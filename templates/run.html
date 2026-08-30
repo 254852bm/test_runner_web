@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <h3>Прогон тестов</h3>
+        <p>Проект: <strong>{{ project.name }}</strong></p>
+        <p>Тест {{ current_index + 1 }} из {{ total }}</p>
+
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">{{ test.title }}</h5>
+                {% if test.precondition %}
+                    <p><strong>Предусловие:</strong> {{ test.precondition }}</p>
+                {% endif %}
+                <p><strong>Шаги:</strong></p>
+                <p class="card-text">{{ test.steps|replace('\n', '<br>')|safe }}</p>
+                {% if test.expected_result %}
+                    <p><strong>Ожидаемый результат:</strong> {{ test.expected_result }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <form method="POST" action="{{ url_for('main.run_tests', project_id=project.id, index=current_index) }}">
+                <div class="mb-3">
+                    <label for="comment" class="form-label">Комментарий (необязательно)</label>
+                    <textarea class="form-control" id="comment" name="comment" rows="2" placeholder="Например: баг в шаге 2, кнопка не активна"></textarea>
+                </div>
+                <div class="d-flex justify-content-around">
+                    <button type="submit" name="status" value="PASS" class="btn btn-success btn-lg">✅ Пройден</button>
+                    <button type="submit" name="status" value="FAIL" class="btn btn-danger btn-lg">❌ Не пройден</button>
+                    <button type="submit" name="status" value="SKIP" class="btn btn-secondary btn-lg">⏭️ Пропущен</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
