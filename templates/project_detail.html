@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>{{ project.name }}</h2>
+    <div>
+        <a href="{{ url_for('main.run_tests', project_id=project.id) }}" class="btn btn-success">▶ Запустить прогон</a>
+        <a href="{{ url_for('main.create_test', project_id=project.id) }}" class="btn btn-primary">+ Добавить тест</a>
+        <a href="{{ url_for('main.projects') }}" class="btn btn-secondary">Назад</a>
+    </div>
+</div>
+
+{% if tests %}
+    <div class="list-group">
+        {% for test in tests %}
+            <div class="list-group-item d-flex justify-content-between align-items-start">
+                <div>
+                    <h5>{{ test.title }}</h5>
+                    <p class="mb-1 text-muted">{{ test.precondition|truncate(100) }}</p>
+                    <small>Шаги: {{ test.steps|truncate(100) }}</small>
+                </div>
+                <span class="badge bg-info">ID: {{ test.id }}</span>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="alert alert-warning">В этом проекте пока нет тестов. Создайте первый!</div>
+{% endif %}
+{% endblock %}
