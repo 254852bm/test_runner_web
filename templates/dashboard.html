@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Dashboard</h2>
+    <a href="{{ url_for('main.projects') }}" class="btn btn-outline-primary">Все проекты</a>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3"><div class="card text-center"><div class="card-body"><h6>PASS</h6><h2>{{ stats.PASS }}</h2></div></div></div>
+    <div class="col-md-3"><div class="card text-center"><div class="card-body"><h6>FAIL</h6><h2>{{ stats.FAIL }}</h2></div></div></div>
+    <div class="col-md-3"><div class="card text-center"><div class="card-body"><h6>SKIP</h6><h2>{{ stats.SKIP }}</h2></div></div></div>
+    <div class="col-md-3"><div class="card text-center"><div class="card-body"><h6>ВСЕГО</h6><h2>{{ stats.TOTAL }}</h2></div></div></div>
+</div>
+
+<h4 class="mb-3">Мои проекты</h4>
+<div class="row g-3 mb-4">
+{% for project in projects %}
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5>{{ project.name }}</h5>
+                <p class="text-muted">Тестов: {{ project.test_cases|length }}</p>
+                <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-primary">Открыть проект</a>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <p>Проектов пока нет.</p>
+{% endfor %}
+</div>
+
+<h4 class="mb-3">Последние прогоны</h4>
+<div class="table-responsive">
+<table class="table table-striped">
+<thead><tr><th>Тест</th><th>Статус</th><th>Комментарий</th><th>Дата</th></tr></thead>
+<tbody>
+{% for run in runs %}
+<tr>
+    <td>{{ run.test_case.title if run.test_case else 'Тест удалён' }}</td>
+    <td><strong>{{ run.status }}</strong></td>
+    <td>{{ run.comment or '—' }}</td>
+    <td>{{ run.timestamp.strftime('%d.%m.%Y %H:%M') }}</td>
+</tr>
+{% else %}
+<tr><td colspan="4" class="text-muted">Прогонов пока нет.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}
