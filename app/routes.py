@@ -197,7 +197,6 @@ def run_history(project_id):
     ).order_by(TestRun.timestamp.desc()).all()
     return render_template('history.html', project=project, runs=runs)
 
-
 @main_bp.route('/project/<int:project_id>/export_pdf')
 @login_required
 def export_pdf(project_id):
@@ -212,59 +211,84 @@ def export_pdf(project_id):
     from flask import send_file
     import os
 
+    font_paths = [
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+        '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf'
+    ]
+    font_registered = False
+    for path in font_paths:
+        if os.path.exists(path):
+            pdfmetrics.registerFont(TTFont('CustomFont', path))
+            font_registered = True
+            break
+    if not font_registered:
+        font_name = 'Helvetica'
+    else:
+        font_name = 'CustomFont'
+
     project = user_project(project_id)
-    if not project:
+    if project is None:
         return redirect(url_for('main.projects'))
 
     runs = TestRun.query.join(TestCase).filter(
         TestCase.project_id == project.id,
         TestRun.user_id == current_user.id
     ).order_by(TestRun.timestamp.desc()).all()
+
     if not runs:
         flash('Нет результатов для экспорта', 'warning')
         return redirect(url_for('main.project_detail', project_id=project.id))
 
-    font_path = 'C:/Windows/Fonts/arial.ttf'
-    if os.path.exists(font_path):
-        pdfmetrics.registerFont(TTFont('Arial', font_path))
-        font_name = 'Arial'
-    else:
-        try:
-            import reportlab
-            dejavu_path = os.path.join(os.path.dirname(reportlab.__file__), 'fonts', 'DejaVuSans.ttf')
-            if os.path.exists(dejavu_path):
-                pdfmetrics.registerFont(TTFont('DejaVuSans', dejavu_path))
-                font_name = 'DejaVuSans'
-            else:
-                font_name = 'Helvetica'
-        except Exception:
-            font_name = 'Helvetica'
-
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72,
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            rightMargin=72, leftMargin=72,
                             topMargin=72, bottomMargin=72)
+
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('CustomTitle', parent=styles['Title'], fontName=font_name)
     heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontName=font_name)
     normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontName=font_name)
-    elements = [Paragraph(f'Отчёт по проекту: {project.name}', title_style),
-                Spacer(1, 0.25 * inch),
-                Paragraph(f'Пользователь: {current_user.email}', normal_style),
-                Paragraph(f'Дата: {datetime.now().strftime("%d.%m.%Y %H:%M")}', normal_style),
-                Spacer(1, 0.25 * inch)]
 
-    stats = {s: sum(1 for r in runs if r.status == s) for s in ['PASS', 'FAIL', 'SKIP']}
-    elements.extend([Paragraph(f'Всего пройдено: {len(runs)}', heading_style),
-                     Paragraph(f'PASS: {stats["PASS"]}', normal_style),
-                     Paragraph(f'FAIL: {stats["FAIL"]}', normal_style),
-                     Paragraph(f'SKIP: {stats["SKIP"]}', normal_style),
-                     Spacer(1, 0.25 * inch)])
+    elements = []
+
+    elements.append(Paragraph(f"Отчёт по проекту: {project.name}", title_style))
+    elements.append(Spacer(1, 0.25 * inch))
+    elements.append(Paragraph(f"Пользователь: {current_user.email}", normal_style))
+    elements.append(Paragraph(f"Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}", normal_style))
+    elements.append(Spacer(1, 0.25 * inch))
+
+    stats = {
+        'PASS': sum(1 for r in runs if r.status == 'PASS'),
+        'FAIL': sum(1 for r in runs if r.status == 'FAIL'),
+        'SKIP': sum(1 for r in runs if r.status == 'SKIP')
+    }
+    total = len(runs)
+
+    elements.append(Paragraph(f"Всего пройдено: {total}", heading_style))
+    elements.append(Paragraph(f"✅ PASS: {stats['PASS']}", normal_style))
+    elements.append(Paragraph(f"❌ FAIL: {stats['FAIL']}", normal_style))
+    elements.append(Paragraph(f"⏭️ SKIP: {stats['SKIP']}", normal_style))
+    elements.append(Spacer(1, 0.25 * inch))
 
     data = [['#', 'Тест', 'Статус', 'Комментарий', 'Дата']]
     for idx, run in enumerate(runs, start=1):
-        test_title = run.test_case.title if run.test_case else f'Тест #{run.test_case_id}'
-        data.append([str(idx), test_title, run.status, run.comment or '',
-                     run.timestamp.strftime('%d.%m.%Y %H:%M')])
+        test = TestCase.query.get(run.test_case_id)
+        test_title = test.title if test else f"Тест #{run.test_case_id}"
+        status_text = run.status
+        if run.status == 'PASS':
+            status_text = '✅ PASS'
+        elif run.status == 'FAIL':
+            status_text = '❌ FAIL'
+        elif run.status == 'SKIP':
+            status_text = '⏭️ SKIP'
+        data.append([
+            str(idx),
+            test_title,
+            status_text,
+            run.comment or '',
+            run.timestamp.strftime('%d.%m.%Y %H:%M')
+        ])
+
     table = Table(data, colWidths=[0.5*inch, 2.5*inch, 0.8*inch, 2*inch, 1.2*inch])
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
@@ -278,8 +302,10 @@ def export_pdf(project_id):
         ('FONTSIZE', (0, 1), (-1, -1), 8),
     ]))
     elements.append(table)
+
     doc.build(elements)
     buffer.seek(0)
+
     return send_file(buffer, as_attachment=True,
                      download_name=f'отчёт_{project.name}_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf',
                      mimetype='application/pdf')
