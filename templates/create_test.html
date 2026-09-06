@@ -1,28 +1,73 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-8">
+    <div class="col-md-10">
         <h2>Новый тест-кейс</h2>
         <form method="POST">
             <div class="mb-3">
                 <label for="title" class="form-label">Заголовок</label>
-                <input type="text" class="form-control" id="title" name="title" placeholder="Например: Проверка входа с корректным паролем" required>
+                <input type="text" class="form-control" id="title" name="title" required>
             </div>
             <div class="mb-3">
                 <label for="precondition" class="form-label">Предусловие</label>
-                <textarea class="form-control" id="precondition" name="precondition" rows="2" placeholder="Что должно быть выполнено до теста"></textarea>
+                <textarea class="form-control" id="precondition" name="precondition" rows="2"></textarea>
             </div>
-            <div class="mb-3">
-                <label for="steps" class="form-label">Шаги</label>
-                <textarea class="form-control" id="steps" name="steps" rows="5" placeholder="1. Открыть страницу&#10;2. Ввести логин&#10;3. Ввести пароль" required></textarea>
+            <h4>Шаги</h4>
+            <div id="steps-container">
+                <div class="step-item card mb-2 p-3">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label class="form-label">Описание шага</label>
+                            <textarea class="form-control" name="step_description[]" rows="2" required></textarea>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label">Ожидаемый результат</label>
+                            <textarea class="form-control" name="step_expected[]" rows="2" required></textarea>
+                        </div>
+                        <div class="col-md-1 d-flex align-items-end">
+                            <button type="button" class="btn btn-danger remove-step">✕</button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="mb-3">
-                <label for="expected" class="form-label">Ожидаемый результат</label>
-                <textarea class="form-control" id="expected" name="expected" rows="2" placeholder="Например: Пользователь перенаправлен на главную страницу"></textarea>
+            <button type="button" class="btn btn-secondary" id="add-step">+ Добавить шаг</button>
+            <div class="mt-3">
+                <button type="submit" class="btn btn-success">Сохранить</button>
+                <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-secondary">Отмена</a>
             </div>
-            <button type="submit" class="btn btn-success">Сохранить</button>
-            <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-secondary">Отмена</a>
         </form>
     </div>
 </div>
+
+<script>
+    document.getElementById('add-step').addEventListener('click', function() {
+        const container = document.getElementById('steps-container');
+        const template = `
+        <div class="step-item card mb-2 p-3">
+            <div class="row">
+                <div class="col-md-6">
+                    <label class="form-label">Описание шага</label>
+                    <textarea class="form-control" name="step_description[]" rows="2" required></textarea>
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Ожидаемый результат</label>
+                    <textarea class="form-control" name="step_expected[]" rows="2" required></textarea>
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button type="button" class="btn btn-danger remove-step">✕</button>
+                </div>
+            </div>
+        </div>`;
+        container.insertAdjacentHTML('beforeend', template);
+        container.lastElementChild.querySelector('.remove-step').addEventListener('click', function() {
+            this.closest('.step-item').remove();
+        });
+    });
+
+    document.querySelectorAll('.remove-step').forEach(btn => {
+        btn.addEventListener('click', function() {
+            this.closest('.step-item').remove();
+        });
+    });
+</script>
 {% endblock %}

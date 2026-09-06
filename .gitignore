@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.bak
+*.backup
+*.tmp
+instance/*.db
+venv/
+.env
+*.log
+migrate_steps.py
+wsgi.py
+ystemctl restart nginx

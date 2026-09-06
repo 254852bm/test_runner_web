@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required, current_user
 from app import db
-from app.models import Project, TestCase, TestRun
+from app.models import Project, TestCase, Step, StepRun, TestRun
 from datetime import datetime
 
 main_bp = Blueprint('main', __name__)
@@ -15,6 +15,7 @@ def user_project(project_id):
     return project
 
 
+# ===== ГЛАВНАЯ =====
 @main_bp.route('/')
 def index():
     if current_user.is_authenticated:
@@ -22,20 +23,28 @@ def index():
     return render_template('index.html')
 
 
+# ===== ДАШБОРД =====
 @main_bp.route('/dashboard')
 @login_required
 def dashboard():
-    projects = Project.query.filter_by(user_id=current_user.id).order_by(Project.created_at.desc()).all()
-    runs = TestRun.query.filter_by(user_id=current_user.id).order_by(TestRun.timestamp.desc()).limit(20).all()
-    stats = {
-        'PASS': TestRun.query.filter_by(user_id=current_user.id, status='PASS').count(),
-        'FAIL': TestRun.query.filter_by(user_id=current_user.id, status='FAIL').count(),
-        'SKIP': TestRun.query.filter_by(user_id=current_user.id, status='SKIP').count(),
-    }
-    stats['TOTAL'] = sum(stats.values())
-    return render_template('dashboard.html', projects=projects, runs=runs, stats=stats)
+    projects_count = Project.query.filter_by(user_id=current_user.id).count()
+    tests_count = TestCase.query.join(Project).filter(Project.user_id == current_user.id).count()
+    today = datetime.utcnow().date()
+    runs_today = TestRun.query.filter(
+        TestRun.user_id == current_user.id,
+        TestRun.timestamp >= today
+    ).count()
+    runs_total = TestRun.query.filter_by(user_id=current_user.id).count()
+    recent_runs = TestRun.query.filter_by(user_id=current_user.id).order_by(TestRun.timestamp.desc()).limit(5).all()
+    return render_template('dashboard.html',
+                           projects_count=projects_count,
+                           tests_count=tests_count,
+                           runs_today=runs_today,
+                           runs_total=runs_total,
+                           recent_runs=recent_runs)
 
 
+# ===== ПРОЕКТЫ =====
 @main_bp.route('/projects')
 @login_required
 def projects():
@@ -54,10 +63,12 @@ def create_project():
             db.session.commit()
             flash('Проект создан!', 'success')
             return redirect(url_for('main.projects'))
-        flash('Введите название', 'danger')
+        else:
+            flash('Введите название', 'danger')
     return render_template('create_project.html')
 
 
+# ===== СТРАНИЦА ПРОЕКТА =====
 @main_bp.route('/project/<int:project_id>')
 @login_required
 def project_detail(project_id):
@@ -68,6 +79,7 @@ def project_detail(project_id):
     return render_template('project_detail.html', project=project, tests=tests)
 
 
+# ===== СОЗДАНИЕ ТЕСТА С ШАГАМИ =====
 @main_bp.route('/project/<int:project_id>/create_test', methods=['GET', 'POST'])
 @login_required
 def create_test(project_id):
@@ -78,60 +90,40 @@ def create_test(project_id):
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
         precondition = request.form.get('precondition', '').strip()
-        steps = request.form.get('steps', '').strip()
-        expected = request.form.get('expected', '').strip()
-        if title and steps:
-            test = TestCase(title=title, precondition=precondition,
-                            steps=steps, expected_result=expected,
-                            project_id=project.id)
-            db.session.add(test)
-            db.session.commit()
-            flash('Тест добавлен!', 'success')
-            return redirect(url_for('main.project_detail', project_id=project.id))
-        flash('Заполните заголовок и шаги', 'danger')
+        descriptions = request.form.getlist('step_description[]')
+        expecteds = request.form.getlist('step_expected[]')
+
+        if not title:
+            flash('Введите заголовок теста', 'danger')
+            return render_template('create_test.html', project_id=project.id)
+
+        test = TestCase(
+            title=title,
+            precondition=precondition,
+            steps='',
+            project_id=project.id
+        )
+        db.session.add(test)
+        db.session.flush()
+
+        for i, (desc, exp) in enumerate(zip(descriptions, expecteds), start=1):
+            if desc and exp:
+                step = Step(
+                    order=i,
+                    description=desc.strip(),
+                    expected_result=exp.strip(),
+                    test_case_id=test.id
+                )
+                db.session.add(step)
+
+        db.session.commit()
+        flash('Тест и шаги добавлены!', 'success')
+        return redirect(url_for('main.project_detail', project_id=project.id))
 
     return render_template('create_test.html', project_id=project.id)
 
 
-@main_bp.route('/project/<int:project_id>/test/<int:test_id>/edit', methods=['GET', 'POST'])
-@login_required
-def edit_test(project_id, test_id):
-    project = user_project(project_id)
-    if not project:
-        return redirect(url_for('main.projects'))
-    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
-
-    if request.method == 'POST':
-        title = request.form.get('title', '').strip()
-        steps = request.form.get('steps', '').strip()
-        if not title or not steps:
-            flash('Заголовок и шаги обязательны', 'danger')
-        else:
-            test.title = title
-            test.precondition = request.form.get('precondition', '').strip()
-            test.steps = steps
-            test.expected_result = request.form.get('expected', '').strip()
-            db.session.commit()
-            flash('Тест-кейс обновлён!', 'success')
-            return redirect(url_for('main.project_detail', project_id=project.id))
-
-    return render_template('edit_test.html', project=project, test=test)
-
-
-@main_bp.route('/project/<int:project_id>/test/<int:test_id>/delete', methods=['POST'])
-@login_required
-def delete_test(project_id, test_id):
-    project = user_project(project_id)
-    if not project:
-        return redirect(url_for('main.projects'))
-    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
-    TestRun.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
-    db.session.delete(test)
-    db.session.commit()
-    flash('Тест-кейс удалён вместе с его результатами.', 'success')
-    return redirect(url_for('main.project_detail', project_id=project.id))
-
-
+# ===== ПРОГОН ТЕСТОВ (ПОШАГОВЫЙ) =====
 @main_bp.route('/project/<int:project_id>/run', methods=['GET', 'POST'])
 @login_required
 def run_tests(project_id):
@@ -145,58 +137,116 @@ def run_tests(project_id):
         return redirect(url_for('main.project_detail', project_id=project.id))
 
     current_index = request.args.get('index', 0, type=int)
-    current_index = max(0, min(current_index, len(tests) - 1))
-
-    if request.method == 'POST':
-        status = request.form.get('status')
-        comment = request.form.get('comment', '').strip()
-        if status in ['PASS', 'FAIL', 'SKIP']:
-            test = tests[current_index]
-            db.session.add(TestRun(status=status, test_case_id=test.id,
-                                    user_id=current_user.id, comment=comment))
-            db.session.commit()
-            next_index = current_index + 1
-            if next_index < len(tests):
-                return redirect(url_for('main.run_tests', project_id=project.id, index=next_index))
-            return redirect(url_for('main.run_stats', project_id=project.id))
-        flash('Неверный статус', 'danger')
+    if current_index < 0 or current_index >= len(tests):
+        flash('Некорректный индекс теста', 'danger')
+        return redirect(url_for('main.project_detail', project_id=project.id))
 
     test = tests[current_index]
+
+    if request.method == 'POST':
+        for step in test.step_list:
+            status_key = f'status_{step.id}'
+            actual_key = f'actual_{step.id}'
+            status = request.form.get(status_key)
+            actual_result = request.form.get(actual_key, '').strip()
+            if status in ['PASS', 'FAIL', 'SKIP']:
+                step_run = StepRun(
+                    status=status,
+                    actual_result=actual_result,
+                    comment='',
+                    step_id=step.id,
+                    user_id=current_user.id
+                )
+                db.session.add(step_run)
+        db.session.commit()
+        flash(f'Тест "{test.title}" пройден!', 'success')
+
+        next_index = current_index + 1
+        if next_index < len(tests):
+            return redirect(url_for('main.run_tests', project_id=project.id, index=next_index))
+        else:
+            return redirect(url_for('main.run_stats_all', project_id=project.id))
+
     return render_template('run.html', project=project, test=test,
                            current_index=current_index, total=len(tests))
 
 
-@main_bp.route('/project/<int:project_id>/stats')
+# ===== СТАТИСТИКА ПОСЛЕ ОДНОГО ТЕСТА =====
+@main_bp.route('/project/<int:project_id>/stats/<int:test_id>')
 @login_required
-def run_stats(project_id):
+def run_stats(project_id, test_id):
     project = user_project(project_id)
     if not project:
         return redirect(url_for('main.projects'))
-    runs = TestRun.query.join(TestCase).filter(
+    test = TestCase.query.get_or_404(test_id)
+    if test.project_id != project.id:
+        flash('Доступ запрещён', 'danger')
+        return redirect(url_for('main.projects'))
+
+    step_runs = StepRun.query.join(Step).filter(
+        Step.test_case_id == test.id,
+        StepRun.user_id == current_user.id
+    ).order_by(StepRun.timestamp.desc()).all()
+
+    if step_runs:
+        last_timestamp = step_runs[0].timestamp
+        last_runs = [sr for sr in step_runs if sr.timestamp == last_timestamp]
+        stats = {
+            'PASS': sum(1 for sr in last_runs if sr.status == 'PASS'),
+            'FAIL': sum(1 for sr in last_runs if sr.status == 'FAIL'),
+            'SKIP': sum(1 for sr in last_runs if sr.status == 'SKIP'),
+            'TOTAL': len(last_runs)
+        }
+    else:
+        stats = {'PASS': 0, 'FAIL': 0, 'SKIP': 0, 'TOTAL': 0}
+
+    return render_template('stats.html', project=project, test=test,
+                           step_runs=step_runs, stats=stats)
+
+
+# ===== ИТОГОВАЯ СТАТИСТИКА ПОСЛЕ ВСЕХ ТЕСТОВ =====
+@main_bp.route('/project/<int:project_id>/stats_all')
+@login_required
+def run_stats_all(project_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+
+    step_runs = StepRun.query.join(Step).join(TestCase).filter(
         TestCase.project_id == project.id,
-        TestRun.user_id == current_user.id
-    ).order_by(TestRun.timestamp.desc()).all()
-    stats = {
-        'PASS': sum(1 for r in runs if r.status == 'PASS'),
-        'FAIL': sum(1 for r in runs if r.status == 'FAIL'),
-        'SKIP': sum(1 for r in runs if r.status == 'SKIP'),
-        'TOTAL': len(runs)
-    }
-    return render_template('stats.html', project=project, runs=runs, stats=stats)
+        StepRun.user_id == current_user.id
+    ).order_by(StepRun.timestamp.desc()).all()
+
+    if step_runs:
+        last_timestamp = step_runs[0].timestamp
+        last_runs = [sr for sr in step_runs if sr.timestamp == last_timestamp]
+        stats = {
+            'PASS': sum(1 for sr in last_runs if sr.status == 'PASS'),
+            'FAIL': sum(1 for sr in last_runs if sr.status == 'FAIL'),
+            'SKIP': sum(1 for sr in last_runs if sr.status == 'SKIP'),
+            'TOTAL': len(last_runs)
+        }
+    else:
+        stats = {'PASS': 0, 'FAIL': 0, 'SKIP': 0, 'TOTAL': 0}
+
+    return render_template('stats_all.html', project=project, stats=stats, runs=step_runs)
 
 
+# ===== ИСТОРИЯ ПРОГОНОВ =====
 @main_bp.route('/project/<int:project_id>/history')
 @login_required
 def run_history(project_id):
     project = user_project(project_id)
     if not project:
         return redirect(url_for('main.projects'))
-    runs = TestRun.query.join(TestCase).filter(
+    runs = StepRun.query.join(Step).join(TestCase).filter(
         TestCase.project_id == project.id,
-        TestRun.user_id == current_user.id
-    ).order_by(TestRun.timestamp.desc()).all()
+        StepRun.user_id == current_user.id
+    ).order_by(StepRun.timestamp.desc()).all()
     return render_template('history.html', project=project, runs=runs)
 
+
+# ===== ЭКСПОРТ PDF (с шагами) =====
 @main_bp.route('/project/<int:project_id>/export_pdf')
 @login_required
 def export_pdf(project_id):
@@ -227,16 +277,12 @@ def export_pdf(project_id):
         font_name = 'CustomFont'
 
     project = user_project(project_id)
-    if project is None:
+    if not project:
         return redirect(url_for('main.projects'))
 
-    runs = TestRun.query.join(TestCase).filter(
-        TestCase.project_id == project.id,
-        TestRun.user_id == current_user.id
-    ).order_by(TestRun.timestamp.desc()).all()
-
-    if not runs:
-        flash('Нет результатов для экспорта', 'warning')
+    tests = TestCase.query.filter_by(project_id=project.id).all()
+    if not tests:
+        flash('Нет тестов для экспорта', 'warning')
         return redirect(url_for('main.project_detail', project_id=project.id))
 
     buffer = BytesIO()
@@ -257,51 +303,24 @@ def export_pdf(project_id):
     elements.append(Paragraph(f"Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}", normal_style))
     elements.append(Spacer(1, 0.25 * inch))
 
-    stats = {
-        'PASS': sum(1 for r in runs if r.status == 'PASS'),
-        'FAIL': sum(1 for r in runs if r.status == 'FAIL'),
-        'SKIP': sum(1 for r in runs if r.status == 'SKIP')
-    }
-    total = len(runs)
-
-    elements.append(Paragraph(f"Всего пройдено: {total}", heading_style))
-    elements.append(Paragraph(f"✅ PASS: {stats['PASS']}", normal_style))
-    elements.append(Paragraph(f"❌ FAIL: {stats['FAIL']}", normal_style))
-    elements.append(Paragraph(f"⏭️ SKIP: {stats['SKIP']}", normal_style))
-    elements.append(Spacer(1, 0.25 * inch))
-
-    data = [['#', 'Тест', 'Статус', 'Комментарий', 'Дата']]
-    for idx, run in enumerate(runs, start=1):
-        test = TestCase.query.get(run.test_case_id)
-        test_title = test.title if test else f"Тест #{run.test_case_id}"
-        status_text = run.status
-        if run.status == 'PASS':
-            status_text = '✅ PASS'
-        elif run.status == 'FAIL':
-            status_text = '❌ FAIL'
-        elif run.status == 'SKIP':
-            status_text = '⏭️ SKIP'
-        data.append([
-            str(idx),
-            test_title,
-            status_text,
-            run.comment or '',
-            run.timestamp.strftime('%d.%m.%Y %H:%M')
-        ])
-
-    table = Table(data, colWidths=[0.5*inch, 2.5*inch, 0.8*inch, 2*inch, 1.2*inch])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('FONTNAME', (0, 0), (-1, -1), font_name),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-    ]))
-    elements.append(table)
+    for test in tests:
+        elements.append(Paragraph(f"Тест: {test.title}", heading_style))
+        if test.precondition:
+            elements.append(Paragraph(f"Предусловие: {test.precondition}", normal_style))
+        if test.step_list:
+            elements.append(Paragraph("Шаги:", normal_style))
+            data = [['#', 'Описание', 'Ожидаемый результат']]
+            for step in test.step_list:
+                data.append([str(step.order), step.description, step.expected_result])
+            table = Table(data, colWidths=[0.5*inch, 3*inch, 2.5*inch])
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('FONTNAME', (0, 0), (-1, -1), font_name),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ]))
+            elements.append(table)
+        elements.append(Spacer(1, 0.2 * inch))
 
     doc.build(elements)
     buffer.seek(0)

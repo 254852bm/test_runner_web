@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>📊 Итоговая статистика прогона</h2>
+<p>Проект: <strong>{{ project.name }}</strong></p>
+
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body text-center">
+                <h1>{{ stats.PASS }}</h1>
+                <p>Пройдено</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-danger">
+            <div class="card-body text-center">
+                <h1>{{ stats.FAIL }}</h1>
+                <p>Не пройдено</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-secondary">
+            <div class="card-body text-center">
+                <h1>{{ stats.SKIP }}</h1>
+                <p>Пропущено</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body text-center">
+                <h1>{{ stats.TOTAL }}</h1>
+                <p>Всего шагов</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="mt-3">
+    <a href="{{ url_for('main.export_pdf', project_id=project.id) }}" class="btn btn-warning">📄 Экспорт PDF</a>
+    <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-primary">← Вернуться к проекту</a>
+</div>
+{% endblock %}

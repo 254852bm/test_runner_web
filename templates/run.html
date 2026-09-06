@@ -1,38 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-8">
-        <h3>Прогон тестов</h3>
+    <div class="col-md-10">
+        <h3>Прогон теста: {{ test.title }}</h3>
+        <p class="text-muted">Тест {{ current_index + 1 }} из {{ total }}</p>
         <p>Проект: <strong>{{ project.name }}</strong></p>
-        <p>Тест {{ current_index + 1 }} из {{ total }}</p>
-
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">{{ test.title }}</h5>
-                {% if test.precondition %}
-                    <p><strong>Предусловие:</strong> {{ test.precondition }}</p>
-                {% endif %}
-                <p><strong>Шаги:</strong></p>
-                <p class="card-text">{{ test.steps|replace('\n', '<br>')|safe }}</p>
-                {% if test.expected_result %}
-                    <p><strong>Ожидаемый результат:</strong> {{ test.expected_result }}</p>
-                {% endif %}
+        <form method="POST" action="{{ url_for('main.run_tests', project_id=project.id, index=current_index) }}">
+            <input type="hidden" name="test_id" value="{{ test.id }}">
+            {% for step in test.step_list %}
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5>Шаг {{ step.order }}</h5>
+                    <p><strong>Описание:</strong> {{ step.description }}</p>
+                    <p><strong>Ожидаемый результат:</strong> {{ step.expected_result }}</p>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label class="form-label">Статус:</label>
+                            <select name="status_{{ step.id }}" class="form-select">
+                                <option value="PASS">✅ Пройден</option>
+                                <option value="FAIL">❌ Не пройден</option>
+                                <option value="SKIP">⏭️ Пропущен</option>
+                            </select>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label">Фактический результат (необязательно):</label>
+                            <input type="text" name="actual_{{ step.id }}" class="form-control" placeholder="Например: кнопка не активна">
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-
-        <div class="mt-4">
-            <form method="POST" action="{{ url_for('main.run_tests', project_id=project.id, index=current_index) }}">
-                <div class="mb-3">
-                    <label for="comment" class="form-label">Комментарий (необязательно)</label>
-                    <textarea class="form-control" id="comment" name="comment" rows="2" placeholder="Например: баг в шаге 2, кнопка не активна"></textarea>
-                </div>
-                <div class="d-flex justify-content-around">
-                    <button type="submit" name="status" value="PASS" class="btn btn-success btn-lg">✅ Пройден</button>
-                    <button type="submit" name="status" value="FAIL" class="btn btn-danger btn-lg">❌ Не пройден</button>
-                    <button type="submit" name="status" value="SKIP" class="btn btn-secondary btn-lg">⏭️ Пропущен</button>
-                </div>
-            </form>
-        </div>
+            {% endfor %}
+            <button type="submit" class="btn btn-success">Завершить прогон</button>
+            <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-secondary">Отмена</a>
+        </form>
     </div>
 </div>
 {% endblock %}

@@ -46,3 +46,23 @@ from app import login_manager
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+class Step(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    order = db.Column(db.Integer, nullable=False)
+    description = db.Column(db.Text, nullable=False)
+    expected_result = db.Column(db.Text, nullable=False)
+    test_case_id = db.Column(db.Integer, db.ForeignKey('test_case.id'), nullable=False)
+    test_case = db.relationship('TestCase', backref='step_list', order_by='Step.order')
+
+class StepRun(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    status = db.Column(db.String(20), nullable=False)
+    comment = db.Column(db.Text)
+    actual_result = db.Column(db.Text)
+    screenshot = db.Column(db.String(200))
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    step_id = db.Column(db.Integer, db.ForeignKey('step.id'), nullable=False)
+    step = db.relationship('Step', backref='runs')
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    user = db.relationship('User', backref='step_runs')
