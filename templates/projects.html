@@ -1,16 +1,19 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>Мои проекты</h2>
-    <a href="{{ url_for('main.create_project') }}" class="btn btn-primary">+ Создать проект</a>
+<div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-4">
+    <h2 class="mb-0">Мои проекты</h2>
+    <div class="action-buttons">
+        <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">← Назад к Dashboard</a>
+        <a href="{{ url_for('main.create_project') }}" class="btn btn-primary">+ Создать проект</a>
+    </div>
 </div>
 
 {% if projects %}
     <div class="list-group">
         {% for project in projects %}
-            <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="list-group-item list-group-item-action">
-                {{ project.name }}
-                <span class="badge bg-secondary float-end">{{ project.test_cases|length }} тестов</span>
+            <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-start gap-3">
+                <span class="project-name flex-grow-1">{{ project.name }}</span>
+                <span class="badge bg-secondary flex-shrink-0">{{ project.test_cases|length }} тестов</span>
             </a>
         {% endfor %}
     </div>
