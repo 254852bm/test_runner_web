@@ -208,6 +208,8 @@ def export_pdf(project_id):
     from reportlab.lib.units import inch
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib.enums import TA_LEFT
+    from xml.sax.saxutils import escape
     from io import BytesIO
     from flask import send_file
     import os
@@ -241,15 +243,18 @@ def export_pdf(project_id):
             font_name = 'Helvetica'
 
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=72, leftMargin=72,
-                            topMargin=72, bottomMargin=72)
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=36, leftMargin=36,
+                            topMargin=50, bottomMargin=50)
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('CustomTitle', parent=styles['Title'], fontName=font_name)
     heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontName=font_name)
     normal_style = ParagraphStyle('CustomNormal', parent=styles['Normal'], fontName=font_name)
-    elements = [Paragraph(f'Отчёт по проекту: {project.name}', title_style),
+    cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontName=font_name,
+                                fontSize=7, leading=9, alignment=TA_LEFT)
+
+    elements = [Paragraph(f'Отчёт по проекту: {escape(project.name)}', title_style),
                 Spacer(1, 0.25 * inch),
-                Paragraph(f'Пользователь: {current_user.email}', normal_style),
+                Paragraph(f'Пользователь: {escape(current_user.email)}', normal_style),
                 Paragraph(f'Дата: {datetime.now().strftime("%d.%m.%Y %H:%M")}', normal_style),
                 Spacer(1, 0.25 * inch)]
 
@@ -260,22 +265,33 @@ def export_pdf(project_id):
                      Paragraph(f'SKIP: {stats["SKIP"]}', normal_style),
                      Spacer(1, 0.25 * inch)])
 
-    data = [['#', 'Тест', 'Статус', 'Комментарий', 'Дата']]
+    data = [[Paragraph('#', cell_style), Paragraph('Тест', cell_style),
+             Paragraph('Статус', cell_style), Paragraph('Комментарий', cell_style),
+             Paragraph('Дата', cell_style)]]
     for idx, run in enumerate(runs, start=1):
         test_title = run.test_case.title if run.test_case else f'Тест #{run.test_case_id}'
-        data.append([str(idx), test_title, run.status, run.comment or '',
-                     run.timestamp.strftime('%d.%m.%Y %H:%M')])
-    table = Table(data, colWidths=[0.5*inch, 2.5*inch, 0.8*inch, 2*inch, 1.2*inch])
+        comment = run.comment or ''
+        comment = escape(comment).replace('\n', '<br/>')
+        data.append([
+            Paragraph(str(idx), cell_style),
+            Paragraph(escape(test_title).replace('\n', '<br/>'), cell_style),
+            Paragraph(escape(run.status), cell_style),
+            Paragraph(comment, cell_style),
+            Paragraph(run.timestamp.strftime('%d.%m.%Y %H:%M'), cell_style)
+        ])
+
+    table = Table(data, colWidths=[0.35*inch, 2.2*inch, 0.65*inch, 2.7*inch, 1.1*inch], repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('FONTNAME', (0, 0), (-1, -1), font_name),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
         ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
     ]))
     elements.append(table)
     doc.build(elements)
