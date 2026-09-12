@@ -2,7 +2,11 @@
 {% block content %}
 <div class="row justify-content-center">
     <div class="col-md-8">
-        <h2>Новый тест-кейс</h2>
+        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
+            <h2 class="mb-0">Новый тест-кейс</h2>
+            <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-outline-secondary">← Назад к проекту</a>
+        </div>
+
         <form method="POST">
             <div class="mb-3">
                 <label for="title" class="form-label">Заголовок</label>
@@ -10,18 +14,25 @@
             </div>
             <div class="mb-3">
                 <label for="precondition" class="form-label">Предусловие</label>
-                <textarea class="form-control" id="precondition" name="precondition" rows="2" placeholder="Что должно быть выполнено до теста"></textarea>
+                <textarea class="form-control" id="precondition" name="precondition" rows="3" placeholder="Можно писать несколько строк или списком"></textarea>
             </div>
             <div class="mb-3">
                 <label for="steps" class="form-label">Шаги</label>
-                <textarea class="form-control" id="steps" name="steps" rows="5" placeholder="1. Открыть страницу&#10;2. Ввести логин&#10;3. Ввести пароль" required></textarea>
+                <textarea class="form-control" id="steps" name="steps" rows="8" placeholder="1. Открыть страницу
+2. Ввести логин
+3. Ввести пароль" required></textarea>
+                <div class="form-text">Можно использовать нумерованный список и переносы строк.</div>
             </div>
             <div class="mb-3">
                 <label for="expected" class="form-label">Ожидаемый результат</label>
-                <textarea class="form-control" id="expected" name="expected" rows="2" placeholder="Например: Пользователь перенаправлен на главную страницу"></textarea>
+                <textarea class="form-control" id="expected" name="expected" rows="4" placeholder="Например:
+1. Пользователь успешно авторизован
+2. Открыта главная страница"></textarea>
             </div>
-            <button type="submit" class="btn btn-success">Сохранить</button>
-            <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-secondary">Отмена</a>
+            <div class="action-buttons">
+                <button type="submit" class="btn btn-success">Сохранить</button>
+                <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-secondary">Отмена</a>
+            </div>
         </form>
     </div>
 </div>
