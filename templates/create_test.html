@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-8">
+    <div class="col-md-10">
         <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
             <h2 class="mb-0">Новый тест-кейс</h2>
             <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-outline-secondary">← Назад к проекту</a>
@@ -16,19 +16,32 @@
                 <label for="precondition" class="form-label">Предусловие</label>
                 <textarea class="form-control" id="precondition" name="precondition" rows="3" placeholder="Можно писать несколько строк или списком"></textarea>
             </div>
+
             <div class="mb-3">
-                <label for="steps" class="form-label">Шаги</label>
-                <textarea class="form-control" id="steps" name="steps" rows="8" placeholder="1. Открыть страницу
-2. Ввести логин
-3. Ввести пароль" required></textarea>
-                <div class="form-text">Можно использовать нумерованный список и переносы строк.</div>
+                <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                    <label class="form-label mb-0">Шаги тест-кейса</label>
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="addStep()">+ Добавить шаг</button>
+                </div>
+                <div id="steps-container">
+                    <div class="card mb-3 step-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>Шаг <span class="step-number">1</span></strong>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Действие</label>
+                                <textarea class="form-control" name="step_action[]" rows="2" placeholder="Например: Открыть страницу авторизации" required></textarea>
+                            </div>
+                            <div>
+                                <label class="form-label">Ожидаемый результат</label>
+                                <textarea class="form-control" name="step_expected[]" rows="2" placeholder="Например: Открывается страница авторизации"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-text">Для каждого шага укажите действие и ожидаемый результат.</div>
             </div>
-            <div class="mb-3">
-                <label for="expected" class="form-label">Ожидаемый результат</label>
-                <textarea class="form-control" id="expected" name="expected" rows="4" placeholder="Например:
-1. Пользователь успешно авторизован
-2. Открыта главная страница"></textarea>
-            </div>
+
             <div class="action-buttons">
                 <button type="submit" class="btn btn-success">Сохранить</button>
                 <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-secondary">Отмена</a>
@@ -36,4 +49,44 @@
         </form>
     </div>
 </div>
+
+<script>
+function addStep() {
+    const container = document.getElementById('steps-container');
+    const cards = container.querySelectorAll('.step-card');
+    const number = cards.length + 1;
+    const card = document.createElement('div');
+    card.className = 'card mb-3 step-card';
+    card.innerHTML = `
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong>Шаг <span class="step-number">${number}</span></strong>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeStep(this)">Удалить</button>
+            </div>
+            <div class="mb-2">
+                <label class="form-label">Действие</label>
+                <textarea class="form-control" name="step_action[]" rows="2" placeholder="Например: Ввести логин" required></textarea>
+            </div>
+            <div>
+                <label class="form-label">Ожидаемый результат</label>
+                <textarea class="form-control" name="step_expected[]" rows="2" placeholder="Например: Логин принят системой"></textarea>
+            </div>
+        </div>`;
+    container.appendChild(card);
+    renumberSteps();
+}
+
+function removeStep(button) {
+    const container = document.getElementById('steps-container');
+    if (container.querySelectorAll('.step-card').length === 1) return;
+    button.closest('.step-card').remove();
+    renumberSteps();
+}
+
+function renumberSteps() {
+    document.querySelectorAll('#steps-container .step-card').forEach((card, index) => {
+        card.querySelector('.step-number').textContent = index + 1;
+    });
+}
+</script>
 {% endblock %}
