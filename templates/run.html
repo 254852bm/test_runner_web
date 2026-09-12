@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-8">
+    <div class="col-md-10">
         <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
             <h3 class="mb-0">Прогон тестов</h3>
             <div class="action-buttons">
@@ -18,27 +18,49 @@
                 {% if test.precondition %}
                     <p class="test-case-text"><strong>Предусловие:</strong> {{ test.precondition }}</p>
                 {% endif %}
-                <p><strong>Шаги:</strong></p>
-                <div class="card-text test-case-text">{{ test.steps }}</div>
-                {% if test.expected_result %}
-                    <p class="mt-3 test-case-text"><strong>Ожидаемый результат:</strong> {{ test.expected_result }}</p>
-                {% endif %}
             </div>
         </div>
 
-        <div class="mt-4">
-            <form method="POST" action="{{ url_for('main.run_tests', project_id=project.id, index=current_index, test_id=(test.id if single_test else None)) }}">
-                <div class="mb-3">
-                    <label for="comment" class="form-label">Комментарий (необязательно)</label>
-                    <textarea class="form-control" id="comment" name="comment" rows="4" placeholder="Например: баг в шаге 2, кнопка не активна"></textarea>
+        <form method="POST" class="mt-4" action="{{ url_for('main.run_tests', project_id=project.id, index=current_index, test_id=(test.id if single_test else None)) }}">
+            {% for step in steps %}
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title mb-3">Шаг {{ loop.index }}</h5>
+                    <div class="mb-3">
+                        <div class="fw-semibold">Действие</div>
+                        <div class="test-case-text">{{ step.action }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="fw-semibold">Ожидаемый результат</div>
+                        <div class="test-case-text">{{ step.expected_result or 'Не указан' }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Статус шага</label>
+                        <select class="form-select" name="step_status[]" required>
+                            <option value="">Выберите статус</option>
+                            <option value="PASS">Пройден</option>
+                            <option value="FAIL">Не пройден</option>
+                            <option value="SKIP">Пропущен</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="form-label">Комментарий к шагу</label>
+                        <textarea class="form-control" name="step_comment[]" rows="2" placeholder="Например: кнопка не активна"></textarea>
+                    </div>
                 </div>
-                <div class="action-buttons justify-content-center">
-                    <button type="submit" name="status" value="PASS" class="btn btn-success btn-lg">✅ Пройден</button>
-                    <button type="submit" name="status" value="FAIL" class="btn btn-danger btn-lg">❌ Не пройден</button>
-                    <button type="submit" name="status" value="SKIP" class="btn btn-secondary btn-lg">⏭️ Пропущен</button>
-                </div>
-            </form>
-        </div>
+            </div>
+            {% endfor %}
+
+            <div class="alert alert-secondary">
+                <strong>Итог теста:</strong> рассчитывается автоматически по статусам шагов.
+                Если хотя бы один шаг не пройден — тест «Не пройден». Если нет ошибок, но есть пропущенный шаг — «Пропущен».<br>
+                <span class="small">Статус и комментарий сохраняются отдельно для каждого шага.</span>
+            </div>
+
+            <div class="action-buttons justify-content-center">
+                <button type="submit" class="btn btn-primary btn-lg">Сохранить результат теста</button>
+            </div>
+        </form>
     </div>
 </div>
 {% endblock %}
