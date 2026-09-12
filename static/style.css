@@ -1,0 +1,26 @@
+/* Project and test-case names wrap instead of overflowing. */
+.project-name,
+.test-case-title,
+.card-title,
+.list-group-item {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* Keep long button groups usable on small screens. */
+.action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+/* Preserve new lines in test-case text while allowing normal wrapping. */
+.test-case-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+textarea.form-control {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
