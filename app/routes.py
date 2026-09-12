@@ -1,10 +1,17 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required, current_user
 from app import db
-from app.models import Project, TestCase, TestRun
+from app.models import Project, TestCase, TestRun, TestStep, StepRun
 from datetime import datetime
 
 main_bp = Blueprint('main', __name__)
+
+
+STATUS_LABELS = {
+    'PASS': 'Пройден',
+    'FAIL': 'Не пройден',
+    'SKIP': 'Пропущен',
+}
 
 
 def user_project(project_id):
@@ -13,6 +20,53 @@ def user_project(project_id):
         flash('Доступ запрещён', 'danger')
         return None
     return project
+
+
+def ensure_test_steps(test):
+    """Создаёт структурированные шаги для старых тест-кейсов."""
+    steps = TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
+    if steps:
+        return steps
+
+    step_lines = [line.strip() for line in (test.steps or '').splitlines() if line.strip()]
+    expected_lines = [line.strip() for line in (test.expected_result or '').splitlines() if line.strip()]
+
+    if not step_lines:
+        return []
+
+    for position, action in enumerate(step_lines, start=1):
+        expected = expected_lines[position - 1] if position <= len(expected_lines) else ''
+        db.session.add(TestStep(
+            test_case_id=test.id,
+            position=position,
+            action=action,
+            expected_result=expected
+        ))
+    db.session.commit()
+    return TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
+
+
+def save_test_steps(test, actions, expected_results):
+    TestStep.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
+    for position, (action, expected) in enumerate(zip(actions, expected_results), start=1):
+        action = action.strip()
+        expected = expected.strip()
+        if action:
+            db.session.add(TestStep(
+                test_case_id=test.id,
+                position=position,
+                action=action,
+                expected_result=expected
+            ))
+
+
+def step_status_summary(step_runs):
+    statuses = [step_run.status for step_run in step_runs]
+    if 'FAIL' in statuses:
+        return 'FAIL'
+    if 'SKIP' in statuses:
+        return 'SKIP'
+    return 'PASS'
 
 
 @main_bp.route('/')
@@ -86,7 +140,11 @@ def delete_project(project_id):
 
     test_ids = [test.id for test in TestCase.query.filter_by(project_id=project.id).all()]
     if test_ids:
+        run_ids = [run.id for run in TestRun.query.filter(TestRun.test_case_id.in_(test_ids)).all()]
+        if run_ids:
+            StepRun.query.filter(StepRun.test_run_id.in_(run_ids)).delete(synchronize_session=False)
         TestRun.query.filter(TestRun.test_case_id.in_(test_ids)).delete(synchronize_session=False)
+        TestStep.query.filter(TestStep.test_case_id.in_(test_ids)).delete(synchronize_session=False)
         TestCase.query.filter(TestCase.project_id == project.id).delete(synchronize_session=False)
 
     db.session.delete(project)
@@ -102,7 +160,9 @@ def test_detail(project_id, test_id):
     if not project:
         return redirect(url_for('main.projects'))
     test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
-    return render_template('test_detail.html', project=project, test=test)
+    steps = ensure_test_steps(test)
+    return render_template('test_detail.html', project=project, test=test, steps=steps,
+                           status_labels=STATUS_LABELS)
 
 
 @main_bp.route('/project/<int:project_id>/create_test', methods=['GET', 'POST'])
@@ -115,17 +175,23 @@ def create_test(project_id):
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
         precondition = request.form.get('precondition', '').strip()
-        steps = request.form.get('steps', '').strip()
-        expected = request.form.get('expected', '').strip()
-        if title and steps:
+        actions = request.form.getlist('step_action[]')
+        expected_results = request.form.getlist('step_expected[]')
+        pairs = [(a.strip(), e.strip()) for a, e in zip(actions, expected_results) if a.strip()]
+
+        if title and pairs:
+            steps_text = '\n'.join(action for action, _ in pairs)
+            expected_text = '\n'.join(expected for _, expected in pairs)
             test = TestCase(title=title, precondition=precondition,
-                            steps=steps, expected_result=expected,
+                            steps=steps_text, expected_result=expected_text,
                             project_id=project.id)
             db.session.add(test)
+            db.session.flush()
+            save_test_steps(test, [a for a, _ in pairs], [e for _, e in pairs])
             db.session.commit()
             flash('Тест добавлен!', 'success')
             return redirect(url_for('main.project_detail', project_id=project.id))
-        flash('Заполните заголовок и шаги', 'danger')
+        flash('Заполните заголовок и добавьте хотя бы один шаг', 'danger')
 
     return render_template('create_test.html', project_id=project.id)
 
@@ -137,22 +203,27 @@ def edit_test(project_id, test_id):
     if not project:
         return redirect(url_for('main.projects'))
     test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    steps = ensure_test_steps(test)
 
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
-        steps = request.form.get('steps', '').strip()
-        if not title or not steps:
-            flash('Заголовок и шаги обязательны', 'danger')
+        actions = request.form.getlist('step_action[]')
+        expected_results = request.form.getlist('step_expected[]')
+        pairs = [(a.strip(), e.strip()) for a, e in zip(actions, expected_results) if a.strip()]
+
+        if not title or not pairs:
+            flash('Заголовок и хотя бы один шаг обязательны', 'danger')
         else:
             test.title = title
             test.precondition = request.form.get('precondition', '').strip()
-            test.steps = steps
-            test.expected_result = request.form.get('expected', '').strip()
+            test.steps = '\n'.join(action for action, _ in pairs)
+            test.expected_result = '\n'.join(expected for _, expected in pairs)
+            save_test_steps(test, [a for a, _ in pairs], [e for _, e in pairs])
             db.session.commit()
             flash('Тест-кейс обновлён!', 'success')
             return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
 
-    return render_template('edit_test.html', project=project, test=test)
+    return render_template('edit_test.html', project=project, test=test, steps=steps)
 
 
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/delete', methods=['POST'])
@@ -162,7 +233,11 @@ def delete_test(project_id, test_id):
     if not project:
         return redirect(url_for('main.projects'))
     test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    run_ids = [run.id for run in TestRun.query.filter_by(test_case_id=test.id).all()]
+    if run_ids:
+        StepRun.query.filter(StepRun.test_run_id.in_(run_ids)).delete(synchronize_session=False)
     TestRun.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
+    TestStep.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
     db.session.delete(test)
     db.session.commit()
     flash('Тест-кейс удалён вместе с его результатами.', 'success')
@@ -191,14 +266,40 @@ def run_tests(project_id):
 
     current_index = request.args.get('index', 0, type=int)
     current_index = max(0, min(current_index, len(tests) - 1))
+    test = tests[current_index]
+    steps = ensure_test_steps(test)
 
     if request.method == 'POST':
-        status = request.form.get('status')
-        comment = request.form.get('comment', '').strip()
-        if status in ['PASS', 'FAIL', 'SKIP']:
-            test = tests[current_index]
-            db.session.add(TestRun(status=status, test_case_id=test.id,
-                                    user_id=current_user.id, comment=comment))
+        statuses = request.form.getlist('step_status[]')
+        comments = request.form.getlist('step_comment[]')
+
+        if len(statuses) != len(steps):
+            flash('Укажите статус для каждого шага', 'danger')
+        elif any(status not in STATUS_LABELS for status in statuses):
+            flash('Некорректный статус шага', 'danger')
+        else:
+            overall_status = step_status_summary([
+                type('StepStatus', (), {'status': status})() for status in statuses
+            ])
+            run = TestRun(
+                status=overall_status,
+                test_case_id=test.id,
+                user_id=current_user.id,
+                comment=''
+            )
+            db.session.add(run)
+            db.session.flush()
+
+            for step, status, comment in zip(steps, statuses, comments):
+                db.session.add(StepRun(
+                    test_run_id=run.id,
+                    test_step_id=step.id,
+                    status=status,
+                    comment=comment.strip(),
+                    step_text=step.action,
+                    expected_result=step.expected_result or ''
+                ))
+
             db.session.commit()
             next_index = current_index + 1
             if next_index < len(tests):
@@ -207,12 +308,10 @@ def run_tests(project_id):
                                             test_id=test.id, index=next_index))
                 return redirect(url_for('main.run_tests', project_id=project.id, index=next_index))
             return redirect(url_for('main.run_stats', project_id=project.id))
-        flash('Неверный статус', 'danger')
 
-    test = tests[current_index]
-    return render_template('run.html', project=project, test=test,
+    return render_template('run.html', project=project, test=test, steps=steps,
                            current_index=current_index, total=len(tests),
-                           single_test=single_test)
+                           single_test=single_test, status_labels=STATUS_LABELS)
 
 
 @main_bp.route('/project/<int:project_id>/stats')
@@ -231,7 +330,8 @@ def run_stats(project_id):
         'SKIP': sum(1 for r in runs if r.status == 'SKIP'),
         'TOTAL': len(runs)
     }
-    return render_template('stats.html', project=project, runs=runs, stats=stats)
+    return render_template('stats.html', project=project, runs=runs, stats=stats,
+                           status_labels=STATUS_LABELS)
 
 
 @main_bp.route('/project/<int:project_id>/history')
@@ -244,7 +344,10 @@ def run_history(project_id):
         TestCase.project_id == project.id,
         TestRun.user_id == current_user.id
     ).order_by(TestRun.timestamp.desc()).all()
-    return render_template('history.html', project=project, runs=runs)
+    for run in runs:
+        run.step_runs = sorted(run.step_runs, key=lambda item: item.id)
+    return render_template('history.html', project=project, runs=runs,
+                           status_labels=STATUS_LABELS)
 
 
 @main_bp.route('/project/<int:project_id>/export_pdf')
@@ -327,12 +430,25 @@ def export_pdf(project_id):
         data.append([
             Paragraph(str(idx), cell_style),
             Paragraph(escape(test_title).replace('\n', '<br/>'), cell_style),
-            Paragraph(escape(run.status), cell_style),
+            Paragraph(escape(STATUS_LABELS.get(run.status, run.status)), cell_style),
             Paragraph(comment, cell_style),
             Paragraph(run.timestamp.strftime('%d.%m.%Y %H:%M'), cell_style)
         ])
 
-    table = Table(data, colWidths=[0.35*inch, 2.2*inch, 0.65*inch, 2.7*inch, 1.1*inch], repeatRows=1)
+        if run.step_runs:
+            data.append([Paragraph('', cell_style), Paragraph('<b>Шаги</b>', cell_style),
+                         Paragraph('Статус', cell_style), Paragraph('Комментарий', cell_style),
+                         Paragraph('Ожидаемый результат', cell_style)])
+            for step_run in sorted(run.step_runs, key=lambda item: item.id):
+                data.append([
+                    Paragraph('', cell_style),
+                    Paragraph(escape(step_run.step_text).replace('\n', '<br/>'), cell_style),
+                    Paragraph(escape(STATUS_LABELS.get(step_run.status, step_run.status)), cell_style),
+                    Paragraph(escape(step_run.comment or '').replace('\n', '<br/>'), cell_style),
+                    Paragraph(escape(step_run.expected_result or '').replace('\n', '<br/>'), cell_style)
+                ])
+
+    table = Table(data, colWidths=[0.35*inch, 2.2*inch, 0.85*inch, 2.0*inch, 1.6*inch], repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
