@@ -26,14 +26,23 @@ def index():
 @login_required
 def dashboard():
     projects = Project.query.filter_by(user_id=current_user.id).order_by(Project.created_at.desc()).all()
-    runs = TestRun.query.filter_by(user_id=current_user.id).order_by(TestRun.timestamp.desc()).limit(20).all()
+    status_filter = request.args.get('status', '').upper()
+    if status_filter not in ['PASS', 'FAIL', 'SKIP']:
+        status_filter = None
+
+    runs_query = TestRun.query.filter_by(user_id=current_user.id)
+    if status_filter:
+        runs_query = runs_query.filter_by(status=status_filter)
+    runs = runs_query.order_by(TestRun.timestamp.desc()).limit(20).all()
+
     stats = {
         'PASS': TestRun.query.filter_by(user_id=current_user.id, status='PASS').count(),
         'FAIL': TestRun.query.filter_by(user_id=current_user.id, status='FAIL').count(),
         'SKIP': TestRun.query.filter_by(user_id=current_user.id, status='SKIP').count(),
     }
     stats['TOTAL'] = sum(stats.values())
-    return render_template('dashboard.html', projects=projects, runs=runs, stats=stats)
+    return render_template('dashboard.html', projects=projects, runs=runs, stats=stats,
+                           status_filter=status_filter)
 
 
 @main_bp.route('/projects')
@@ -66,6 +75,16 @@ def project_detail(project_id):
         return redirect(url_for('main.projects'))
     tests = TestCase.query.filter_by(project_id=project.id).all()
     return render_template('project_detail.html', project=project, tests=tests)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>')
+@login_required
+def test_detail(project_id, test_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    return render_template('test_detail.html', project=project, test=test)
 
 
 @main_bp.route('/project/<int:project_id>/create_test', methods=['GET', 'POST'])
@@ -113,7 +132,7 @@ def edit_test(project_id, test_id):
             test.expected_result = request.form.get('expected', '').strip()
             db.session.commit()
             flash('Тест-кейс обновлён!', 'success')
-            return redirect(url_for('main.project_detail', project_id=project.id))
+            return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
 
     return render_template('edit_test.html', project=project, test=test)
 
@@ -139,7 +158,15 @@ def run_tests(project_id):
     if not project:
         return redirect(url_for('main.projects'))
 
-    tests = TestCase.query.filter_by(project_id=project.id).all()
+    selected_test_id = request.args.get('test_id', type=int)
+    if selected_test_id:
+        selected_test = TestCase.query.filter_by(id=selected_test_id, project_id=project.id).first_or_404()
+        tests = [selected_test]
+        single_test = True
+    else:
+        tests = TestCase.query.filter_by(project_id=project.id).all()
+        single_test = False
+
     if not tests:
         flash('В этом проекте нет тестов для прогона', 'warning')
         return redirect(url_for('main.project_detail', project_id=project.id))
@@ -157,13 +184,17 @@ def run_tests(project_id):
             db.session.commit()
             next_index = current_index + 1
             if next_index < len(tests):
+                if single_test:
+                    return redirect(url_for('main.run_tests', project_id=project.id,
+                                            test_id=test.id, index=next_index))
                 return redirect(url_for('main.run_tests', project_id=project.id, index=next_index))
             return redirect(url_for('main.run_stats', project_id=project.id))
         flash('Неверный статус', 'danger')
 
     test = tests[current_index]
     return render_template('run.html', project=project, test=test,
-                           current_index=current_index, total=len(tests))
+                           current_index=current_index, total=len(tests),
+                           single_test=single_test)
 
 
 @main_bp.route('/project/<int:project_id>/stats')
