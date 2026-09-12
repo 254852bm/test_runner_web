@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-8">
+    <div class="col-md-10">
         <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
             <h2 class="mb-0">Редактирование тест-кейса</h2>
             <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-outline-secondary">← Назад к проекту</a>
@@ -15,19 +15,82 @@
                 <label for="precondition" class="form-label">Предусловие</label>
                 <textarea class="form-control" id="precondition" name="precondition" rows="3">{{ test.precondition or '' }}</textarea>
             </div>
+
             <div class="mb-3">
-                <label for="steps" class="form-label">Шаги</label>
-                <textarea class="form-control" id="steps" name="steps" rows="8" required>{{ test.steps }}</textarea>
+                <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                    <label class="form-label mb-0">Шаги тест-кейса</label>
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="addStep()">+ Добавить шаг</button>
+                </div>
+                <div id="steps-container">
+                    {% for step in steps %}
+                    <div class="card mb-3 step-card">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>Шаг <span class="step-number">{{ loop.index }}</span></strong>
+                                {% if not loop.first %}
+                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeStep(this)">Удалить</button>
+                                {% endif %}
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label">Действие</label>
+                                <textarea class="form-control" name="step_action[]" rows="2" required>{{ step.action }}</textarea>
+                            </div>
+                            <div>
+                                <label class="form-label">Ожидаемый результат</label>
+                                <textarea class="form-control" name="step_expected[]" rows="2">{{ step.expected_result or '' }}</textarea>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="form-text">Статус и комментарий заполняются во время прогона теста.</div>
             </div>
-            <div class="mb-3">
-                <label for="expected" class="form-label">Ожидаемый результат</label>
-                <textarea class="form-control" id="expected" name="expected" rows="4">{{ test.expected_result or '' }}</textarea>
-            </div>
+
             <div class="action-buttons">
                 <button type="submit" class="btn btn-success">Сохранить изменения</button>
-                <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-secondary">Отмена</a>
+                <a href="{{ url_for('main.test_detail', project_id=project.id, test_id=test.id) }}" class="btn btn-secondary">Отмена</a>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+function addStep() {
+    const container = document.getElementById('steps-container');
+    const cards = container.querySelectorAll('.step-card');
+    const number = cards.length + 1;
+    const card = document.createElement('div');
+    card.className = 'card mb-3 step-card';
+    card.innerHTML = `
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong>Шаг <span class="step-number">${number}</span></strong>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeStep(this)">Удалить</button>
+            </div>
+            <div class="mb-2">
+                <label class="form-label">Действие</label>
+                <textarea class="form-control" name="step_action[]" rows="2" required></textarea>
+            </div>
+            <div>
+                <label class="form-label">Ожидаемый результат</label>
+                <textarea class="form-control" name="step_expected[]" rows="2"></textarea>
+            </div>
+        </div>`;
+    container.appendChild(card);
+    renumberSteps();
+}
+
+function removeStep(button) {
+    const container = document.getElementById('steps-container');
+    if (container.querySelectorAll('.step-card').length === 1) return;
+    button.closest('.step-card').remove();
+    renumberSteps();
+}
+
+function renumberSteps() {
+    document.querySelectorAll('#steps-container .step-card').forEach((card, index) => {
+        card.querySelector('.step-number').textContent = index + 1;
+    });
+}
+</script>
 {% endblock %}
