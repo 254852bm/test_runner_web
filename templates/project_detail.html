@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2>{{ project.name }}</h2>
-    <div class="d-flex gap-2 flex-wrap">
+<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
+    <h2 class="project-name mb-0 flex-grow-1">{{ project.name }}</h2>
+    <div class="action-buttons justify-content-end">
         <a href="{{ url_for('main.run_tests', project_id=project.id) }}" class="btn btn-success">▶ Запустить прогон</a>
         <a href="{{ url_for('main.create_test', project_id=project.id) }}" class="btn btn-primary">+ Добавить тест</a>
         <a href="{{ url_for('main.run_history', project_id=project.id) }}" class="btn btn-outline-dark">📜 История</a>
-        <a href="{{ url_for('main.projects') }}" class="btn btn-secondary">Назад</a>
+        <a href="{{ url_for('main.projects') }}" class="btn btn-secondary">← Назад к проектам</a>
     </div>
 </div>
 
@@ -14,15 +14,17 @@
     <div class="list-group">
         {% for test in tests %}
             <div class="list-group-item">
-                <div class="d-flex justify-content-between align-items-start gap-3">
-                    <div>
-                        <h5>{{ test.title }}</h5>
-                        <p class="mb-1 text-muted">{{ test.precondition|truncate(100) }}</p>
-                        <small>Шаги: {{ test.steps|truncate(100) }}</small>
+                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                    <div class="flex-grow-1 min-width-0">
+                        <h5 class="test-case-title">{{ test.title }}</h5>
+                        {% if test.precondition %}
+                            <p class="mb-1 text-muted test-case-text"><strong>Предусловие:</strong> {{ test.precondition }}</p>
+                        {% endif %}
+                        <div class="test-case-text"><strong>Шаги:</strong> {{ test.steps|truncate(150) }}</div>
                     </div>
-                    <span class="badge bg-info">ID: {{ test.id }}</span>
+                    <span class="badge bg-info flex-shrink-0">ID: {{ test.id }}</span>
                 </div>
-                <div class="mt-3 d-flex gap-2">
+                <div class="mt-3 action-buttons">
                     <a href="{{ url_for('main.edit_test', project_id=project.id, test_id=test.id) }}" class="btn btn-sm btn-outline-primary">✏ Редактировать</a>
                     <form method="POST" action="{{ url_for('main.delete_test', project_id=project.id, test_id=test.id) }}" onsubmit="return confirm('Удалить этот тест-кейс и всю его историю прогонов?');">
                         <button type="submit" class="btn btn-sm btn-outline-danger">🗑 Удалить</button>
