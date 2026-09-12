@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 gap-2 flex-wrap">
     <div>
         <h2>История прогонов</h2>
         <p class="text-muted mb-0">Проект: {{ project.name }}</p>
@@ -16,10 +16,41 @@
 <tr>
     <td>{{ run.id }}</td>
     <td>{{ run.test_case.title if run.test_case else 'Тест удалён' }}</td>
-    <td><strong>{{ run.status }}</strong></td>
+    <td><strong>{{ status_labels.get(run.status, run.status) }}</strong></td>
     <td>{{ run.comment or '—' }}</td>
     <td>{{ run.timestamp.strftime('%d.%m.%Y %H:%M') }}</td>
 </tr>
+{% if run.step_runs %}
+<tr>
+    <td></td>
+    <td colspan="4">
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0">
+                <thead>
+                    <tr>
+                        <th>Шаг</th>
+                        <th>Действие</th>
+                        <th>Ожидаемый результат</th>
+                        <th>Статус</th>
+                        <th>Комментарий</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for step_run in run.step_runs %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td class="test-case-text">{{ step_run.step_text }}</td>
+                        <td class="test-case-text">{{ step_run.expected_result or '—' }}</td>
+                        <td><strong>{{ status_labels.get(step_run.status, step_run.status) }}</strong></td>
+                        <td class="test-case-text">{{ step_run.comment or '—' }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </td>
+</tr>
+{% endif %}
 {% else %}
 <tr><td colspan="5" class="text-muted">История пока пуста.</td></tr>
 {% endfor %}
