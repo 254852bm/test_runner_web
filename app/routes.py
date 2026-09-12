@@ -77,6 +77,24 @@ def project_detail(project_id):
     return render_template('project_detail.html', project=project, tests=tests)
 
 
+@main_bp.route('/project/<int:project_id>/delete', methods=['POST'])
+@login_required
+def delete_project(project_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+
+    test_ids = [test.id for test in TestCase.query.filter_by(project_id=project.id).all()]
+    if test_ids:
+        TestRun.query.filter(TestRun.test_case_id.in_(test_ids)).delete(synchronize_session=False)
+        TestCase.query.filter(TestCase.project_id == project.id).delete(synchronize_session=False)
+
+    db.session.delete(project)
+    db.session.commit()
+    flash('Проект и все его тест-кейсы удалены.', 'success')
+    return redirect(url_for('main.projects'))
+
+
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>')
 @login_required
 def test_detail(project_id, test_id):
@@ -257,21 +275,24 @@ def export_pdf(project_id):
         flash('Нет результатов для экспорта', 'warning')
         return redirect(url_for('main.project_detail', project_id=project.id))
 
-    font_path = 'C:/Windows/Fonts/arial.ttf'
-    if os.path.exists(font_path):
-        pdfmetrics.registerFont(TTFont('Arial', font_path))
-        font_name = 'Arial'
-    else:
-        try:
-            import reportlab
-            dejavu_path = os.path.join(os.path.dirname(reportlab.__file__), 'fonts', 'DejaVuSans.ttf')
-            if os.path.exists(dejavu_path):
-                pdfmetrics.registerFont(TTFont('DejaVuSans', dejavu_path))
-                font_name = 'DejaVuSans'
-            else:
-                font_name = 'Helvetica'
-        except Exception:
-            font_name = 'Helvetica'
+    font_candidates = [
+        'C:/Windows/Fonts/arial.ttf',
+        '/mnt/c/Windows/Fonts/arial.ttf',
+        '/usr/share/fonts/truetype/msttcorefonts/Arial.ttf',
+        '/usr/share/fonts/truetype/msttcorefonts/arial.ttf',
+        '/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    ]
+
+    font_name = 'Helvetica'
+    for font_path in font_candidates:
+        if os.path.exists(font_path):
+            try:
+                pdfmetrics.registerFont(TTFont('CyrillicFont', font_path))
+                font_name = 'CyrillicFont'
+                break
+            except Exception:
+                continue
 
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=36, leftMargin=36,
