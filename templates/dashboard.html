@@ -9,27 +9,23 @@
 </div>
 
 <div class="row g-3 mb-4">
+    {% for status, label in [('PASS', 'Пройденные'), ('FAIL', 'Непройденные'), ('SKIP', 'Пропущенные')] %}
     <div class="col-md-3">
-        <a href="{{ url_for('main.projects') }}" class="text-decoration-none text-reset">
-            <div class="card text-center h-100"><div class="card-body"><h6>PASS</h6><h2>{{ stats.PASS }}</h2><small class="text-muted">Открыть проекты</small></div></div>
+        <a href="{{ url_for('main.dashboard', status=status) }}" class="text-decoration-none text-reset">
+            <div class="card text-center h-100 {% if status_filter == status %}border-primary{% endif %}"><div class="card-body"><h6>{{ status }}</h6><h2>{{ stats[status] }}</h2><small class="text-muted">Показать {{ label|lower }}</small></div></div>
         </a>
     </div>
+    {% endfor %}
     <div class="col-md-3">
-        <a href="{{ url_for('main.projects') }}" class="text-decoration-none text-reset">
-            <div class="card text-center h-100"><div class="card-body"><h6>FAIL</h6><h2>{{ stats.FAIL }}</h2><small class="text-muted">Открыть проекты</small></div></div>
-        </a>
-    </div>
-    <div class="col-md-3">
-        <a href="{{ url_for('main.projects') }}" class="text-decoration-none text-reset">
-            <div class="card text-center h-100"><div class="card-body"><h6>SKIP</h6><h2>{{ stats.SKIP }}</h2><small class="text-muted">Открыть проекты</small></div></div>
-        </a>
-    </div>
-    <div class="col-md-3">
-        <a href="{{ url_for('main.projects') }}" class="text-decoration-none text-reset">
-            <div class="card text-center h-100"><div class="card-body"><h6>ВСЕГО</h6><h2>{{ stats.TOTAL }}</h2><small class="text-muted">Открыть проекты</small></div></div>
+        <a href="{{ url_for('main.dashboard') }}" class="text-decoration-none text-reset">
+            <div class="card text-center h-100 {% if not status_filter %}border-primary{% endif %}"><div class="card-body"><h6>ВСЕГО</h6><h2>{{ stats.TOTAL }}</h2><small class="text-muted">Показать все прогоны</small></div></div>
         </a>
     </div>
 </div>
+
+{% if status_filter %}
+<div class="alert alert-info">Сейчас показаны только прогоны со статусом <strong>{{ status_filter }}</strong>. <a href="{{ url_for('main.dashboard') }}">Показать все</a></div>
+{% endif %}
 
 <h4 class="mb-3">Мои проекты</h4>
 <div class="row g-3 mb-4">
@@ -54,7 +50,7 @@
 {% endfor %}
 </div>
 
-<h4 class="mb-3">Последние прогоны</h4>
+<h4 class="mb-3">Последние прогоны{% if status_filter %} — {{ status_filter }}{% endif %}</h4>
 <div class="table-responsive">
 <table class="table table-striped">
 <thead><tr><th>Тест</th><th>Статус</th><th>Комментарий</th><th>Дата</th></tr></thead>
@@ -67,7 +63,7 @@
     <td>{{ run.timestamp.strftime('%d.%m.%Y %H:%M') }}</td>
 </tr>
 {% else %}
-<tr><td colspan="4" class="text-muted">Прогонов пока нет.</td></tr>
+<tr><td colspan="4" class="text-muted">Прогонов с таким статусом пока нет.</td></tr>
 {% endfor %}
 </tbody>
 </table>
