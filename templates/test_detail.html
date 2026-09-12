@@ -15,10 +15,23 @@
         {% if test.precondition %}
             <div class="mb-3"><strong>Предусловие:</strong><div class="test-case-text">{{ test.precondition }}</div></div>
         {% endif %}
-        <div class="mb-3"><strong>Шаги:</strong><div class="test-case-text">{{ test.steps }}</div></div>
-        {% if test.expected_result %}
-            <div><strong>Ожидаемый результат:</strong><div class="test-case-text">{{ test.expected_result }}</div></div>
-        {% endif %}
+
+        <div class="mb-2"><strong>Шаги тест-кейса:</strong></div>
+        {% for step in steps %}
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6>Шаг {{ loop.index }}</h6>
+                <div class="mb-2">
+                    <strong>Действие:</strong>
+                    <div class="test-case-text">{{ step.action }}</div>
+                </div>
+                <div>
+                    <strong>Ожидаемый результат:</strong>
+                    <div class="test-case-text">{{ step.expected_result or 'Не указан' }}</div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
     </div>
 </div>
 
