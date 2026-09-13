@@ -24,14 +24,25 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
 
-            <a class="navbar-brand mx-auto mx-lg-0" href="{{ url_for('main.index') }}">🧪 Тест-раннер</a>
+            <a class="navbar-brand app-logo" href="{{ url_for('main.index') }}" aria-label="Тест-раннер">
+                <svg width="180" height="50" viewBox="0 0 180 50" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="logoTitle">
+                    <title id="logoTitle">Тест-раннер</title>
+                    <path d="M10 15 L15 20 L25 10" stroke="#28a745" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    <line x1="32" y1="15" x2="45" y2="15" stroke="#343a40" stroke-width="3" stroke-linecap="round"/>
+                    <path d="M10 25 L15 30 L25 20" stroke="#28a745" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    <line x1="32" y1="25" x2="45" y2="25" stroke="#343a40" stroke-width="3" stroke-linecap="round"/>
+                    <path d="M10 35 L15 40 L25 30" stroke="#28a745" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+                    <line x1="32" y1="35" x2="45" y2="35" stroke="#343a40" stroke-width="3" stroke-linecap="round"/>
+                    <text x="55" y="33" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="700" fill="#343a40">Тест-раннер</text>
+                </svg>
+            </a>
         </div>
     </nav>
 
     <div class="offcanvas offcanvas-start app-sidebar" tabindex="-1" id="mainSidebar"
          aria-labelledby="mainSidebarLabel">
         <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="mainSidebarLabel">🧪 Тест-раннер</h5>
+            <h5 class="offcanvas-title" id="mainSidebarLabel">Тест-раннер</h5>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Закрыть"></button>
         </div>
 
