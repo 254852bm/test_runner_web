@@ -179,3 +179,51 @@ html[data-theme="dark"] .bg-light {
 html[data-theme="dark"] .text-dark {
     color: var(--app-text) !important;
 }
+
+/* ===== Dashboard ===== */
+.dashboard-stat-card,
+.project-dashboard-card,
+.dashboard-chart-card {
+    border-color: var(--app-border);
+    box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.04);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dashboard-stat-card:hover,
+.project-dashboard-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1.2rem rgba(0, 0, 0, 0.08);
+}
+
+.dashboard-stat-icon {
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: var(--app-sidebar-hover);
+    color: var(--app-text);
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.dashboard-chart-wrap {
+    position: relative;
+    height: 280px;
+}
+
+.dashboard-doughnut-wrap {
+    max-width: 360px;
+    margin: 0 auto;
+}
+
+.project-dashboard-card .badge {
+    min-width: 2rem;
+}
+
+@media (max-width: 575.98px) {
+    .dashboard-chart-wrap {
+        height: 230px;
+    }
+}
