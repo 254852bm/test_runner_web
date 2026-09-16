@@ -76,9 +76,11 @@ class TestRun(db.Model):
     comment = db.Column(db.Text)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     test_case_id = db.Column(db.Integer, db.ForeignKey('test_case.id'), nullable=False)
+    version_id = db.Column(db.Integer, db.ForeignKey('test_case_version.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
 
     test_case = db.relationship('TestCase', backref='runs')
+    version = db.relationship('TestCaseVersion', backref='runs')
     user = db.relationship('User', backref='runs')
 
     step_runs = db.relationship(
