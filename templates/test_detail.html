@@ -9,8 +9,12 @@
     </div>
 </div>
 
-<div class="card">
+<div class="card mb-4">
     <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h5 class="mb-0">Текущая версия</h5>
+            <span class="badge bg-primary">v{{ current_version.version_number }}</span>
+        </div>
         <p><strong>ID:</strong> {{ test.id }}</p>
         {% if test.precondition %}
             <div class="mb-3"><strong>Предусловие:</strong><div class="test-case-text">{{ test.precondition }}</div></div>
@@ -21,16 +25,32 @@
         <div class="card mb-3">
             <div class="card-body">
                 <h6>Шаг {{ loop.index }}</h6>
-                <div class="mb-2">
-                    <strong>Действие:</strong>
-                    <div class="test-case-text">{{ step.action }}</div>
-                </div>
-                <div>
-                    <strong>Ожидаемый результат:</strong>
-                    <div class="test-case-text">{{ step.expected_result or 'Не указан' }}</div>
-                </div>
+                <div class="mb-2"><strong>Действие:</strong><div class="test-case-text">{{ step.action }}</div></div>
+                <div><strong>Ожидаемый результат:</strong><div class="test-case-text">{{ step.expected_result or 'Не указан' }}</div></div>
             </div>
         </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="mb-3">История версий</h5>
+        {% for version in versions %}
+        <div class="border rounded p-3 mb-2">
+            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                <div>
+                    <strong>v{{ version.version_number }}</strong>
+                    {% if version.id == current_version.id %}<span class="badge bg-success ms-2">текущая</span>{% endif %}
+                </div>
+                <div class="text-muted small">{{ version.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+            </div>
+            <div class="small text-muted mt-1">{{ version.user.email }}</div>
+            <div class="mt-2">{{ version.title }}</div>
+            <a href="{{ url_for('main.test_version_detail', project_id=project.id, test_id=test.id, version_number=version.version_number) }}" class="btn btn-sm btn-outline-primary mt-2">Открыть версию</a>
+        </div>
+        {% else %}
+        <div class="text-muted">История версий пока пуста.</div>
         {% endfor %}
     </div>
 </div>
