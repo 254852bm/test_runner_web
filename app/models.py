@@ -39,6 +39,28 @@ class TestCase(db.Model):
         cascade='all, delete-orphan'
     )
 
+    versions = db.relationship(
+        'TestCaseVersion',
+        backref='test_case',
+        lazy=True,
+        order_by='TestCaseVersion.version_number',
+        cascade='all, delete-orphan'
+    )
+
+
+class TestCaseVersion(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    test_case_id = db.Column(db.Integer, db.ForeignKey('test_case.id'), nullable=False)
+    version_number = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    precondition = db.Column(db.Text)
+    steps = db.Column(db.Text, nullable=False)
+    expected_result = db.Column(db.Text)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='test_case_versions')
+
 
 class TestStep(db.Model):
     id = db.Column(db.Integer, primary_key=True)
