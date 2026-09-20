@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash
 from flask_login import login_required, current_user
 from app import db
-from app.models import Project, TestCase, TestRun, TestStep, StepRun
+from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun
 from datetime import datetime
 
 main_bp = Blueprint('main', __name__)
@@ -69,6 +69,46 @@ def step_status_summary(step_runs):
     return 'PASS'
 
 
+def ensure_test_version(test):
+    """Создаёт v1 для существующего теста, если история версий ещё пустая."""
+    version = TestCaseVersion.query.filter_by(test_case_id=test.id).order_by(
+        TestCaseVersion.version_number.desc()
+    ).first()
+    if version:
+        return version
+
+    version = TestCaseVersion(
+        test_case_id=test.id,
+        version_number=1,
+        title=test.title,
+        precondition=test.precondition or '',
+        steps=test.steps or '',
+        expected_result=test.expected_result or '',
+        user_id=current_user.id,
+    )
+    db.session.add(version)
+    db.session.commit()
+    return version
+
+
+def create_test_version(test):
+    latest = TestCaseVersion.query.filter_by(test_case_id=test.id).order_by(
+        TestCaseVersion.version_number.desc()
+    ).first()
+    version_number = (latest.version_number + 1) if latest else 1
+    version = TestCaseVersion(
+        test_case_id=test.id,
+        version_number=version_number,
+        title=test.title,
+        precondition=test.precondition or '',
+        steps=test.steps or '',
+        expected_result=test.expected_result or '',
+        user_id=current_user.id,
+    )
+    db.session.add(version)
+    return version
+
+
 @main_bp.route('/')
 def index():
     if current_user.is_authenticated:
@@ -128,6 +168,8 @@ def project_detail(project_id):
     if not project:
         return redirect(url_for('main.projects'))
     tests = TestCase.query.filter_by(project_id=project.id).all()
+    for test in tests:
+        ensure_test_version(test)
     return render_template('project_detail.html', project=project, tests=tests)
 
 
@@ -145,6 +187,7 @@ def delete_project(project_id):
             StepRun.query.filter(StepRun.test_run_id.in_(run_ids)).delete(synchronize_session=False)
         TestRun.query.filter(TestRun.test_case_id.in_(test_ids)).delete(synchronize_session=False)
         TestStep.query.filter(TestStep.test_case_id.in_(test_ids)).delete(synchronize_session=False)
+        TestCaseVersion.query.filter(TestCaseVersion.test_case_id.in_(test_ids)).delete(synchronize_session=False)
         TestCase.query.filter(TestCase.project_id == project.id).delete(synchronize_session=False)
 
     db.session.delete(project)
@@ -161,8 +204,30 @@ def test_detail(project_id, test_id):
         return redirect(url_for('main.projects'))
     test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
     steps = ensure_test_steps(test)
+    current_version = ensure_test_version(test)
+    versions = TestCaseVersion.query.filter_by(test_case_id=test.id).order_by(
+        TestCaseVersion.version_number.desc()
+    ).all()
     return render_template('test_detail.html', project=project, test=test, steps=steps,
-                           status_labels=STATUS_LABELS)
+                           status_labels=STATUS_LABELS, current_version=current_version,
+                           versions=versions)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/versions/<int:version_number>')
+@login_required
+def test_version_detail(project_id, test_id, version_number):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    version = TestCaseVersion.query.filter_by(
+        test_case_id=test.id, version_number=version_number
+    ).first_or_404()
+    version_steps = [line.strip() for line in (version.steps or '').splitlines() if line.strip()]
+    version_expected = [line.strip() for line in (version.expected_result or '').splitlines() if line.strip()]
+    return render_template('test_version_detail.html', project=project, test=test,
+                           version=version, version_steps=version_steps,
+                           version_expected=version_expected)
 
 
 @main_bp.route('/project/<int:project_id>/create_test', methods=['GET', 'POST'])
@@ -188,6 +253,7 @@ def create_test(project_id):
             db.session.add(test)
             db.session.flush()
             save_test_steps(test, [a for a, _ in pairs], [e for _, e in pairs])
+            create_test_version(test)
             db.session.commit()
             flash('Тест добавлен!', 'success')
             return redirect(url_for('main.project_detail', project_id=project.id))
@@ -204,6 +270,7 @@ def edit_test(project_id, test_id):
         return redirect(url_for('main.projects'))
     test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
     steps = ensure_test_steps(test)
+    ensure_test_version(test)
 
     if request.method == 'POST':
         title = request.form.get('title', '').strip()
@@ -219,8 +286,9 @@ def edit_test(project_id, test_id):
             test.steps = '\n'.join(action for action, _ in pairs)
             test.expected_result = '\n'.join(expected for _, expected in pairs)
             save_test_steps(test, [a for a, _ in pairs], [e for _, e in pairs])
+            create_test_version(test)
             db.session.commit()
-            flash('Тест-кейс обновлён!', 'success')
+            flash('Тест-кейс обновлён! Создана новая версия.', 'success')
             return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
 
     return render_template('edit_test.html', project=project, test=test, steps=steps)
@@ -238,6 +306,7 @@ def delete_test(project_id, test_id):
         StepRun.query.filter(StepRun.test_run_id.in_(run_ids)).delete(synchronize_session=False)
     TestRun.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
     TestStep.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
+    TestCaseVersion.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
     db.session.delete(test)
     db.session.commit()
     flash('Тест-кейс удалён вместе с его результатами.', 'success')

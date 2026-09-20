@@ -11,22 +11,36 @@
 </div>
 
 {% if tests %}
+<form method="GET" action="{{ url_for('main.run_tests', project_id=project.id) }}" id="testSelectionForm">
+    <div class="card mb-3">
+        <div class="card-body d-flex justify-content-between align-items-center gap-3 flex-wrap">
+            <div>
+                <strong>Выберите тест-кейсы для прогона</strong>
+                <div class="text-muted small">Отметьте нужные тесты и запустите только их.</div>
+            </div>
+            <button type="submit" class="btn btn-success">▶ Запустить выбранные</button>
+        </div>
+    </div>
+
     <div class="list-group">
         {% for test in tests %}
             <div class="list-group-item">
                 <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
-                    <div class="flex-grow-1 min-width-0">
-                        <h5 class="test-case-title"><a href="{{ url_for('main.test_detail', project_id=project.id, test_id=test.id) }}" class="text-decoration-none">{{ test.title }}</a></h5>
-                        {% if test.precondition %}
-                            <p class="mb-1 text-muted test-case-text"><strong>Предусловие:</strong> {{ test.precondition }}</p>
-                        {% endif %}
-                        <div class="test-case-text"><strong>Шаги:</strong> {{ test.steps|truncate(150) }}</div>
+                    <div class="form-check flex-grow-1 min-width-0">
+                        <input class="form-check-input test-select" type="checkbox" name="test_id" value="{{ test.id }}" id="test-{{ test.id }}">
+                        <label class="form-check-label w-100" for="test-{{ test.id }}">
+                            <h5 class="test-case-title mb-1">{{ test.title }}</h5>
+                            {% if test.precondition %}
+                                <p class="mb-1 text-muted test-case-text"><strong>Предусловие:</strong> {{ test.precondition }}</p>
+                            {% endif %}
+                            <div class="test-case-text"><strong>Шаги:</strong> {{ test.steps|truncate(150) }}</div>
+                        </label>
                     </div>
                     <span class="badge bg-info flex-shrink-0">ID: {{ test.id }}</span>
                 </div>
                 <div class="mt-3 action-buttons">
                     <a href="{{ url_for('main.test_detail', project_id=project.id, test_id=test.id) }}" class="btn btn-sm btn-outline-secondary">Открыть</a>
-                    <a href="{{ url_for('main.run_tests', project_id=project.id, test_id=test.id) }}" class="btn btn-sm btn-success">▶ Выбрать</a>
+                    <a href="{{ url_for('main.run_tests', project_id=project.id, test_id=test.id) }}" class="btn btn-sm btn-success">▶ Запустить один</a>
                     <a href="{{ url_for('main.edit_test', project_id=project.id, test_id=test.id) }}" class="btn btn-sm btn-outline-primary">✏ Редактировать</a>
                     <form method="POST" action="{{ url_for('main.delete_test', project_id=project.id, test_id=test.id) }}" onsubmit="return confirm('Удалить этот тест-кейс и всю его историю прогонов?');">
                         <button type="submit" class="btn btn-sm btn-outline-danger">🗑 Удалить</button>
@@ -35,7 +49,24 @@
             </div>
         {% endfor %}
     </div>
+</form>
 {% else %}
     <div class="alert alert-warning">В этом проекте пока нет тестов. Создайте первый!</div>
+{% endif %}
+
+{% if tests %}
+<script>
+(function () {
+    const form = document.getElementById('testSelectionForm');
+    if (!form) return;
+    form.addEventListener('submit', function (event) {
+        const selected = form.querySelectorAll('.test-select:checked');
+        if (!selected.length) {
+            event.preventDefault();
+            alert('Выберите хотя бы один тест-кейс.');
+        }
+    });
+})();
+</script>
 {% endif %}
 {% endblock %}

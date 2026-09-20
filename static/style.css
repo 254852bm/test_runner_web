@@ -24,3 +24,206 @@ textarea.form-control {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
+
+/* ===== Theme ===== */
+:root {
+    --app-bg: #f8f9fa;
+    --app-text: #212529;
+    --app-card-bg: #ffffff;
+    --app-border: #dee2e6;
+    --app-muted: #6c757d;
+    --app-input-bg: #ffffff;
+    --app-input-text: #212529;
+    --app-sidebar-bg: #ffffff;
+    --app-sidebar-hover: #f1f3f5;
+}
+
+html[data-theme="dark"] {
+    --app-bg: #121212;
+    --app-text: #e9ecef;
+    --app-card-bg: #1e1e1e;
+    --app-border: #3a3a3a;
+    --app-muted: #adb5bd;
+    --app-input-bg: #252525;
+    --app-input-text: #f1f3f5;
+    --app-sidebar-bg: #1b1b1b;
+    --app-sidebar-hover: #2b2b2b;
+}
+
+html,
+body {
+    min-height: 100%;
+}
+
+body {
+    background-color: var(--app-bg);
+    color: var(--app-text);
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+html[data-theme="dark"] .card,
+html[data-theme="dark"] .list-group-item,
+html[data-theme="dark"] .modal-content,
+html[data-theme="dark"] .dropdown-menu {
+    background-color: var(--app-card-bg);
+    color: var(--app-text);
+    border-color: var(--app-border);
+}
+
+html[data-theme="dark"] .table {
+    --bs-table-bg: var(--app-card-bg);
+    --bs-table-color: var(--app-text);
+    --bs-table-border-color: var(--app-border);
+}
+
+html[data-theme="dark"] .form-control,
+html[data-theme="dark"] .form-select {
+    background-color: var(--app-input-bg);
+    color: var(--app-input-text);
+    border-color: var(--app-border);
+}
+
+html[data-theme="dark"] .form-control:focus,
+html[data-theme="dark"] .form-select:focus {
+    background-color: #2b2b2b;
+    color: var(--app-input-text);
+}
+
+html[data-theme="dark"] .text-muted,
+html[data-theme="dark"] .form-text {
+    color: var(--app-muted) !important;
+}
+
+html[data-theme="dark"] .btn-close {
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+
+/* ===== Top bar ===== */
+.app-navbar {
+    min-height: 56px;
+}
+
+.sidebar-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 38px;
+    padding: 0.25rem 0.5rem;
+}
+
+/* ===== Sidebar ===== */
+.app-sidebar {
+    width: 290px;
+    background-color: var(--app-sidebar-bg);
+    color: var(--app-text);
+}
+
+.app-sidebar .offcanvas-header {
+    border-bottom: 1px solid var(--app-border);
+}
+
+.app-sidebar .offcanvas-title {
+    font-weight: 700;
+}
+
+.sidebar-user {
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    background-color: var(--app-sidebar-hover);
+}
+
+.sidebar-email {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.sidebar-nav .nav-link,
+.app-sidebar .theme-toggle {
+    color: var(--app-text);
+    border-radius: 0.5rem;
+    padding: 0.7rem 0.8rem;
+    margin-bottom: 0.25rem;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.sidebar-nav .nav-link:hover,
+.app-sidebar .theme-toggle:hover {
+    background-color: var(--app-sidebar-hover);
+}
+
+.sidebar-nav .nav-link.active {
+    background-color: #0d6efd;
+    color: #fff;
+}
+
+.sidebar-divider {
+    height: 1px;
+    background-color: var(--app-border);
+    margin: 0.75rem 0;
+}
+
+.app-content {
+    padding-bottom: 2rem;
+}
+
+/* Bootstrap utility backgrounds that otherwise stay white in dark mode. */
+html[data-theme="dark"] .bg-white {
+    background-color: var(--app-card-bg) !important;
+}
+
+html[data-theme="dark"] .bg-light {
+    background-color: #252525 !important;
+}
+
+html[data-theme="dark"] .text-dark {
+    color: var(--app-text) !important;
+}
+
+/* ===== Dashboard ===== */
+.dashboard-stat-card,
+.project-dashboard-card,
+.dashboard-chart-card {
+    border-color: var(--app-border);
+    box-shadow: 0 0.2rem 0.8rem rgba(0, 0, 0, 0.04);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.dashboard-stat-card:hover,
+.project-dashboard-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1.2rem rgba(0, 0, 0, 0.08);
+}
+
+.dashboard-stat-icon {
+    width: 42px;
+    height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: var(--app-sidebar-hover);
+    color: var(--app-text);
+    font-size: 1.25rem;
+    font-weight: 700;
+}
+
+.dashboard-chart-wrap {
+    position: relative;
+    height: 280px;
+}
+
+.dashboard-doughnut-wrap {
+    max-width: 360px;
+    margin: 0 auto;
+}
+
+.project-dashboard-card .badge {
+    min-width: 2rem;
+}
+
+@media (max-width: 575.98px) {
+    .dashboard-chart-wrap {
+        height: 230px;
+    }
+}
