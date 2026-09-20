@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, request, flash
+from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file
 from flask_login import login_required, current_user
 from app import db
 from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun
@@ -432,21 +432,22 @@ def export_pdf(project_id):
     from reportlab.lib.enums import TA_LEFT
     from xml.sax.saxutils import escape
     from io import BytesIO
-    from flask import send_file
     import os
 
     project = user_project(project_id)
-    if not project:
+    if project is None:
         return redirect(url_for('main.projects'))
 
     runs = TestRun.query.join(TestCase).filter(
         TestCase.project_id == project.id,
         TestRun.user_id == current_user.id
     ).order_by(TestRun.timestamp.desc()).all()
+
     if not runs:
         flash('Нет результатов для экспорта', 'warning')
         return redirect(url_for('main.project_detail', project_id=project.id))
 
+    # Поиск и регистрация шрифта с поддержкой кириллицы (Windows + Linux)
     font_candidates = [
         'C:/Windows/Fonts/arial.ttf',
         '/mnt/c/Windows/Fonts/arial.ttf',
@@ -467,8 +468,10 @@ def export_pdf(project_id):
                 continue
 
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=36, leftMargin=36,
-                            topMargin=50, bottomMargin=50)
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            rightMargin=72, leftMargin=72,
+                            topMargin=72, bottomMargin=72)
+
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle('CustomTitle', parent=styles['Title'], fontName=font_name)
     heading_style = ParagraphStyle('CustomHeading', parent=styles['Heading2'], fontName=font_name)
@@ -476,22 +479,31 @@ def export_pdf(project_id):
     cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontName=font_name,
                                 fontSize=7, leading=9, alignment=TA_LEFT)
 
-    elements = [Paragraph(f'Отчёт по проекту: {escape(project.name)}', title_style),
-                Spacer(1, 0.25 * inch),
-                Paragraph(f'Пользователь: {escape(current_user.email)}', normal_style),
-                Paragraph(f'Дата: {datetime.now().strftime("%d.%m.%Y %H:%M")}', normal_style),
-                Spacer(1, 0.25 * inch)]
+    elements = []
 
-    stats = {s: sum(1 for r in runs if r.status == s) for s in ['PASS', 'FAIL', 'SKIP']}
-    elements.extend([Paragraph(f'Всего пройдено: {len(runs)}', heading_style),
-                     Paragraph(f'PASS: {stats["PASS"]}', normal_style),
-                     Paragraph(f'FAIL: {stats["FAIL"]}', normal_style),
-                     Paragraph(f'SKIP: {stats["SKIP"]}', normal_style),
-                     Spacer(1, 0.25 * inch)])
+    elements.append(Paragraph(f"Отчёт по проекту: {escape(project.name)}", title_style))
+    elements.append(Spacer(1, 0.25 * inch))
+    elements.append(Paragraph(f"Пользователь: {escape(current_user.email)}", normal_style))
+    elements.append(Paragraph(f"Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}", normal_style))
+    elements.append(Spacer(1, 0.25 * inch))
+
+    stats = {
+        'PASS': sum(1 for r in runs if r.status == 'PASS'),
+        'FAIL': sum(1 for r in runs if r.status == 'FAIL'),
+        'SKIP': sum(1 for r in runs if r.status == 'SKIP')
+    }
+    total = len(runs)
+
+    elements.append(Paragraph(f"Всего пройдено: {total}", heading_style))
+    elements.append(Paragraph(f"✅ PASS: {stats['PASS']}", normal_style))
+    elements.append(Paragraph(f"❌ FAIL: {stats['FAIL']}", normal_style))
+    elements.append(Paragraph(f"⏭️ SKIP: {stats['SKIP']}", normal_style))
+    elements.append(Spacer(1, 0.25 * inch))
 
     data = [[Paragraph('#', cell_style), Paragraph('Тест', cell_style),
              Paragraph('Статус', cell_style), Paragraph('Комментарий', cell_style),
              Paragraph('Дата', cell_style)]]
+    
     for idx, run in enumerate(runs, start=1):
         test_title = run.test_case.title if run.test_case else f'Тест #{run.test_case_id}'
         comment = run.comment or ''
@@ -531,8 +543,10 @@ def export_pdf(project_id):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
     ]))
     elements.append(table)
+
     doc.build(elements)
     buffer.seek(0)
+
     return send_file(buffer, as_attachment=True,
                      download_name=f'отчёт_{project.name}_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf',
                      mimetype='application/pdf')
