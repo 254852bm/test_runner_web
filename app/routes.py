@@ -1,6 +1,7 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file
 from flask_login import login_required, current_user
 from markdown import markdown
+from markdown.extensions.toc import slugify_unicode
 from app import db
 from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun
 from datetime import datetime
@@ -137,7 +138,11 @@ def documentation():
         flash('Документация временно недоступна.', 'warning')
         return redirect(url_for('main.dashboard'))
 
-    content = markdown(source, extensions=['extra', 'toc'])
+    content = markdown(
+    source,
+    extensions=['extra', 'toc'],
+    extension_configs={'toc': {'slugify': slugify_unicode}}
+)
     return render_template('documentation.html', title=title, content=content, current_page=page)
 
 
