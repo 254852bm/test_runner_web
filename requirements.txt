@@ -5,3 +5,4 @@ Flask-WTF
 WTForms
 reportlab
 python-dotenv
+Markdown
