@@ -12,6 +12,22 @@
         <p>Проект: <strong class="project-name">{{ project.name }}</strong></p>
         <p>{% if single_test %}Выбран тест-кейс{% else %}Тест {{ current_index + 1 }} из {{ total }}{% endif %}</p>
 
+        {% if not single_test %}
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                {% if current_index > 0 %}
+                    <a href="{{ url_for('main.run_tests', project_id=project.id, index=current_index - 1) }}"
+                       class="btn btn-outline-primary">← Предыдущий тест</a>
+                {% else %}
+                    <button class="btn btn-outline-secondary" disabled>← Предыдущий тест</button>
+                {% endif %}
+            </div>
+            <div>
+                <span class="text-muted">Тест {{ current_index + 1 }} из {{ total }}</span>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title test-case-title">{{ test.title }}</h5>

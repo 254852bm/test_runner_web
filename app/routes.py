@@ -463,13 +463,21 @@ def export_pdf(project_id):
     if project is None:
         return redirect(url_for('main.projects'))
 
-    runs = TestRun.query.join(TestCase).filter(
+    from_date = request.args.get('from_date', '').strip()
+    to_date = request.args.get('to_date', '').strip()
+
+    runs_query = TestRun.query.join(TestCase).filter(
         TestCase.project_id == project.id,
         TestRun.user_id == current_user.id
-    ).order_by(TestRun.timestamp.desc()).all()
+    )
+    if from_date:
+        runs_query = runs_query.filter(TestRun.timestamp >= from_date)
+    if to_date:
+        runs_query = runs_query.filter(TestRun.timestamp <= to_date + ' 23:59:59')
+    runs = runs_query.order_by(TestRun.timestamp.desc()).all()
 
     if not runs:
-        flash('Нет результатов для экспорта', 'warning')
+        flash('Нет результатов для экспорта за выбранный период', 'warning')
         return redirect(url_for('main.project_detail', project_id=project.id))
 
     # Поиск и регистрация шрифта с поддержкой кириллицы (Windows + Linux)
@@ -504,38 +512,35 @@ def export_pdf(project_id):
     cell_style = ParagraphStyle('Cell', parent=styles['Normal'], fontName=font_name,
                                 fontSize=7, leading=9, alignment=TA_LEFT)
 
-    elements = []
+    elements = [Paragraph('Отчёт по проекту: ' + escape(project.name), title_style),
+                Spacer(1, 0.25 * inch),
+                Paragraph('Пользователь: ' + escape(current_user.email), normal_style),
+                Paragraph('Дата: ' + datetime.now().strftime('%d.%m.%Y %H:%M'), normal_style)]
 
-    elements.append(Paragraph(f"Отчёт по проекту: {escape(project.name)}", title_style))
-    elements.append(Spacer(1, 0.25 * inch))
-    elements.append(Paragraph(f"Пользователь: {escape(current_user.email)}", normal_style))
-    elements.append(Paragraph(f"Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}", normal_style))
+    if from_date or to_date:
+        period_text = 'Период: ' + (from_date or '...') + ' — ' + (to_date or '...')
+        elements.append(Paragraph(period_text, normal_style))
+
     elements.append(Spacer(1, 0.25 * inch))
 
-    stats = {
-        'PASS': sum(1 for r in runs if r.status == 'PASS'),
-        'FAIL': sum(1 for r in runs if r.status == 'FAIL'),
-        'SKIP': sum(1 for r in runs if r.status == 'SKIP')
-    }
-    total = len(runs)
-
-    elements.append(Paragraph(f"Всего пройдено: {total}", heading_style))
-    elements.append(Paragraph(f"✅ PASS: {stats['PASS']}", normal_style))
-    elements.append(Paragraph(f"❌ FAIL: {stats['FAIL']}", normal_style))
-    elements.append(Paragraph(f"⏭️ SKIP: {stats['SKIP']}", normal_style))
-    elements.append(Spacer(1, 0.25 * inch))
+    stats = {s: sum(1 for r in runs if r.status == s) for s in ['PASS', 'FAIL', 'SKIP']}
+    elements.extend([Paragraph('Всего прогонов: ' + str(len(runs)), heading_style),
+                     Paragraph('PASS: ' + str(stats['PASS']), normal_style),
+                     Paragraph('FAIL: ' + str(stats['FAIL']), normal_style),
+                     Paragraph('SKIP: ' + str(stats['SKIP']), normal_style),
+                     Spacer(1, 0.25 * inch)])
 
     data = [[Paragraph('#', cell_style), Paragraph('Тест', cell_style),
              Paragraph('Статус', cell_style), Paragraph('Комментарий', cell_style),
              Paragraph('Дата', cell_style)]]
-    
+    NL = chr(10)
     for idx, run in enumerate(runs, start=1):
-        test_title = run.test_case.title if run.test_case else f'Тест #{run.test_case_id}'
+        test_title = run.test_case.title if run.test_case else ('Тест #' + str(run.test_case_id))
         comment = run.comment or ''
-        comment = escape(comment).replace('\n', '<br/>')
+        comment = escape(comment).replace(NL, '<br/>')
         data.append([
             Paragraph(str(idx), cell_style),
-            Paragraph(escape(test_title).replace('\n', '<br/>'), cell_style),
+            Paragraph(escape(test_title).replace(NL, '<br/>'), cell_style),
             Paragraph(escape(STATUS_LABELS.get(run.status, run.status)), cell_style),
             Paragraph(comment, cell_style),
             Paragraph(run.timestamp.strftime('%d.%m.%Y %H:%M'), cell_style)
@@ -548,10 +553,10 @@ def export_pdf(project_id):
             for step_run in sorted(run.step_runs, key=lambda item: item.id):
                 data.append([
                     Paragraph('', cell_style),
-                    Paragraph(escape(step_run.step_text).replace('\n', '<br/>'), cell_style),
+                    Paragraph(escape(step_run.step_text).replace(NL, '<br/>'), cell_style),
                     Paragraph(escape(STATUS_LABELS.get(step_run.status, step_run.status)), cell_style),
-                    Paragraph(escape(step_run.comment or '').replace('\n', '<br/>'), cell_style),
-                    Paragraph(escape(step_run.expected_result or '').replace('\n', '<br/>'), cell_style)
+                    Paragraph(escape(step_run.comment or '').replace(NL, '<br/>'), cell_style),
+                    Paragraph(escape(step_run.expected_result or '').replace(NL, '<br/>'), cell_style)
                 ])
 
     table = Table(data, colWidths=[0.35*inch, 2.2*inch, 0.85*inch, 2.0*inch, 1.6*inch], repeatRows=1)
