@@ -58,6 +58,8 @@
                        href="{{ url_for('main.dashboard') }}">📊 Dashboard</a>
                     <a class="nav-link {% if request.endpoint in ['main.projects', 'main.project_detail'] %}active{% endif %}"
                        href="{{ url_for('main.projects') }}">📁 Проекты</a>
+                    <a class="nav-link {% if request.endpoint == 'main.documentation' %}active{% endif %}"
+                       href="{{ url_for('main.documentation') }}">📚 Документация</a>
                 </nav>
 
                 <div class="sidebar-divider"></div>
