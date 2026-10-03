@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file
 from flask_login import login_required, current_user
+from markdown import markdown
 from app import db
 from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun
 from datetime import datetime
@@ -114,6 +115,30 @@ def index():
     if current_user.is_authenticated:
         return redirect(url_for('main.dashboard'))
     return render_template('index.html')
+
+
+@main_bp.route('/docs')
+@login_required
+def documentation():
+    page = request.args.get('page', 'guide')
+    if page not in ['guide', 'faq']:
+        page = 'guide'
+
+    documents = {
+        'guide': ('📘 Руководство пользователя', 'docs/user-guide.md'),
+        'faq': ('❓ Частые вопросы', 'docs/faq.md'),
+    }
+    title, path = documents[page]
+
+    try:
+        with open(path, 'r', encoding='utf-8') as file:
+            source = file.read()
+    except FileNotFoundError:
+        flash('Документация временно недоступна.', 'warning')
+        return redirect(url_for('main.dashboard'))
+
+    content = markdown(source, extensions=['extra', 'toc'])
+    return render_template('documentation.html', title=title, content=content, current_page=page)
 
 
 @main_bp.route('/dashboard')
