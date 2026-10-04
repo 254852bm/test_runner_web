@@ -26,6 +26,8 @@ def create_app():
     app.register_blueprint(main_bp)
     from .support_bot import support_bp
     app.register_blueprint(support_bp)
+    from .api import api_bp
+    app.register_blueprint(api_bp)
     with app.app_context():
         db.create_all()
 

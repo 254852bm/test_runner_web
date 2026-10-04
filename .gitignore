@@ -24,3 +24,4 @@ backup/
 # Служебное
 migrate_steps.py
 wsgi.py
+create_token.py
