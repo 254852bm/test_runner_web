@@ -60,6 +60,8 @@
                        href="{{ url_for('main.projects') }}">📁 Проекты</a>
                     <a class="nav-link {% if request.endpoint == 'main.documentation' %}active{% endif %}"
                        href="{{ url_for('main.documentation') }}">📚 Документация</a>
+                    <a class="nav-link {% if request.endpoint in ['main.api_tokens'] %}active{% endif %}"
+                       href="{{ url_for('main.api_tokens') }}">🔑 API-токены</a>
                 </nav>
 
                 <div class="sidebar-divider"></div>

@@ -3,8 +3,9 @@ from flask_login import login_required, current_user
 from markdown import markdown
 from markdown.extensions.toc import slugify_unicode
 from app import db
-from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun
+from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun, ApiToken
 from datetime import datetime
+import secrets
 
 main_bp = Blueprint('main', __name__)
 
@@ -585,3 +586,39 @@ def export_pdf(project_id):
     return send_file(buffer, as_attachment=True,
                      download_name=f'отчёт_{project.name}_{datetime.now().strftime("%Y%m%d_%H%M")}.pdf',
                      mimetype='application/pdf')
+# ===== API-ТОКЕНЫ =====
+
+@main_bp.route('/settings/api')
+@login_required
+def api_tokens():
+    tokens = ApiToken.query.filter_by(user_id=current_user.id).order_by(ApiToken.created_at.desc()).all()
+    return render_template('api_tokens.html', tokens=tokens)
+
+
+@main_bp.route('/settings/api/create', methods=['POST'])
+@login_required
+def api_token_create():
+    name = request.form.get('name', '').strip() or 'Без названия'
+    token_value = secrets.token_urlsafe(48)
+    token = ApiToken(
+        user_id=current_user.id,
+        token=token_value,
+        name=name
+    )
+    db.session.add(token)
+    db.session.commit()
+    flash(f'Токен «{name}» создан. Скопируйте его — он больше не будет показан.', 'success')
+    return redirect(url_for('main.api_tokens'))
+
+
+@main_bp.route('/settings/api/delete/<int:token_id>', methods=['POST'])
+@login_required
+def api_token_delete(token_id):
+    token = ApiToken.query.get_or_404(token_id)
+    if token.user_id != current_user.id:
+        flash('Доступ запрещён', 'danger')
+        return redirect(url_for('main.api_tokens'))
+    db.session.delete(token)
+    db.session.commit()
+    flash('Токен удалён', 'success')
+    return redirect(url_for('main.api_tokens'))
