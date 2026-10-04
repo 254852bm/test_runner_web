@@ -10,11 +10,18 @@
 
 <div class="table-responsive">
 <table class="table table-striped align-middle">
-<thead><tr><th>#</th><th>Тест</th><th>Статус</th><th>Комментарий</th><th>Дата</th></tr></thead>
+<thead><tr><th>#</th><th>Источник</th><th>Тест</th><th>Статус</th><th>Комментарий</th><th>Дата</th></tr></thead>
 <tbody>
 {% for run in runs %}
 <tr>
     <td>{{ run.id }}</td>
+    <td>
+        {% if run.source == 'auto' %}
+            <span title="Автоматический прогон">🤖 auto</span>
+        {% else %}
+            <span title="Ручной прогон">👤 manual</span>
+        {% endif %}
+    </td>
     <td>{{ run.test_case.title if run.test_case else 'Тест удалён' }}</td>
     <td><strong>{{ status_labels.get(run.status, run.status) }}</strong></td>
     <td>{{ run.comment or '—' }}</td>
@@ -23,7 +30,7 @@
 {% if run.step_runs %}
 <tr>
     <td></td>
-    <td colspan="4">
+    <td colspan="5">
         <div class="table-responsive">
             <table class="table table-sm table-bordered mb-0">
                 <thead>
@@ -52,7 +59,7 @@
 </tr>
 {% endif %}
 {% else %}
-<tr><td colspan="5" class="text-muted">История пока пуста.</td></tr>
+<tr><td colspan="6" class="text-muted">История пока пуста.</td></tr>
 {% endfor %}
 </tbody>
 </table>
