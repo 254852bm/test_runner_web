@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>🔑 API-токены</h2>
+    <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">← Назад к Dashboard</a>
+</div>
+
+<div class="alert alert-info">
+    <strong>Что это?</strong> API-токены позволяют отправлять результаты авто-тестов (Selenium, Playwright) в TestRun
+    через эндпоинт <code>POST /api/run</code>.
+    Каждый токен привязан к вашему аккаунту и даёт доступ только к вашим проектам.
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Создать новый токен</h5>
+        <form method="POST" action="{{ url_for('main.api_token_create') }}" class="row g-2 align-items-end">
+            <div class="col-md-8">
+                <label class="form-label small mb-1">Название токена</label>
+                <input type="text" name="name" class="form-control" placeholder="Например: Selenium macOS" required>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-success w-100">+ Создать токен</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if tokens %}
+    <h5>Ваши токены</h5>
+    <div class="table-responsive">
+        <table class="table table-striped align-middle">
+            <thead>
+                <tr>
+                    <th>Название</th>
+                    <th>Токен</th>
+                    <th>Создан</th>
+                    <th>Последнее использование</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for token in tokens %}
+                    <tr>
+                        <td>{{ token.name }}</td>
+                        <td>
+                            <code class="token-value" style="font-size: 0.75rem; user-select: all;">{{ token.token }}</code>
+                            <button type="button" class="btn btn-sm btn-outline-secondary ms-1" onclick="copyToken(this)">📋</button>
+                        </td>
+                        <td>{{ token.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
+                        <td>
+                            {% if token.last_used_at %}
+                                {{ token.last_used_at.strftime('%d.%m.%Y %H:%M') }}
+                            {% else %}
+                                <span class="text-muted">не использовался</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <form method="POST" action="{{ url_for('main.api_token_delete', token_id=token.id) }}" style="display:inline;">
+                                <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Удалить токен «{{ token.name }}»?')">🗑️ Удалить</button>
+                            </form>
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="alert alert-warning">
+        У вас пока нет API-токенов. Создайте первый — и сможете отправлять результаты авто-тестов.
+    </div>
+{% endif %}
+
+<div class="mt-4">
+    <h5>Как использовать</h5>
+    <p>Отправьте POST-запрос на <code>https://testrun.pro/api/run</code> с таким JSON:</p>
+    <pre style="background: #f4f4f4; padding: 12px; border-radius: 8px; overflow-x: auto;"><code>{
+  "token": "ваш-токен",
+  "test_case_id": 15,
+  "status": "PASS",
+  "comment": "всё ок",
+  "duration_ms": 1234
+}</code></pre>
+</div>
+
+<script>
+function copyToken(btn) {
+    const token = btn.previousElementSibling.textContent.trim();
+    navigator.clipboard.writeText(token).then(() => {
+        const original = btn.textContent;
+        btn.textContent = '✅';
+        setTimeout(() => { btn.textContent = original; }, 1500);
+    });
+}
+</script>
+{% endblock %}
