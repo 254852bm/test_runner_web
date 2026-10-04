@@ -1,1 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Окружение
+venv/
 .env
+
+# База данных
+instance/*.db
+
+# Бэкапы и архивные копии
+*.bak
+*.backup
+*.backup_*
+*.before_*
+*.clean
+backup/
+
+# Логи
+*.log
+
+# Служебное
+migrate_steps.py
+wsgi.py
