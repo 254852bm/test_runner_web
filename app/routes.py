@@ -123,13 +123,15 @@ def index():
 @login_required
 def documentation():
     page = request.args.get('page', 'guide')
-    if page not in ['guide', 'faq']:
+    if page not in ['guide', 'faq', 'selenium']:
         page = 'guide'
 
     documents = {
         'guide': ('📘 Руководство пользователя', 'docs/user-guide.md'),
         'faq': ('❓ Частые вопросы', 'docs/faq.md'),
+        'selenium': ('🤖 Автоматизация (Selenium)', 'docs/selenium-guide.md'),
     }
+
     title, path = documents[page]
 
     try:
