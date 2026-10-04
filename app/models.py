@@ -78,6 +78,8 @@ class TestRun(db.Model):
     test_case_id = db.Column(db.Integer, db.ForeignKey('test_case.id'), nullable=False)
     version_id = db.Column(db.Integer, db.ForeignKey('test_case_version.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    source = db.Column(db.String(20), default='manual')  # 'manual' или 'auto'
+    duration_ms = db.Column(db.Integer)                  # время выполнения, мс
 
     test_case = db.relationship('TestCase', backref='runs')
     version = db.relationship('TestCaseVersion', backref='runs')
@@ -103,6 +105,15 @@ class StepRun(db.Model):
 
     test_step = db.relationship('TestStep', backref='runs')
 
+class ApiToken(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(100))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_used_at = db.Column(db.DateTime)
+
+    user = db.relationship('User', backref='api_tokens')
 
 from app import login_manager
 
