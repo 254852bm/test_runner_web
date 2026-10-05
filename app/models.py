@@ -101,6 +101,7 @@ class StepRun(db.Model):
     comment = db.Column(db.Text)
     step_text = db.Column(db.Text, nullable=False)
     expected_result = db.Column(db.Text)
+    actual_result = db.Column(db.Text)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
     test_step = db.relationship('TestStep', backref='runs')
