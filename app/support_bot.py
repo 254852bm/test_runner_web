@@ -1,6 +1,7 @@
 import logging
 import asyncio
-from flask import Blueprint, request, jsonify, current_app
+import os
+from flask import Blueprint, request, jsonify
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from telegram.request import HTTPXRequest
@@ -9,12 +10,11 @@ support_bp = Blueprint('support_bot', __name__, url_prefix='/tg-webhook')
 
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = "8708834124:AAF6qNA_cFYfi7xIJxnwPmOiyppSk3xo0GY"
-ADMIN_CHAT_ID = 5370959021438146805
-SECRET_PATH = "support-2026-secret"  # любой секрет, чтобы URL был непредсказуемым
-PROXY_URL = "socks5h://64.90.10.204:1080"
+BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+ADMIN_CHAT_ID = int(os.getenv('TELEGRAM_ADMIN_CHAT_ID', '0'))
+SECRET_PATH = os.getenv('TELEGRAM_WEBHOOK_SECRET', '')
+PROXY_URL = os.getenv('TELEGRAM_PROXY_URL')
 
-# Одно приложение Telegram, создаётся один раз
 _tg_app = None
 
 
@@ -45,7 +45,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=ADMIN_CHAT_ID, text=text)
         await message.reply_text("✅ Сообщение отправлено в поддержку.")
     except Exception as e:
-        logger.error(f"send_message error: {e}")
+        logger.error("send_message error: %s", e)
         await message.reply_text("❌ Не удалось отправить. Попробуйте позже.")
 
 
@@ -72,15 +72,23 @@ async def reply_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(chat_id=user_id, text=f"💬 Ответ поддержки:\n\n{message.text}")
         await message.reply_text("✅ Ответ отправлен.")
     except Exception as e:
-        logger.error(f"reply error: {e}")
-        await message.reply_text(f"❌ Ошибка: {e}")
+        logger.error("reply error: %s", e)
+        await message.reply_text("❌ Ошибка отправки ответа.")
 
 
 def get_tg_app():
-    """Создаёт Telegram-приложение один раз."""
     global _tg_app
     if _tg_app is None:
-        req = HTTPXRequest(proxy=PROXY_URL, connect_timeout=15.0, read_timeout=15.0)
+        if not BOT_TOKEN:
+            raise RuntimeError('TELEGRAM_BOT_TOKEN не задан')
+        if not ADMIN_CHAT_ID:
+            raise RuntimeError('TELEGRAM_ADMIN_CHAT_ID не задан')
+        if not SECRET_PATH:
+            raise RuntimeError('TELEGRAM_WEBHOOK_SECRET не задан')
+        req_kwargs = {'connect_timeout': 15.0, 'read_timeout': 15.0}
+        if PROXY_URL:
+            req_kwargs['proxy'] = PROXY_URL
+        req = HTTPXRequest(**req_kwargs)
         _tg_app = Application.builder().token(BOT_TOKEN).request(req).build()
         _tg_app.add_handler(CommandHandler("start", cmd_start))
         _tg_app.add_handler(MessageHandler(
@@ -91,9 +99,11 @@ def get_tg_app():
     return _tg_app
 
 
-@support_bp.route(f'/{SECRET_PATH}', methods=['POST'])
-def webhook():
-    """Telegram присылает сюда обновления."""
+@support_bp.route('/<secret>', methods=['POST'])
+def webhook(secret):
+    if not SECRET_PATH or secret != SECRET_PATH:
+        return jsonify({"ok": False}), 404
+
     data = request.get_json(force=True)
     if not data:
         return jsonify({"ok": False}), 400
@@ -101,8 +111,6 @@ def webhook():
     try:
         tg_app = get_tg_app()
         update = Update.de_json(data, tg_app.bot)
-
-        # Запускаем обработку в отдельном event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -110,8 +118,8 @@ def webhook():
             loop.run_until_complete(tg_app.process_update(update))
         finally:
             loop.close()
-    except Exception as e:
-        logger.exception(f"Webhook processing error: {e}")
+    except Exception:
+        logger.exception("Webhook processing error")
         return jsonify({"ok": False}), 500
 
     return jsonify({"ok": True})
