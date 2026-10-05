@@ -26,3 +26,8 @@ migrate_steps.py
 wsgi.py
 create_token.py
 migrate_api.py
+
+# Случайные файлы команд/терминала
+sh root@*
+trunner -n *
+ystemctl restart nginx
