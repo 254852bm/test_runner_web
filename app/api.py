@@ -109,7 +109,8 @@ def api_run():
             status=step_status,
             comment='',
             step_text=step.action,
-            expected_result=step.expected_result or ''
+            expected_result=step.expected_result or '',
+            actual_result=str(actual_result or '')
         )
         db.session.add(sr)
 
