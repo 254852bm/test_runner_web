@@ -150,13 +150,16 @@ ID — это число, которое идентифицирует конкр
 2. Открой его в VS Code.
 3. Скопируй код из `docs/examples/selenium_test_login.py`.
 4. **Замени:**
-   - `API_TOKEN` — на свой токен из TestRun.
+   - `API_TOKEN` — на свой токен из TestRun. **Не храните токен в Git: лучше использовать переменную окружения.**
    - `TEST_CASE_ID` — на ID своего теста.
 
 **Пример:**
 
-- `API_TOKEN = "OoeXXX8ToNFOje3cz3ZSSdG1AllvqOQrX51QHzB2uRnV3GRiLIw9JjMXW5hyG9kg"`
+- `API_TOKEN = os.environ["TESTRUN_API_TOKEN"]`
 - `TEST_CASE_ID = 6`
+
+Пример запуска в PowerShell: `$env:TESTRUN_API_TOKEN="ваш_новый_токен"`.
+**Никогда не публикуйте реальный API-токен в коде или GitHub.**
 
 ---
 
@@ -253,7 +256,7 @@ finally:
 
 ### Отправка результата
 
-В `step_results` указывай `step_id` — ID шага из TestRun. Узнать можно в БД командой:
+В `step_results` указывай `step_id` — **реальный ID шага из базы TestRun, а не его порядковый номер**. ID нужен для связи автоматизации с конкретным шагом.
 
 ```
 sqlite3 instance/test_runner.db "SELECT id, position, action FROM test_step WHERE test_case_id = 6;"
@@ -263,7 +266,7 @@ sqlite3 instance/test_runner.db "SELECT id, position, action FROM test_step WHER
 
 ```
 step_results.append({
-    "step_id": 1,
+    "step_id": 123,
     "status": "PASS",
     "actual_result": "Логин введён"
 })
