@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <h2>Новое обращение в поддержку</h2>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label" for="subject">Тема</label>
+      <input class="form-control" id="subject" name="subject" maxlength="200" required>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="category">Категория</label>
+      <select class="form-select" id="category" name="category">
+        <option>Вопрос</option>
+        <option>Ошибка</option>
+        <option>Предложение</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label" for="message">Сообщение</label>
+      <textarea class="form-control" id="message" name="message" rows="6" maxlength="10000" required></textarea>
+    </div>
+    <button class="btn btn-primary" type="submit">Отправить</button>
+    <a class="btn btn-secondary" href="{{ url_for("support.index") }}">Отмена</a>
+  </form>
+</div>
+{% endblock %}

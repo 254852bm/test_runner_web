@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+  <a href="{{ url_for("support.index") }}">← К списку обращений</a>
+  <h2 class="mt-3">{{ ticket.subject }}</h2>
+  <p>Категория: {{ ticket.category }} · Статус: {{ "Открыто" if ticket.status == "open" else "Закрыто" }}</p>
+  <div class="list-group mb-4">
+    {% for item in ticket.messages %}
+    <div class="list-group-item">
+      <strong>{{ item.sender.email }}</strong>
+      <small class="text-muted">{{ item.created_at.strftime("%d.%m.%Y %H:%M") }}</small>
+      <p class="mb-0 mt-2" style="white-space: pre-wrap">{{ item.message }}</p>
+    </div>
+    {% endfor %}
+  </div>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="mb-3">
+      <label class="form-label" for="message">Ответ</label>
+      <textarea class="form-control" id="message" name="message" rows="5" maxlength="10000" required></textarea>
+    </div>
+    {% if is_admin %}
+    <div class="mb-3">
+      <label class="form-label" for="status">Статус обращения</label>
+      <select class="form-select" id="status" name="status">
+        <option value="open" {% if ticket.status == "open" %}selected{% endif %}>Открыто</option>
+        <option value="closed" {% if ticket.status == "closed" %}selected{% endif %}>Закрыто</option>
+      </select>
+    </div>
+    {% endif %}
+    <button class="btn btn-primary" type="submit">Отправить ответ</button>
+  </form>
+</div>
+{% endblock %}

@@ -3,9 +3,10 @@ from flask_login import login_required, current_user
 from markdown import markdown
 from markdown.extensions.toc import slugify_unicode
 from app import db
-from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun, ApiToken
+from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun, ApiToken, FeedbackTicket, FeedbackMessage, User
 from datetime import datetime
 import secrets
+import os
 
 main_bp = Blueprint('main', __name__)
 
@@ -170,6 +171,37 @@ def dashboard():
     stats['TOTAL'] = sum(stats.values())
     return render_template('dashboard.html', projects=projects, runs=runs, stats=stats,
                            status_filter=status_filter)
+
+
+@main_bp.route('/profile', methods=['GET', 'POST'])
+@login_required
+def profile():
+    if request.method == 'POST':
+        company_name = request.form.get('company_name', '').strip()
+        if len(company_name) > 100:
+            flash('Название компании должно быть не длиннее 100 символов.', 'danger')
+        else:
+            current_user.company_name = company_name or None
+            db.session.commit()
+            flash('Профиль сохранён.', 'success')
+            return redirect(url_for('main.profile'))
+
+    projects = Project.query.filter_by(user_id=current_user.id).order_by(Project.created_at.desc()).all()
+    project_ids = [project.id for project in projects]
+    test_count = TestCase.query.filter(TestCase.project_id.in_(project_ids)).count() if project_ids else 0
+    stats = {
+        'PASS': TestRun.query.filter_by(user_id=current_user.id, status='PASS').count(),
+        'FAIL': TestRun.query.filter_by(user_id=current_user.id, status='FAIL').count(),
+        'SKIP': TestRun.query.filter_by(user_id=current_user.id, status='SKIP').count(),
+    }
+    stats['TOTAL'] = sum(stats.values())
+    recent_tickets = FeedbackTicket.query.filter_by(user_id=current_user.id).order_by(
+        FeedbackTicket.updated_at.desc()
+    ).limit(5).all()
+    return render_template(
+        'profile.html', projects=projects, test_count=test_count,
+        stats=stats, recent_tickets=recent_tickets
+    )
 
 
 @main_bp.route('/projects')

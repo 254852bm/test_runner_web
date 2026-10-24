@@ -122,3 +122,32 @@ from app import login_manager
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
+
+
+class FeedbackTicket(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    subject = db.Column(db.String(200), nullable=False)
+    category = db.Column(db.String(50), default='Вопрос', nullable=False)
+    status = db.Column(db.String(20), default='open', nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    user = db.relationship('User', backref='feedback_tickets')
+    messages = db.relationship(
+        'FeedbackMessage',
+        backref='ticket',
+        lazy=True,
+        order_by='FeedbackMessage.created_at',
+        cascade='all, delete-orphan'
+    )
+
+
+class FeedbackMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    ticket_id = db.Column(db.Integer, db.ForeignKey('feedback_ticket.id'), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    sender = db.relationship('User', backref='feedback_messages')

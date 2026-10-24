@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+<h2>Личный кабинет</h2>
+<form method="post" class="mb-4">
+<label for="company_name">Компания</label>
+<input class="form-control mb-2" id="company_name" name="company_name" maxlength="100" value="{{ current_user.company_name or '' }}">
+<button class="btn btn-primary" type="submit">Сохранить профиль</button>
+</form>
+<p><strong>Email:</strong> {{ current_user.email }}</p>
+<p><strong>Тариф:</strong> {{ current_user.tariff }}</p>
+<p><strong>Регистрация:</strong> {{ current_user.created_at.strftime("%d.%m.%Y") if current_user.created_at else "—" }}</p>
+<h4>Моя статистика</h4>
+<p>Проекты: {{ projects|length }} · Тест-кейсы: {{ test_count }} · Всего прогонов: {{ stats.TOTAL }}</p>
+<p>Пройдено: {{ stats.PASS }} · Не пройдено: {{ stats.FAIL }} · Пропущено: {{ stats.SKIP }}</p>
+<h4>Мои проекты</h4>
+<ul>{% for project in projects %}<li><a href="{{ url_for("main.project_detail", project_id=project.id) }}">{{ project.name }}</a></li>{% else %}<li>Проектов пока нет</li>{% endfor %}</ul>
+<h4>Последние обращения в поддержку</h4>
+<ul>{% for ticket in recent_tickets %}<li>{{ ticket.subject }} — {{ ticket.status }}{% if ticket.messages and ticket.messages[-1].sender_id != current_user.id %} <strong class="text-success">💬 Есть ответ от поддержки</strong>{% endif %}</li>{% else %}<li>Обращений пока нет</li>{% endfor %}</ul>
+</div>
+{% endblock %}
