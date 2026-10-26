@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block content %}<div class="container py-4"><h2>Журнал действий администратора</h2>
+{% if records %}<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Время UTC</th><th>Администратор</th><th>Действие</th><th>Пользователь</th><th>Причина</th><th>Детали</th></tr></thead><tbody>{% for row in records %}<tr><td>{{ row.created_at.strftime('%d.%m.%Y %H:%M:%S') }}</td><td>{{ row.actor.email if row.actor else '—' }}</td><td>{{ row.action }}</td><td>{{ row.target_user.email if row.target_user else '—' }}</td><td>{{ row.reason or '—' }}</td><td>{{ row.details or '—' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p>Журнал пока пуст.</p>{% endif %}</div>{% endblock %}
