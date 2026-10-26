@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block content %}<div class="container py-4"><h2>Журнал приложения</h2><p class="text-muted">Последние 100 технических событий. Полные тексты исключений и стек-трейсы остаются только в серверном журнале.</p>
+{% if records %}<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Время UTC</th><th>Маршрут</th><th>Метод</th><th>Тип события</th><th>Пользователь</th></tr></thead><tbody>{% for row in records %}<tr><td>{{ row.created_at.strftime('%d.%m.%Y %H:%M:%S') }}</td><td>{{ row.endpoint or '—' }}</td><td>{{ row.method or '—' }}</td><td>{{ row.error_type }}</td><td>{{ row.user.email if row.user else '—' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p>Записей пока нет.</p>{% endif %}</div>{% endblock %}
