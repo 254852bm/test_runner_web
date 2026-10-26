@@ -147,11 +147,5 @@ def audit():
 @login_required
 def logs():
     _require_admin()
-    path = Path(current_app.instance_path) / "admin-errors.log"
-    lines = []
-    if path.exists():
-        try:
-            lines = path.read_text(encoding="utf-8", errors="replace").splitlines()[-100:]
-        except OSError:
-            current_app.logger.exception("Could not read admin error log")
-    return render_template("admin/logs.html", lines=lines)
+    records = AppErrorLog.query.order_by(AppErrorLog.created_at.desc()).limit(100).all()
+    return render_template("admin/logs.html", records=records)
