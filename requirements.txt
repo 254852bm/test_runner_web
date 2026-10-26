@@ -6,3 +6,4 @@ WTForms
 reportlab
 python-dotenv
 Markdown
+python-telegram-bot

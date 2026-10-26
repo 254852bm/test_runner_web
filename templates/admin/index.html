@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4">
+<h2>Панель администратора</h2>
+<div class="row g-3 my-2">
+<div class="col-md-3"><div class="card h-100"><div class="card-body"><div class="text-muted">Пользователи</div><div class="display-6">{{ user_count }}</div><a href="{{ url_for('admin.users') }}">Управление →</a></div></div></div>
+<div class="col-md-3"><div class="card h-100"><div class="card-body"><div class="text-muted">Заблокированы</div><div class="display-6">{{ blocked_count }}</div></div></div></div>
+<div class="col-md-3"><div class="card h-100"><div class="card-body"><div class="text-muted">Открытые обращения</div><div class="display-6">{{ open_tickets }}</div><a href="{{ url_for('admin.support') }}">Поддержка →</a></div></div></div>
+<div class="col-md-3"><div class="card h-100"><div class="card-body"><div class="text-muted">Ошибки</div><div class="display-6">{{ recent_errors|length }}</div><a href="{{ url_for('admin.errors') }}">Диагностика →</a></div></div></div>
+</div>
+<div class="d-flex flex-wrap gap-2 mb-4"><a class="btn btn-outline-primary" href="{{ url_for('admin.users') }}">Пользователи</a><a class="btn btn-outline-primary" href="{{ url_for('admin.support') }}">Поддержка</a><a class="btn btn-outline-primary" href="{{ url_for('admin.errors') }}">Ошибки</a><a class="btn btn-outline-primary" href="{{ url_for('admin.logs') }}">Журнал приложения</a><a class="btn btn-outline-primary" href="{{ url_for('admin.audit') }}">Журнал действий</a></div>
+<h4>Последние административные действия</h4>
+{% if recent_audit %}<div class="table-responsive"><table class="table table-sm"><thead><tr><th>Время UTC</th><th>Действие</th><th>Пользователь</th><th>Причина</th></tr></thead><tbody>{% for item in recent_audit %}<tr><td>{{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</td><td>{{ item.action }}</td><td>{{ item.target_user.email if item.target_user else '—' }}</td><td>{{ item.reason or '—' }}</td></tr>{% endfor %}</tbody></table></div>{% else %}<p>Действий пока нет.</p>{% endif %}
+</div>
+{% endblock %}

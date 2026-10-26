@@ -12,12 +12,12 @@ def login():
         email = request.form.get('email')
         password = request.form.get('password')
         user = User.query.filter_by(email=email).first()
-        if user and check_password_hash(user.password, password):
+        if user and check_password_hash(user.password, password) and not user.is_blocked_now:
             login_user(user)
             flash('Вы вошли!', 'success')
             return redirect(url_for('main.index'))
         else:
-            flash('Неверный email или пароль', 'danger')
+            flash('Неверный email или пароль либо аккаунт временно заблокирован.', 'danger')
     return render_template('login.html')
 
 @auth_bp.route('/register', methods=['GET', 'POST'])

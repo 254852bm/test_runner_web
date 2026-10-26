@@ -60,6 +60,7 @@
                        href="{{ url_for('main.projects') }}">📁 Проекты</a>
                     <a class="nav-link {% if request.endpoint == 'main.profile' %}active{% endif %}" href="{{ url_for('main.profile') }}">👤 Личный кабинет</a>
                     <a class="nav-link {% if request.endpoint and request.endpoint.startswith('support.') %}active{% endif %}" href="{{ url_for('support.index') }}">🎧 Поддержка</a>
+                    {% if is_site_admin %}<a class="nav-link {% if request.endpoint and request.endpoint.startswith('admin.') %}active{% endif %}" href="{{ url_for('admin.index') }}">🛡️ Администрирование</a>{% endif %}
                     <a class="nav-link {% if request.endpoint == 'main.documentation' %}active{% endif %}"
                        href="{{ url_for('main.documentation') }}">📚 Документация</a>
                     <a class="nav-link {% if request.endpoint in ['main.api_tokens'] %}active{% endif %}"

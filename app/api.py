@@ -19,9 +19,12 @@ def _get_user_by_token(token):
     api_token = ApiToken.query.filter_by(token=token).first()
     if not api_token:
         return None
+    user = api_token.user
+    if not user or user.is_blocked_now:
+        return None
     api_token.last_used_at = datetime.utcnow()
     db.session.commit()
-    return api_token.user
+    return user
 
 
 @api_bp.route('/run', methods=['POST'])

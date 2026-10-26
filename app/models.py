@@ -10,6 +10,13 @@ class User(UserMixin, db.Model):
     company_name = db.Column(db.String(100))
     tariff = db.Column(db.String(20), default='free')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_blocked = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+    blocked_until = db.Column(db.DateTime, nullable=True)
+    blocked_reason = db.Column(db.String(300), nullable=True)
+
+    @property
+    def is_blocked_now(self):
+        return bool(self.is_blocked and (self.blocked_until is None or self.blocked_until > datetime.utcnow()))
 
     projects = db.relationship('Project', backref='owner', lazy=True)
 
@@ -151,3 +158,25 @@ class FeedbackMessage(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     sender = db.relationship('User', backref='feedback_messages')
+
+
+class AdminAuditLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    actor_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    target_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    action = db.Column(db.String(80), nullable=False)
+    reason = db.Column(db.String(300), nullable=True)
+    details = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    actor = db.relationship('User', foreign_keys=[actor_user_id])
+    target_user = db.relationship('User', foreign_keys=[target_user_id])
+
+
+class AppErrorLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    endpoint = db.Column(db.String(200), nullable=True)
+    method = db.Column(db.String(10), nullable=True)
+    error_type = db.Column(db.String(120), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    user = db.relationship('User', foreign_keys=[user_id])
