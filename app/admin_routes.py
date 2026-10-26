@@ -49,7 +49,7 @@ def index():
         user_count=User.query.count(),
         blocked_count=User.query.filter(
             User.is_blocked.is_(True),
-            db.or_(User.blocked_until.is_(None), User.blocked_until > datetime.utcnow()),
+            or_(User.blocked_until.is_(None), User.blocked_until > datetime.utcnow()),
         ).count(),
         open_tickets=FeedbackTicket.query.filter_by(status="open").count(),
         recent_errors=AppErrorLog.query.order_by(AppErrorLog.created_at.desc()).limit(5).all(),
