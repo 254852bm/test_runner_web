@@ -19,7 +19,8 @@ with app.app_context():
 
     database_path = Path(database_name)
     if not database_path.is_absolute():
-        database_path = (Path.cwd() / database_path).resolve()
+        # Flask-SQLAlchemy resolves relative SQLite paths from app.instance_path.
+        database_path = (Path(app.instance_path) / database_path).resolve()
     if not database_path.is_file():
         raise FileNotFoundError(
             f"Database file was not found at {database_path}; refusing to create or migrate a new database."
