@@ -80,7 +80,8 @@ def create_app():
             app.logger.exception('Could not persist application error record')
         return 'Внутренняя ошибка сервера. Попробуйте позже.', 500
 
-    with app.app_context():
-        db.create_all()
+    if os.getenv('SKIP_DB_CREATE_ALL') != '1':
+        with app.app_context():
+            db.create_all()
 
     return app
