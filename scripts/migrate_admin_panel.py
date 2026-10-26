@@ -35,6 +35,10 @@ with app.app_context():
         source.backup(backup)
     if backup_path.stat().st_size == 0:
         raise RuntimeError("Database backup is empty; refusing to migrate.")
+    with sqlite3.connect(str(backup_path)) as backup_check:
+        integrity = backup_check.execute("PRAGMA integrity_check").fetchone()
+    if not integrity or integrity[0] != "ok":
+        raise RuntimeError(f"Database backup failed integrity_check: {integrity!r}")
 
     columns = {column["name"] for column in inspector.get_columns("user")}
     with db.engine.begin() as connection:
