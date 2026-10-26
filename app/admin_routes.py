@@ -47,7 +47,10 @@ def index():
     return render_template(
         "admin/index.html",
         user_count=User.query.count(),
-        blocked_count=sum(1 for user in User.query.filter_by(is_blocked=True).all() if user.is_blocked_now),
+        blocked_count=User.query.filter(
+            User.is_blocked.is_(True),
+            db.or_(User.blocked_until.is_(None), User.blocked_until > datetime.utcnow()),
+        ).count(),
         open_tickets=FeedbackTicket.query.filter_by(status="open").count(),
         recent_errors=AppErrorLog.query.order_by(AppErrorLog.created_at.desc()).limit(5).all(),
         recent_audit=AdminAuditLog.query.order_by(AdminAuditLog.created_at.desc()).limit(8).all(),
