@@ -3,13 +3,18 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
-from flask_wtf.csrf import validate_csrf, ValidationError
+from flask_wtf.csrf import generate_csrf, validate_csrf, ValidationError
 from sqlalchemy import or_
 
 from app import db
 from app.models import User, FeedbackTicket, AdminAuditLog, AppErrorLog
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+
+@admin_bp.context_processor
+def inject_admin_csrf():
+    return {"csrf_token": generate_csrf}
 
 
 def _require_admin():
