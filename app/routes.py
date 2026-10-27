@@ -368,8 +368,22 @@ def create_test(project_id):
             db.session.add(test)
             db.session.flush()
             save_test_steps(test, [a for a, _ in pairs], [e for _, e in pairs])
-            create_test_version(test)
-            db.session.commit()
+            db.session.flush()
+            saved_paths = []
+            try:
+                for index, step in enumerate(test.step_items):
+                    saved_paths.extend(save_uploaded_screenshots(
+                        request.files.getlist(f'test_step_screenshot_{index}[]'),
+                        user_id=current_user.id, test_step_id=step.id
+                    ))
+                create_test_version(test)
+                db.session.commit()
+            except ValueError as error:
+                db.session.rollback()
+                for path in saved_paths:
+                    path.unlink(missing_ok=True)
+                flash(str(error), 'danger')
+                return render_template('create_test.html', project_id=project.id)
             flash('Тест добавлен!', 'success')
             return redirect(url_for('main.project_detail', project_id=project.id))
         flash('Заполните заголовок и добавьте хотя бы один шаг', 'danger')
@@ -401,8 +415,22 @@ def edit_test(project_id, test_id):
             test.steps = '\n'.join(action for action, _ in pairs)
             test.expected_result = '\n'.join(expected for _, expected in pairs)
             save_test_steps(test, [a for a, _ in pairs], [e for _, e in pairs])
-            create_test_version(test)
-            db.session.commit()
+            db.session.flush()
+            saved_paths = []
+            try:
+                for index, step in enumerate(test.step_items):
+                    saved_paths.extend(save_uploaded_screenshots(
+                        request.files.getlist(f'test_step_screenshot_{index}[]'),
+                        user_id=current_user.id, test_step_id=step.id
+                    ))
+                create_test_version(test)
+                db.session.commit()
+            except ValueError as error:
+                db.session.rollback()
+                for path in saved_paths:
+                    path.unlink(missing_ok=True)
+                flash(str(error), 'danger')
+                return redirect(url_for('main.edit_test', project_id=project.id, test_id=test.id))
             flash('Тест-кейс обновлён! Создана новая версия.', 'success')
             return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
 
