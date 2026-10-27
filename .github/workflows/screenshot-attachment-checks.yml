@@ -29,4 +29,4 @@ jobs:
               print(f"OK {path}")
           PY
       - name: Run screenshot upload tests
-        run: PYTHONPATH=. pytest -q tests/test_screenshot_uploads.py
+        run: PYTHONPATH=. pytest -q tests
