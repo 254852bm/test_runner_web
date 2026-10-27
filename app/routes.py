@@ -472,6 +472,11 @@ def edit_test(project_id, test_id):
             if action:
                 pairs.append((action, expected, source_id))
 
+        submitted_existing_ids = [source_id for _, _, source_id in pairs if source_id is not None]
+        if len(submitted_existing_ids) != len(set(submitted_existing_ids)):
+            flash('Один и тот же существующий шаг указан несколько раз. Обновите страницу и попробуйте снова.', 'danger')
+            return redirect(url_for('main.edit_test', project_id=project.id, test_id=test.id))
+
         if not title or not pairs:
             flash('Заголовок и хотя бы один шаг обязательны', 'danger')
         else:
