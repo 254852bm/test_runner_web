@@ -84,9 +84,9 @@ def save_uploaded_screenshots(uploads, user_id, step_run_id=None, test_step_id=N
             continue
         if len(data) > 5 * 1024 * 1024:
             raise ValueError('Размер одного изображения не должен превышать 5 МБ.')
-        if data.startswith(b'\\xff\\xd8\\xff'):
+        if data[:3] == bytes([255, 216, 255]):
             image_type = 'jpeg'
-        elif data.startswith(b'\\x89PNG\\r\\n\\x1a\\n'):
+        elif data.startswith(bytes([137, 80, 78, 71, 13, 10, 26, 10])):
             image_type = 'png'
         elif data.startswith((b'GIF87a', b'GIF89a')):
             image_type = 'gif'
@@ -97,13 +97,13 @@ def save_uploaded_screenshots(uploads, user_id, step_run_id=None, test_step_id=N
         mime_types = {'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp'}
         extension = 'jpg' if image_type == 'jpeg' else image_type
         original_name = secure_filename(upload.filename or '')[:255] or f'screenshot.{extension}'
-        prepared.append((data, image_type, extension, original_name, mime_types[image_type]))
+        prepared.append((data, extension, original_name, mime_types[image_type]))
 
     upload_dir = Path(current_app.instance_path) / 'step-screenshots'
     upload_dir.mkdir(parents=True, exist_ok=True)
     saved_paths = []
     try:
-        for data, image_type, extension, original_name, mime_type in prepared:
+        for data, extension, original_name, mime_type in prepared:
             stored_name = secrets.token_hex(24) + '.' + extension
             file_path = upload_dir / stored_name
             file_path.write_bytes(data)
