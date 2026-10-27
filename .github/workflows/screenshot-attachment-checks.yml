@@ -28,5 +28,5 @@ jobs:
               env.parse(path.read_text(encoding="utf-8"))
               print(f"OK {path}")
           PY
-      - name: Run screenshot upload tests
+      - name: Run all automated tests
         run: PYTHONPATH=. pytest -q tests
