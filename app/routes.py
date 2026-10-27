@@ -1,12 +1,16 @@
-from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file
+from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file, abort, current_app
 from flask_login import login_required, current_user
 from markdown import markdown
 from markdown.extensions.toc import slugify_unicode
 from app import db
-from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun, ApiToken, FeedbackTicket, FeedbackMessage, User
+from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User
 from datetime import datetime
 import secrets
 import os
+import re
+import imghdr
+from pathlib import Path
+from werkzeug.utils import secure_filename
 
 main_bp = Blueprint('main', __name__)
 
@@ -423,18 +427,80 @@ def run_tests(project_id):
             )
             db.session.add(run)
             db.session.flush()
+            uploaded_paths = []
+            try:
+                for index, (step, status, comment) in enumerate(zip(steps, statuses, comments)):
+                    step_run = StepRun(
+                        test_run_id=run.id,
+                        test_step_id=step.id,
+                        status=status,
+                        comment=comment.strip(),
+                        step_text=step.action,
+                        expected_result=step.expected_result or ''
+                    )
+                    db.session.add(step_run)
+                    db.session.flush()
 
-            for step, status, comment in zip(steps, statuses, comments):
-                db.session.add(StepRun(
-                    test_run_id=run.id,
-                    test_step_id=step.id,
-                    status=status,
-                    comment=comment.strip(),
-                    step_text=step.action,
-                    expected_result=step.expected_result or ''
-                ))
+                    uploads = request.files.getlist(f'step_screenshot_{index}[]')
+                    uploads = [item for item in uploads if item and item.filename]
+                    if len(uploads) > 5:
+                        raise ValueError(f'Для шага {index + 1} можно прикрепить не более 5 изображений.')
 
-            db.session.commit()
+                    for upload in uploads:
+                        data = upload.read(5 * 1024 * 1024 + 1)
+                        if not data:
+                            continue
+                        if len(data) > 5 * 1024 * 1024:
+                            raise ValueError('Размер одного изображения не должен превышать 5 МБ.')
+                        image_type = imghdr.what(None, h=data)
+                        mime_types = {'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif'}
+                        if image_type not in mime_types:
+                            # WEBP: RIFF....WEBP signature.
+                            if not (len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP'):
+                                raise ValueError('Разрешены только изображения PNG, JPEG, GIF и WEBP.')
+                            mime_type = 'image/webp'
+                            extension = 'webp'
+                        else:
+                            mime_type = mime_types[image_type]
+                            extension = 'jpg' if image_type == 'jpeg' else image_type
+
+                        stored_name = secrets.token_hex(24) + '.' + extension
+                        upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+                        upload_dir.mkdir(parents=True, exist_ok=True)
+                        file_path = upload_dir / stored_name
+                        file_path.write_bytes(data)
+                        uploaded_paths.append(file_path)
+
+                        original_name = secure_filename(upload.filename or '')[:255] or f'screenshot.{extension}'
+                        db.session.add(StepRunScreenshot(
+                            step_run_id=step_run.id,
+                            user_id=current_user.id,
+                            stored_name=stored_name,
+                            original_name=original_name,
+                            mime_type=mime_type,
+                            size_bytes=len(data)
+                        ))
+
+                db.session.commit()
+            except ValueError as error:
+                db.session.rollback()
+                for file_path in uploaded_paths:
+                    try:
+                        file_path.unlink(missing_ok=True)
+                    except OSError:
+                        current_app.logger.exception('Could not remove a temporary screenshot after validation failure')
+                flash(str(error), 'danger')
+                return redirect(url_for('main.run_tests', project_id=project.id,
+                                        test_id=(test.id if single_test else None), index=current_index))
+            except Exception:
+                db.session.rollback()
+                for file_path in uploaded_paths:
+                    try:
+                        file_path.unlink(missing_ok=True)
+                    except OSError:
+                        current_app.logger.exception('Could not remove a screenshot after a failed test-run save')
+                raise
+
             next_index = current_index + 1
             if next_index < len(tests):
                 if single_test:
@@ -446,6 +512,20 @@ def run_tests(project_id):
     return render_template('run.html', project=project, test=test, steps=steps,
                            current_index=current_index, total=len(tests),
                            single_test=single_test, status_labels=STATUS_LABELS)
+
+
+@main_bp.route('/screenshots/<int:screenshot_id>')
+@login_required
+def view_step_screenshot(screenshot_id):
+    screenshot = StepRunScreenshot.query.filter_by(
+        id=screenshot_id, user_id=current_user.id
+    ).first_or_404()
+    upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+    file_path = upload_dir / screenshot.stored_name
+    if not file_path.is_file():
+        abort(404)
+    return send_file(file_path, mimetype=screenshot.mime_type, as_attachment=False,
+                     download_name=screenshot.original_name, max_age=0)
 
 
 @main_bp.route('/project/<int:project_id>/stats')
