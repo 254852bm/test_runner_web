@@ -54,6 +54,15 @@ def ensure_test_steps(test):
 
 
 def save_test_steps(test, actions, expected_results):
+    # Шаги пересоздаются при редактировании; убираем файлы их старых скриншотов.
+    old_steps = TestStep.query.filter_by(test_case_id=test.id).all()
+    upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+    for old_step in old_steps:
+        for screenshot in old_step.screenshots:
+            try:
+                (upload_dir / screenshot.stored_name).unlink(missing_ok=True)
+            except OSError:
+                current_app.logger.exception('Could not remove old test-step screenshot %s', screenshot.id)
     TestStep.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
     for position, (action, expected) in enumerate(zip(actions, expected_results), start=1):
         action = action.strip()
