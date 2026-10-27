@@ -75,6 +75,20 @@ class TestStep(db.Model):
     position = db.Column(db.Integer, nullable=False)
     action = db.Column(db.Text, nullable=False)
     expected_result = db.Column(db.Text)
+    screenshots = db.relationship('TestStepScreenshot', backref='test_step', lazy=True,
+                                 cascade='all, delete-orphan', order_by='TestStepScreenshot.created_at')
+
+
+class TestStepScreenshot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    test_step_id = db.Column(db.Integer, db.ForeignKey('test_step.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    stored_name = db.Column(db.String(100), unique=True, nullable=False)
+    original_name = db.Column(db.String(255), nullable=False)
+    mime_type = db.Column(db.String(30), nullable=False)
+    size_bytes = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    user = db.relationship('User', backref='test_step_screenshots')
 
 
 class TestRun(db.Model):
@@ -112,6 +126,23 @@ class StepRun(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
     test_step = db.relationship('TestStep', backref='runs')
+    screenshots = db.relationship(
+        'StepRunScreenshot', backref='step_run', lazy=True,
+        cascade='all, delete-orphan', order_by='StepRunScreenshot.created_at'
+    )
+
+
+class StepRunScreenshot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    step_run_id = db.Column(db.Integer, db.ForeignKey('step_run.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    stored_name = db.Column(db.String(100), unique=True, nullable=False)
+    original_name = db.Column(db.String(255), nullable=False)
+    mime_type = db.Column(db.String(30), nullable=False)
+    size_bytes = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    user = db.relationship('User', backref='step_run_screenshots')
+
 
 class ApiToken(db.Model):
     id = db.Column(db.Integer, primary_key=True)

@@ -31,3 +31,6 @@ migrate_api.py
 sh root@*
 trunner -n *
 ystemctl restart nginx
+
+# Пользовательские скриншоты: хранятся вне репозитория
+instance/step-screenshots/
