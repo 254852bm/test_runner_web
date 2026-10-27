@@ -63,6 +63,7 @@ def save_test_steps(test, actions, expected_results):
                 (upload_dir / screenshot.stored_name).unlink(missing_ok=True)
             except OSError:
                 current_app.logger.exception('Could not remove old test-step screenshot %s', screenshot.id)
+            db.session.delete(screenshot)
     TestStep.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
     for position, (action, expected) in enumerate(zip(actions, expected_results), start=1):
         action = action.strip()
