@@ -5,7 +5,7 @@ import pytest
 from werkzeug.datastructures import FileStorage
 
 from app import create_app, db
-from app.models import Project, TestCase, TestRun, TestStep, TestStepScreenshot, StepRun, User
+from app.models import Project, TestCase, TestRun, TestStep, TestStepScreenshot, StepRunScreenshot, StepRun, User
 from app.routes import save_test_steps, save_uploaded_screenshots
 
 
@@ -402,3 +402,27 @@ def test_user_cannot_edit_another_users_test_case(app):
         saved = db.session.get(TestCase, case_id)
         assert saved.title == "Screenshot test"
         assert TestStep.query.filter_by(test_case_id=case_id).one().action == "Open page"
+
+
+
+def test_user_cannot_fetch_another_users_run_screenshot(app):
+    with app.app_context():
+        owner, case, step, run, step_run = _user_and_step()
+        saved_path = save_uploaded_screenshots(
+            [_upload(PNG_HEADER + b"private-run-image")],
+            owner.id,
+            step_run_id=step_run.id,
+        )[0]
+        db.session.commit()
+        screenshot = StepRunScreenshot.query.one()
+        screenshot_id = screenshot.id
+        other_user = User(email="viewer@example.test", password="not-a-real-password")
+        db.session.add(other_user)
+        db.session.commit()
+        other_user_id = other_user.id
+        assert saved_path.is_file()
+
+    client = app.test_client()
+    _login(client, other_user_id)
+    response = client.get(f"/screenshots/{screenshot_id}")
+    assert response.status_code == 404
