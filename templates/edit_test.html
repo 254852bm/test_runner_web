@@ -24,6 +24,7 @@
                 <div id="steps-container">
                     {% for step in steps %}
                     <div class="card mb-3 step-card">
+                        <input type="hidden" name="step_id[]" value="{{ step.id }}">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <strong>Шаг <span class="step-number">{{ loop.index }}</span></strong>
@@ -42,7 +43,7 @@
                             <div>
                                 <label class="form-label">Скриншоты ожидаемого результата</label>
                                 <input class="form-control" type="file" name="test_step_screenshot_{{ loop.index0 }}[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple>
-                                <div class="form-text">До 5 изображений на шаг, не более 5 МБ каждое. При сохранении существующие скриншоты этого шага будут заменены.</div>
+                                <div class="form-text">До 5 изображений на шаг, не более 5 МБ каждое. Если выбрать новые изображения, прежние вложения этого шага заменятся.</div>
                             </div>
                         </div>
                     </div>
@@ -67,6 +68,7 @@ function addStep() {
     const card = document.createElement('div');
     card.className = 'card mb-3 step-card';
     card.innerHTML = `
+        <input type="hidden" name="step_id[]" value="">
         <div class="card-body">
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <strong>Шаг <span class="step-number">${number}</span></strong>
