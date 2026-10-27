@@ -429,3 +429,10 @@ html[data-theme="dark"] .text-dark {
         margin-left: 2.8rem;
     }
 }
+
+/* Keep the requested dark-green wordmark readable on the dark top bar. */
+.app-logo {
+    background-color: #f1f3f5;
+    border-radius: 0.45rem;
+    padding: 0.1rem 0.45rem;
+}
