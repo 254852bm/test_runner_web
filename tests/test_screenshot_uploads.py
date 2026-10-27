@@ -146,3 +146,56 @@ def test_removing_extra_steps_keeps_old_run_linked_to_remaining_step(app):
         assert preserved.comment == "keep this"
         assert preserved.step_text == "Old second"
         assert preserved.expected_result == "Old second result"
+
+
+
+def test_step_reordering_keeps_historical_run_attached_to_same_logical_step(app):
+    with app.app_context():
+        user, case, first_step, run, first_run = _user_and_step()
+        second_step = TestStep(
+            test_case_id=case.id, position=2,
+            action="Second logical step", expected_result="Second result"
+        )
+        db.session.add(second_step)
+        db.session.flush()
+        second_run = StepRun(
+            test_run_id=run.id, test_step_id=second_step.id, status="FAIL",
+            step_text="Second logical step", expected_result="Second result",
+            comment="historical second"
+        )
+        db.session.add(second_run)
+        db.session.commit()
+        first_id, second_id = first_step.id, second_step.id
+        first_run_id, second_run_id = first_run.id, second_run.id
+
+        save_test_steps(
+            case,
+            ["Second logical step", "Open page"],
+            ["Second result", "Page appears"],
+            source_step_ids=[second_id, first_id],
+        )
+        db.session.commit()
+
+        current_steps = TestStep.query.filter_by(test_case_id=case.id).order_by(TestStep.position).all()
+        preserved_first = db.session.get(StepRun, first_run_id)
+        preserved_second = db.session.get(StepRun, second_run_id)
+        assert [step.action for step in current_steps] == ["Second logical step", "Open page"]
+        assert preserved_second.test_step_id == current_steps[0].id
+        assert preserved_first.test_step_id == current_steps[1].id
+        assert preserved_first.step_text == "Open page"
+        assert preserved_first.expected_result == "Page appears"
+        assert preserved_second.step_text == "Second logical step"
+        assert preserved_second.expected_result == "Second result"
+        assert preserved_second.comment == "historical second"
+
+
+def test_save_test_steps_rejects_empty_steps_without_deleting_existing_data(app):
+    with app.app_context():
+        user, case, old_step, run, step_run = _user_and_step()
+        old_step_id = old_step.id
+        with pytest.raises(ValueError, match="хотя бы один шаг"):
+            save_test_steps(case, ["  ", ""], ["", ""])
+        db.session.rollback()
+
+        assert db.session.get(TestStep, old_step_id) is not None
+        assert db.session.get(StepRun, step_run.id).test_step_id == old_step_id
