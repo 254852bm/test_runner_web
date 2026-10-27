@@ -389,8 +389,6 @@ def create_test(project_id):
                     ))
                 create_test_version(test)
                 db.session.commit()
-                for old_path in old_screenshot_paths:
-                    old_path.unlink(missing_ok=True)
             except ValueError as error:
                 db.session.rollback()
                 for path in saved_paths:
@@ -443,6 +441,8 @@ def edit_test(project_id, test_id):
                     ))
                 create_test_version(test)
                 db.session.commit()
+                for old_path in old_screenshot_paths:
+                    old_path.unlink(missing_ok=True)
             except ValueError as error:
                 db.session.rollback()
                 for path in saved_paths:
