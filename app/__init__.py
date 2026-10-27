@@ -15,6 +15,8 @@ def create_app():
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key')
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///../instance/test_runner.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    # Ограничиваем общий размер запроса с изображениями, чтобы избежать чрезмерной загрузки памяти.
+    app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
     if not os.getenv('SECRET_KEY') or os.getenv('SECRET_KEY') == 'dev-key':
         app.logger.warning('SECRET_KEY is missing or using the development fallback')
     os.makedirs(app.instance_path, exist_ok=True)
