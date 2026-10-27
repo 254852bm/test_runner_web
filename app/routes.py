@@ -52,17 +52,20 @@ def ensure_test_steps(test):
     return TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
 
 
-def save_test_steps(test, actions, expected_results):
+def save_test_steps(test, actions, expected_results, source_step_ids=None):
     """
-    Заменяет текущие шаги, сохраняя валидность внешних ключей в истории.
-
-    StepRun хранит текст и ожидаемый результат как снимок на момент прогона.
-    При замене шагов перенаправляем его FK на соответствующий новый шаг (или
-    первый новый шаг, если старый шаг был удалён). Исторические поля StepRun
-    остаются неизменными; PDF и история должны опираться на эти снимки.
+    Rebuild current steps while keeping historical StepRun snapshots intact.
+    source_step_ids identifies the existing step represented by each submitted
+    row; blank IDs represent newly added steps. This prevents reordering or
+    deleting a step from silently changing which current step a historical FK
+    points to. If its original step was removed, use the first remaining step
+    only to satisfy the non-null FK; history display must use StepRun snapshots.
     """
     old_steps = TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
+    old_by_id = {step.id: step for step in old_steps}
+    source_step_ids = list(source_step_ids or [])
     new_steps = []
+    source_to_new = {}
     for position, (action, expected) in enumerate(zip(actions, expected_results), start=1):
         action = action.strip()
         expected = expected.strip()
@@ -75,19 +78,20 @@ def save_test_steps(test, actions, expected_results):
             )
             db.session.add(step)
             new_steps.append(step)
+            source_id = source_step_ids[position - 1] if position - 1 < len(source_step_ids) else None
+            if source_id in old_by_id and source_id not in source_to_new:
+                source_to_new[source_id] = step
 
-    # Сначала создаём новые строки, чтобы у каждой старой ссылки была цель.
     db.session.flush()
     fallback_step_id = new_steps[0].id if new_steps else None
-    for index, old_step in enumerate(old_steps):
-        replacement = new_steps[index] if index < len(new_steps) else None
+    for old_step in old_steps:
+        replacement = source_to_new.get(old_step.id)
         replacement_id = replacement.id if replacement is not None else fallback_step_id
         if replacement_id is not None:
             StepRun.query.filter_by(test_step_id=old_step.id).update(
                 {StepRun.test_step_id: replacement_id},
                 synchronize_session=False
             )
-        # Удаляем вложения и сам старый шаг только после переноса ссылок.
         for screenshot in old_step.screenshots:
             db.session.delete(screenshot)
         db.session.delete(old_step)
@@ -438,18 +442,40 @@ def edit_test(project_id, test_id):
         title = request.form.get('title', '').strip()
         actions = request.form.getlist('step_action[]')
         expected_results = request.form.getlist('step_expected[]')
-        pairs = [(a.strip(), e.strip()) for a, e in zip(actions, expected_results) if a.strip()]
+        submitted_step_ids = request.form.getlist('step_id[]')
+        if len(submitted_step_ids) != len(actions) or len(expected_results) != len(actions):
+            flash('Некорректный список шагов. Обновите страницу и попробуйте снова.', 'danger')
+            return redirect(url_for('main.edit_test', project_id=project.id, test_id=test.id))
+
+        old_steps = TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
+        old_ids = {step.id for step in old_steps}
+        pairs = []
+        for action, expected, raw_step_id in zip(actions, expected_results, submitted_step_ids):
+            action, expected = action.strip(), expected.strip()
+            raw_step_id = raw_step_id.strip()
+            if raw_step_id:
+                try:
+                    source_id = int(raw_step_id)
+                except ValueError:
+                    flash('Некорректный идентификатор шага.', 'danger')
+                    return redirect(url_for('main.edit_test', project_id=project.id, test_id=test.id))
+                if source_id not in old_ids:
+                    flash('Список шагов устарел. Обновите страницу и попробуйте снова.', 'danger')
+                    return redirect(url_for('main.edit_test', project_id=project.id, test_id=test.id))
+            else:
+                source_id = None
+            if action:
+                pairs.append((action, expected, source_id))
 
         if not title or not pairs:
             flash('Заголовок и хотя бы один шаг обязательны', 'danger')
         else:
             test.title = title
             test.precondition = request.form.get('precondition', '').strip()
-            test.steps = '\n'.join(action for action, _ in pairs)
-            test.expected_result = '\n'.join(expected for _, expected in pairs)
-            old_steps = TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
-            old_screenshots_by_index = {
-                index: [
+            test.steps = '\n'.join(action for action, _, _ in pairs)
+            test.expected_result = '\n'.join(expected for _, expected, _ in pairs)
+            old_screenshots_by_id = {
+                step.id: [
                     {
                         'stored_name': screenshot.stored_name,
                         'original_name': screenshot.original_name,
@@ -459,28 +485,31 @@ def edit_test(project_id, test_id):
                     }
                     for screenshot in step.screenshots
                 ]
-                for index, step in enumerate(old_steps)
+                for step in old_steps
             }
             old_screenshot_paths_to_remove = []
-            save_test_steps(test, [a for a, _ in pairs], [e for _, e in pairs])
+            save_test_steps(
+                test, [a for a, _, _ in pairs], [e for _, e, _ in pairs],
+                source_step_ids=[source_id for _, _, source_id in pairs]
+            )
             db.session.flush()
             saved_paths = []
             try:
                 upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+                retained_source_ids = {source_id for _, _, source_id in pairs if source_id is not None}
                 for index, step in enumerate(test.step_items):
+                    source_id = pairs[index][2]
                     uploads = [item for item in request.files.getlist(f'test_step_screenshot_{index}[]')
                                if item and item.filename]
+                    old_items = old_screenshots_by_id.get(source_id, [])
                     if uploads:
-                        old_screenshot_paths_to_remove.extend(
-                            upload_dir / item['stored_name']
-                            for item in old_screenshots_by_index.get(index, [])
-                        )
+                        old_screenshot_paths_to_remove.extend(upload_dir / item['stored_name'] for item in old_items)
                         saved_paths.extend(save_uploaded_screenshots(
                             uploads, user_id=current_user.id, test_step_id=step.id
                         ))
                     else:
-                        # Сохраняем прежние вложения, если пользователь не выбрал новые.
-                        for item in old_screenshots_by_index.get(index, []):
+                        # Сохраняем вложения именно исходного шага, даже если шаги переставили местами.
+                        for item in old_items:
                             old_path = upload_dir / item['stored_name']
                             if not old_path.is_file():
                                 continue
@@ -499,12 +528,10 @@ def edit_test(project_id, test_id):
                                 created_at=item['created_at'],
                             ))
                             old_screenshot_paths_to_remove.append(old_path)
-                # При удалении шагов очищаем файлы их скриншотов после успешного commit.
-                for old_index, items in old_screenshots_by_index.items():
-                    if old_index >= len(test.step_items):
-                        old_screenshot_paths_to_remove.extend(
-                            upload_dir / item['stored_name'] for item in items
-                        )
+                # Вложения шагов, удалённых из формы, удаляем только после успешного commit.
+                for old_id, items in old_screenshots_by_id.items():
+                    if old_id not in retained_source_ids:
+                        old_screenshot_paths_to_remove.extend(upload_dir / item['stored_name'] for item in items)
                 create_test_version(test)
                 db.session.commit()
                 for old_path in old_screenshot_paths_to_remove:
