@@ -310,3 +310,129 @@ html[data-theme="dark"] .text-dark {
         padding: 1rem;
     }
 }
+
+
+/* ===== Compact history and top navigation improvements ===== */
+.app-navbar .container-fluid {
+    display: flex;
+    align-items: center;
+}
+
+.app-navbar-start {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
+}
+
+.navbar-quick-links {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.navbar-quick-links a {
+    color: #f8f9fa;
+    text-decoration: none;
+    font-size: 0.92rem;
+    white-space: nowrap;
+    border-radius: 0.4rem;
+    padding: 0.45rem 0.6rem;
+    transition: background-color 0.15s ease;
+}
+
+.navbar-quick-links a:hover,
+.navbar-quick-links a.active {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.14);
+}
+
+.app-logo {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 0;
+}
+
+.app-logo svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+
+.run-history-item {
+    border: 1px solid var(--app-border);
+    border-radius: 0.65rem !important;
+    background: var(--app-card-bg);
+    color: var(--app-text);
+    padding: 1rem 1.1rem;
+    box-shadow: 0 0.15rem 0.5rem rgba(0, 0, 0, 0.035);
+}
+
+.run-history-item[hidden] {
+    display: none !important;
+}
+
+.run-history-details {
+    flex-shrink: 0;
+}
+
+.run-history-details summary {
+    list-style: none;
+    cursor: pointer;
+}
+
+.run-history-details summary::-webkit-details-marker {
+    display: none;
+}
+
+.run-history-details[open] {
+    flex-basis: 100%;
+}
+
+.run-history-details[open] summary {
+    display: inline-block;
+}
+
+.run-history-details .table {
+    color: inherit;
+}
+
+@media (max-width: 767.98px) {
+    .app-navbar-start {
+        gap: 0.45rem;
+        flex-wrap: wrap;
+    }
+
+    .navbar-quick-links {
+        gap: 0;
+    }
+
+    .navbar-quick-links a {
+        font-size: 0.82rem;
+        padding: 0.4rem 0.45rem;
+    }
+
+    .app-logo svg {
+        width: 145px;
+        height: auto;
+    }
+
+    .run-history-details {
+        width: 100%;
+    }
+}
+
+@media (max-width: 420px) {
+    .navbar-quick-links {
+        order: 3;
+        width: 100%;
+        margin-left: 2.8rem;
+    }
+}
+
+/* Keep the requested dark-green wordmark readable on the dark top bar. */
+.app-logo {
+    background-color: #f1f3f5;
+    border-radius: 0.45rem;
+    padding: 0.1rem 0.45rem;
+}
