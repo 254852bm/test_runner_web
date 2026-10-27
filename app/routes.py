@@ -3,7 +3,7 @@ from flask_login import login_required, current_user
 from markdown import markdown
 from markdown.extensions.toc import slugify_unicode
 from app import db
-from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User
+from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User
 from datetime import datetime
 import secrets
 import os
@@ -65,6 +65,53 @@ def save_test_steps(test, actions, expected_results):
                 action=action,
                 expected_result=expected
             ))
+
+
+def save_uploaded_screenshots(uploads, user_id, step_run_id=None, test_step_id=None):
+    """Проверяет и сохраняет изображения во внешнюю папку, не в БД."""
+    uploads = [item for item in uploads if item and item.filename]
+    if len(uploads) > 5:
+        raise ValueError('Для одного шага можно прикрепить не более 5 изображений.')
+
+    saved_paths = []
+    upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    for upload in uploads:
+        data = upload.read(5 * 1024 * 1024 + 1)
+        if not data:
+            continue
+        if len(data) > 5 * 1024 * 1024:
+            raise ValueError('Размер одного изображения не должен превышать 5 МБ.')
+        if data.startswith(b'\\xff\\xd8\\xff'):
+            image_type = 'jpeg'
+        elif data.startswith(b'\\x89PNG\\r\\n\\x1a\\n'):
+            image_type = 'png'
+        elif data.startswith((b'GIF87a', b'GIF89a')):
+            image_type = 'gif'
+        elif len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+            image_type = 'webp'
+        else:
+            raise ValueError('Разрешены только изображения PNG, JPEG, GIF и WEBP.')
+
+        mime_types = {'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp'}
+        extension = 'jpg' if image_type == 'jpeg' else image_type
+        stored_name = secrets.token_hex(24) + '.' + extension
+        file_path = upload_dir / stored_name
+        file_path.write_bytes(data)
+        saved_paths.append(file_path)
+        original_name = secure_filename(upload.filename or '')[:255] or f'screenshot.{extension}'
+
+        if step_run_id is not None:
+            db.session.add(StepRunScreenshot(
+                step_run_id=step_run_id, user_id=user_id, stored_name=stored_name,
+                original_name=original_name, mime_type=mime_types[image_type], size_bytes=len(data)
+            ))
+        elif test_step_id is not None:
+            db.session.add(TestStepScreenshot(
+                test_step_id=test_step_id, user_id=user_id, stored_name=stored_name,
+                original_name=original_name, mime_type=mime_types[image_type], size_bytes=len(data)
+            ))
+    return saved_paths
 
 
 def step_status_summary(step_runs):
