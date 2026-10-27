@@ -788,7 +788,10 @@ def export_pdf(project_id):
                     Paragraph(escape(step_run.comment or '').replace(NL, '<br/>'), cell_style),
                     Paragraph(escape(step_run.expected_result or '').replace(NL, '<br/>'), cell_style)
                 ])
-                for screenshot in step_run.screenshots:
+                related_screenshots = list(step_run.screenshots)
+                if step_run.test_step is not None:
+                    related_screenshots.extend(step_run.test_step.screenshots)
+                for screenshot in related_screenshots:
                     screenshot_path = os.path.join(project_root, 'instance', 'step-screenshots', screenshot.stored_name)
                     if os.path.isfile(screenshot_path):
                         try:
