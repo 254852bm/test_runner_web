@@ -436,3 +436,28 @@ html[data-theme="dark"] .text-dark {
     border-radius: 0.45rem;
     padding: 0.1rem 0.45rem;
 }
+
+
+/* ===== Step-run screenshot attachments ===== */
+.step-screenshot-gallery {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.step-screenshot-gallery a {
+    display: block;
+    border: 1px solid var(--app-border);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background: var(--app-card-bg);
+}
+.step-screenshot-gallery img {
+    display: block;
+    width: 112px;
+    height: 84px;
+    object-fit: cover;
+}
+.step-screenshot-gallery a:focus-visible {
+    outline: 3px solid #0d6efd;
+    outline-offset: 2px;
+}
