@@ -53,22 +53,44 @@ def ensure_test_steps(test):
 
 
 def save_test_steps(test, actions, expected_results):
-    # Записи скриншотов удаляем в транзакции; сами файлы удалим только после commit.
-    old_steps = TestStep.query.filter_by(test_case_id=test.id).all()
-    for old_step in old_steps:
-        for screenshot in old_step.screenshots:
-            db.session.delete(screenshot)
-    TestStep.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
+    """
+    Заменяет текущие шаги, сохраняя валидность внешних ключей в истории.
+
+    StepRun хранит текст и ожидаемый результат как снимок на момент прогона.
+    При замене шагов перенаправляем его FK на соответствующий новый шаг (или
+    первый новый шаг, если старый шаг был удалён). Исторические поля StepRun
+    остаются неизменными; PDF и история должны опираться на эти снимки.
+    """
+    old_steps = TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
+    new_steps = []
     for position, (action, expected) in enumerate(zip(actions, expected_results), start=1):
         action = action.strip()
         expected = expected.strip()
         if action:
-            db.session.add(TestStep(
+            step = TestStep(
                 test_case_id=test.id,
                 position=position,
                 action=action,
                 expected_result=expected
-            ))
+            )
+            db.session.add(step)
+            new_steps.append(step)
+
+    # Сначала создаём новые строки, чтобы у каждой старой ссылки была цель.
+    db.session.flush()
+    fallback_step_id = new_steps[0].id if new_steps else None
+    for index, old_step in enumerate(old_steps):
+        replacement = new_steps[index] if index < len(new_steps) else None
+        replacement_id = replacement.id if replacement is not None else fallback_step_id
+        if replacement_id is not None:
+            StepRun.query.filter_by(test_step_id=old_step.id).update(
+                {StepRun.test_step_id: replacement_id},
+                synchronize_session=False
+            )
+        # Удаляем вложения и сам старый шаг только после переноса ссылок.
+        for screenshot in old_step.screenshots:
+            db.session.delete(screenshot)
+        db.session.delete(old_step)
 
 
 def save_uploaded_screenshots(uploads, user_id, step_run_id=None, test_step_id=None):
