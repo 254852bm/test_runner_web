@@ -7,7 +7,6 @@ from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, Te
 from datetime import datetime
 import secrets
 import os
-import re
 from pathlib import Path
 from werkzeug.utils import secure_filename
 
