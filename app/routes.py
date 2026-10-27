@@ -574,7 +574,7 @@ def run_history(project_id):
 @login_required
 def export_pdf(project_id):
     from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib import colors
     from reportlab.lib.units import inch
@@ -627,6 +627,7 @@ def export_pdf(project_id):
                 continue
 
     buffer = BytesIO()
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     doc = SimpleDocTemplate(buffer, pagesize=A4,
                             rightMargin=72, leftMargin=72,
                             topMargin=72, bottomMargin=72)
@@ -684,8 +685,22 @@ def export_pdf(project_id):
                     Paragraph(escape(step_run.comment or '').replace(NL, '<br/>'), cell_style),
                     Paragraph(escape(step_run.expected_result or '').replace(NL, '<br/>'), cell_style)
                 ])
+                for screenshot in step_run.screenshots:
+                    screenshot_path = os.path.join(project_root, 'instance', 'step-screenshots', screenshot.stored_name)
+                    if os.path.isfile(screenshot_path):
+                        try:
+                            screenshot_image = Image(screenshot_path, width=1.25 * inch, height=0.9 * inch, kind='proportional')
+                            data.append([
+                                Paragraph('', cell_style),
+                                Paragraph('Скриншот: ' + escape(screenshot.original_name), cell_style),
+                                Paragraph('', cell_style),
+                                Paragraph(escape(step_run.comment or '').replace(NL, '<br/>'), cell_style),
+                                screenshot_image
+                            ])
+                        except Exception:
+                            current_app.logger.exception('Could not add screenshot %s to PDF', screenshot.id)
 
-    table = Table(data, colWidths=[0.35*inch, 2.2*inch, 0.85*inch, 2.0*inch, 1.6*inch], repeatRows=1)
+    table = Table(data, colWidths=[0.3*inch, 1.55*inch, 0.65*inch, 1.55*inch, 1.45*inch], repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
