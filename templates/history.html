@@ -52,7 +52,20 @@
                                             <td class="test-case-text">{{ step_run.step_text }}</td>
                                             <td class="test-case-text">{{ step_run.expected_result or '—' }}</td>
                                             <td><strong>{{ status_labels.get(step_run.status, step_run.status) }}</strong></td>
-                                            <td class="test-case-text">{{ step_run.comment or '—' }}</td>
+                                            <td>
+                                                <div class="test-case-text">{{ step_run.comment or '—' }}</div>
+                                                {% if step_run.screenshots %}
+                                                    <div class="step-screenshot-gallery mt-2">
+                                                    {% for screenshot in step_run.screenshots %}
+                                                        <a href="{{ url_for('main.view_step_screenshot', screenshot_id=screenshot.id) }}" target="_blank" rel="noopener"
+                                                           title="{{ screenshot.original_name }}">
+                                                            <img src="{{ url_for('main.view_step_screenshot', screenshot_id=screenshot.id) }}"
+                                                                 alt="{{ screenshot.original_name }}" loading="lazy">
+                                                        </a>
+                                                    {% endfor %}
+                                                    </div>
+                                                {% endif %}
+                                            </td>
                                         </tr>
                                     {% endfor %}
                                     </tbody>
