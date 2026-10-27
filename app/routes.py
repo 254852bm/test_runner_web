@@ -75,17 +75,17 @@ def save_test_steps(test, actions, expected_results, source_step_ids=None):
     new_steps = []
     source_to_new = {}
     for position, (action, expected) in enumerate(normalized_pairs, start=1):
-            step = TestStep(
-                test_case_id=test.id,
-                position=position,
-                action=action,
-                expected_result=expected
-            )
-            db.session.add(step)
-            new_steps.append(step)
-            source_id = source_step_ids[position - 1] if position - 1 < len(source_step_ids) else None
-            if source_id in old_by_id and source_id not in source_to_new:
-                source_to_new[source_id] = step
+        step = TestStep(
+            test_case_id=test.id,
+            position=position,
+            action=action,
+            expected_result=expected
+        )
+        db.session.add(step)
+        new_steps.append(step)
+        source_id = source_step_ids[position - 1] if position - 1 < len(source_step_ids) else None
+        if source_id in old_by_id and source_id not in source_to_new:
+            source_to_new[source_id] = step
 
     db.session.flush()
     fallback_step_id = new_steps[0].id if new_steps else None
