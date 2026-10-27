@@ -5,7 +5,7 @@ import pytest
 from werkzeug.datastructures import FileStorage
 
 from app import create_app, db
-from app.models import Project, TestCase, TestRun, TestStep, StepRun, User
+from app.models import Project, TestCase, TestRun, TestStep, TestStepScreenshot, StepRun, User
 from app.routes import save_test_steps, save_uploaded_screenshots
 
 
@@ -276,3 +276,67 @@ def test_history_page_renders_historical_step_snapshots_after_current_steps_chan
     assert "original comment" in html
     assert "Completely new current action" not in html
     assert "Completely new current expectation" not in html
+
+
+
+def test_edit_route_keeps_screenshots_with_original_steps_when_reordered(app):
+    with app.app_context():
+        user, case, first_step, run, first_run = _user_and_step()
+        second_step = TestStep(
+            test_case_id=case.id, position=2,
+            action="Second logical step", expected_result="Second result"
+        )
+        db.session.add(second_step)
+        db.session.flush()
+        upload_dir = Path(app.instance_path) / "step-screenshots"
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        first_file = upload_dir / "first.png"
+        second_file = upload_dir / "second.png"
+        first_file.write_bytes(PNG_HEADER + b"first")
+        second_file.write_bytes(PNG_HEADER + b"second")
+        db.session.add_all([
+            TestStepScreenshot(
+                test_step_id=first_step.id, user_id=user.id, stored_name=first_file.name,
+                original_name="first.png", mime_type="image/png", size_bytes=10
+            ),
+            TestStepScreenshot(
+                test_step_id=second_step.id, user_id=user.id, stored_name=second_file.name,
+                original_name="second.png", mime_type="image/png", size_bytes=11
+            )
+        ])
+        db.session.commit()
+        user_id, project_id, case_id = user.id, case.project_id, case.id
+        first_id, second_id = first_step.id, second_step.id
+
+    client = app.test_client()
+    with client.session_transaction() as session:
+        session["_user_id"] = str(user_id)
+        session["_fresh"] = True
+
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/edit",
+        data={
+            "title": "Screenshot identity test",
+            "precondition": "",
+            "step_id[]": [str(second_id), str(first_id)],
+            "step_action[]": ["Second logical step", "Open page"],
+            "step_expected[]": ["Second result", "Page appears"],
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        current_steps = TestStep.query.filter_by(test_case_id=case_id).order_by(TestStep.position).all()
+        screenshots = {
+            screenshot.original_name: screenshot.test_step.action
+            for step in current_steps for screenshot in step.screenshots
+        }
+        assert screenshots == {
+            "second.png": "Second logical step",
+            "first.png": "Open page",
+        }
+        current_files = {path.name for path in upload_dir.iterdir()}
+        assert first_file.name not in current_files
+        assert second_file.name not in current_files
+        assert len(current_files) == 2
