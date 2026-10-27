@@ -605,6 +605,24 @@ def run_tests(project_id):
                            single_test=single_test, status_labels=STATUS_LABELS)
 
 
+@main_bp.route('/test-step-screenshots/<int:screenshot_id>')
+@login_required
+def view_test_step_screenshot(screenshot_id):
+    screenshot = TestStepScreenshot.query.filter_by(
+        id=screenshot_id, user_id=current_user.id
+    ).first_or_404()
+    step = TestStep.query.get_or_404(screenshot.test_step_id)
+    test = TestCase.query.get_or_404(step.test_case_id)
+    project = Project.query.get_or_404(test.project_id)
+    if project.user_id != current_user.id:
+        abort(404)
+    file_path = Path(current_app.instance_path) / 'step-screenshots' / screenshot.stored_name
+    if not file_path.is_file():
+        abort(404)
+    return send_file(file_path, mimetype=screenshot.mime_type, as_attachment=False,
+                     download_name=screenshot.original_name, max_age=0)
+
+
 @main_bp.route('/screenshots/<int:screenshot_id>')
 @login_required
 def view_step_screenshot(screenshot_id):
