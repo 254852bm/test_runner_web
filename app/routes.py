@@ -78,14 +78,12 @@ def save_test_steps(test, actions, expected_results):
 
 
 def save_uploaded_screenshots(uploads, user_id, step_run_id=None, test_step_id=None):
-    """Проверяет и сохраняет изображения во внешнюю папку, не в БД."""
+    """Проверяет изображения до записи и сохраняет их вне репозитория."""
     uploads = [item for item in uploads if item and item.filename]
     if len(uploads) > 5:
         raise ValueError('Для одного шага можно прикрепить не более 5 изображений.')
 
-    saved_paths = []
-    upload_dir = Path(current_app.instance_path) / 'step-screenshots'
-    upload_dir.mkdir(parents=True, exist_ok=True)
+    prepared = []
     for upload in uploads:
         data = upload.read(5 * 1024 * 1024 + 1)
         if not data:
@@ -102,25 +100,34 @@ def save_uploaded_screenshots(uploads, user_id, step_run_id=None, test_step_id=N
             image_type = 'webp'
         else:
             raise ValueError('Разрешены только изображения PNG, JPEG, GIF и WEBP.')
-
         mime_types = {'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp'}
         extension = 'jpg' if image_type == 'jpeg' else image_type
-        stored_name = secrets.token_hex(24) + '.' + extension
-        file_path = upload_dir / stored_name
-        file_path.write_bytes(data)
-        saved_paths.append(file_path)
         original_name = secure_filename(upload.filename or '')[:255] or f'screenshot.{extension}'
+        prepared.append((data, image_type, extension, original_name, mime_types[image_type]))
 
-        if step_run_id is not None:
-            db.session.add(StepRunScreenshot(
-                step_run_id=step_run_id, user_id=user_id, stored_name=stored_name,
-                original_name=original_name, mime_type=mime_types[image_type], size_bytes=len(data)
-            ))
-        elif test_step_id is not None:
-            db.session.add(TestStepScreenshot(
-                test_step_id=test_step_id, user_id=user_id, stored_name=stored_name,
-                original_name=original_name, mime_type=mime_types[image_type], size_bytes=len(data)
-            ))
+    upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    saved_paths = []
+    try:
+        for data, image_type, extension, original_name, mime_type in prepared:
+            stored_name = secrets.token_hex(24) + '.' + extension
+            file_path = upload_dir / stored_name
+            file_path.write_bytes(data)
+            saved_paths.append(file_path)
+            if step_run_id is not None:
+                db.session.add(StepRunScreenshot(
+                    step_run_id=step_run_id, user_id=user_id, stored_name=stored_name,
+                    original_name=original_name, mime_type=mime_type, size_bytes=len(data)
+                ))
+            elif test_step_id is not None:
+                db.session.add(TestStepScreenshot(
+                    test_step_id=test_step_id, user_id=user_id, stored_name=stored_name,
+                    original_name=original_name, mime_type=mime_type, size_bytes=len(data)
+                ))
+    except Exception:
+        for file_path in saved_paths:
+            file_path.unlink(missing_ok=True)
+        raise
     return saved_paths
 
 
