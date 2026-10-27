@@ -7,7 +7,7 @@
             <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-outline-secondary">← Назад к проекту</a>
         </div>
 
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
             <div class="mb-3">
                 <label for="title" class="form-label">Заголовок</label>
                 <input type="text" class="form-control" id="title" name="title" placeholder="Например: Проверка входа с корректным паролем" required>
@@ -32,9 +32,14 @@
                                 <label class="form-label">Действие</label>
                                 <textarea class="form-control" name="step_action[]" rows="2" placeholder="Например: Открыть страницу авторизации" required></textarea>
                             </div>
-                            <div>
+                            <div class="mb-2">
                                 <label class="form-label">Ожидаемый результат</label>
                                 <textarea class="form-control" name="step_expected[]" rows="2" placeholder="Например: Открывается страница авторизации"></textarea>
+                            </div>
+                            <div>
+                                <label class="form-label">Скриншоты ожидаемого результата</label>
+                                <input class="form-control" type="file" name="test_step_screenshot_0[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple>
+                                <div class="form-text">До 5 изображений на шаг, не более 5 МБ каждое.</div>
                             </div>
                         </div>
                     </div>
@@ -67,9 +72,14 @@ function addStep() {
                 <label class="form-label">Действие</label>
                 <textarea class="form-control" name="step_action[]" rows="2" placeholder="Например: Ввести логин" required></textarea>
             </div>
-            <div>
+            <div class="mb-2">
                 <label class="form-label">Ожидаемый результат</label>
                 <textarea class="form-control" name="step_expected[]" rows="2" placeholder="Например: Логин принят системой"></textarea>
+            </div>
+            <div>
+                <label class="form-label">Скриншоты ожидаемого результата</label>
+                <input class="form-control" type="file" name="test_step_screenshot_${number - 1}[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple>
+                <div class="form-text">До 5 изображений на шаг, не более 5 МБ каждое.</div>
             </div>
         </div>`;
     container.appendChild(card);
@@ -86,6 +96,8 @@ function removeStep(button) {
 function renumberSteps() {
     document.querySelectorAll('#steps-container .step-card').forEach((card, index) => {
         card.querySelector('.step-number').textContent = index + 1;
+        const screenshotInput = card.querySelector('input[type="file"]');
+        if (screenshotInput) screenshotInput.name = 'test_step_screenshot_' + index + '[]';
     });
 }
 </script>

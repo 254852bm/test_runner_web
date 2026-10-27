@@ -1,12 +1,14 @@
-from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file
+from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file, abort, current_app
 from flask_login import login_required, current_user
 from markdown import markdown
 from markdown.extensions.toc import slugify_unicode
 from app import db
-from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, StepRun, ApiToken, FeedbackTicket, FeedbackMessage, User
+from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User
 from datetime import datetime
 import secrets
 import os
+from pathlib import Path
+from werkzeug.utils import secure_filename
 
 main_bp = Blueprint('main', __name__)
 
@@ -50,18 +52,108 @@ def ensure_test_steps(test):
     return TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
 
 
-def save_test_steps(test, actions, expected_results):
-    TestStep.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
-    for position, (action, expected) in enumerate(zip(actions, expected_results), start=1):
-        action = action.strip()
-        expected = expected.strip()
-        if action:
-            db.session.add(TestStep(
-                test_case_id=test.id,
-                position=position,
-                action=action,
-                expected_result=expected
-            ))
+def save_test_steps(test, actions, expected_results, source_step_ids=None):
+    """
+    Rebuild current steps while keeping historical StepRun snapshots intact.
+    source_step_ids identifies the existing step represented by each submitted
+    row; blank IDs represent newly added steps. This prevents reordering or
+    deleting a step from silently changing which current step a historical FK
+    points to. If its original step was removed, use the first remaining step
+    only to satisfy the non-null FK; history display must use StepRun snapshots.
+    """
+    normalized_pairs = [
+        (action.strip(), expected.strip())
+        for action, expected in zip(actions, expected_results)
+        if action and action.strip()
+    ]
+    if not normalized_pairs:
+        raise ValueError('Тест-кейс должен содержать хотя бы один шаг.')
+
+    old_steps = TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
+    old_by_id = {step.id: step for step in old_steps}
+    source_step_ids = list(source_step_ids or [])
+    new_steps = []
+    source_to_new = {}
+    for position, (action, expected) in enumerate(normalized_pairs, start=1):
+        step = TestStep(
+            test_case_id=test.id,
+            position=position,
+            action=action,
+            expected_result=expected
+        )
+        db.session.add(step)
+        new_steps.append(step)
+        source_id = source_step_ids[position - 1] if position - 1 < len(source_step_ids) else None
+        if source_id in old_by_id and source_id not in source_to_new:
+            source_to_new[source_id] = step
+
+    db.session.flush()
+    fallback_step_id = new_steps[0].id if new_steps else None
+    for old_step in old_steps:
+        replacement = source_to_new.get(old_step.id)
+        replacement_id = replacement.id if replacement is not None else fallback_step_id
+        if replacement_id is not None:
+            StepRun.query.filter_by(test_step_id=old_step.id).update(
+                {StepRun.test_step_id: replacement_id},
+                synchronize_session=False
+            )
+        for screenshot in old_step.screenshots:
+            db.session.delete(screenshot)
+        db.session.delete(old_step)
+
+
+def save_uploaded_screenshots(uploads, user_id, step_run_id=None, test_step_id=None):
+    """Проверяет изображения до записи и сохраняет их вне репозитория."""
+    uploads = [item for item in uploads if item and item.filename]
+    if len(uploads) > 5:
+        raise ValueError('Для одного шага можно прикрепить не более 5 изображений.')
+
+    prepared = []
+    for upload in uploads:
+        data = upload.read(5 * 1024 * 1024 + 1)
+        if not data:
+            continue
+        if len(data) > 5 * 1024 * 1024:
+            raise ValueError('Размер одного изображения не должен превышать 5 МБ.')
+        if data[:3] == bytes([255, 216, 255]):
+            image_type = 'jpeg'
+        elif data.startswith(bytes([137, 80, 78, 71, 13, 10, 26, 10])):
+            image_type = 'png'
+        elif data.startswith((b'GIF87a', b'GIF89a')):
+            image_type = 'gif'
+        elif len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+            image_type = 'webp'
+        else:
+            raise ValueError('Разрешены только изображения PNG, JPEG, GIF и WEBP.')
+        mime_types = {'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp'}
+        extension = 'jpg' if image_type == 'jpeg' else image_type
+        original_name = secure_filename(upload.filename or '')[:255] or f'screenshot.{extension}'
+        prepared.append((data, extension, original_name, mime_types[image_type]))
+
+    upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    saved_paths = []
+    try:
+        for data, extension, original_name, mime_type in prepared:
+            stored_name = secrets.token_hex(24) + '.' + extension
+            file_path = upload_dir / stored_name
+            file_path.write_bytes(data)
+            saved_paths.append(file_path)
+            if step_run_id is not None:
+                db.session.add(StepRunScreenshot(
+                    step_run_id=step_run_id, user_id=user_id, stored_name=stored_name,
+                    original_name=original_name, mime_type=mime_type, size_bytes=len(data)
+                ))
+            elif test_step_id is not None:
+                db.session.add(TestStepScreenshot(
+                    test_step_id=test_step_id, user_id=user_id, stored_name=stored_name,
+                    original_name=original_name, mime_type=mime_type, size_bytes=len(data)
+                ))
+    except Exception:
+        for file_path in saved_paths:
+            file_path.unlink(missing_ok=True)
+        raise
+    return saved_paths
 
 
 def step_status_summary(step_runs):
@@ -318,8 +410,22 @@ def create_test(project_id):
             db.session.add(test)
             db.session.flush()
             save_test_steps(test, [a for a, _ in pairs], [e for _, e in pairs])
-            create_test_version(test)
-            db.session.commit()
+            db.session.flush()
+            saved_paths = []
+            try:
+                for index, step in enumerate(test.step_items):
+                    saved_paths.extend(save_uploaded_screenshots(
+                        request.files.getlist(f'test_step_screenshot_{index}[]'),
+                        user_id=current_user.id, test_step_id=step.id
+                    ))
+                create_test_version(test)
+                db.session.commit()
+            except ValueError as error:
+                db.session.rollback()
+                for path in saved_paths:
+                    path.unlink(missing_ok=True)
+                flash(str(error), 'danger')
+                return render_template('create_test.html', project_id=project.id)
             flash('Тест добавлен!', 'success')
             return redirect(url_for('main.project_detail', project_id=project.id))
         flash('Заполните заголовок и добавьте хотя бы один шаг', 'danger')
@@ -341,18 +447,111 @@ def edit_test(project_id, test_id):
         title = request.form.get('title', '').strip()
         actions = request.form.getlist('step_action[]')
         expected_results = request.form.getlist('step_expected[]')
-        pairs = [(a.strip(), e.strip()) for a, e in zip(actions, expected_results) if a.strip()]
+        submitted_step_ids = request.form.getlist('step_id[]')
+        if len(submitted_step_ids) != len(actions) or len(expected_results) != len(actions):
+            flash('Некорректный список шагов. Обновите страницу и попробуйте снова.', 'danger')
+            return redirect(url_for('main.edit_test', project_id=project.id, test_id=test.id))
+
+        old_steps = TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
+        old_ids = {step.id for step in old_steps}
+        pairs = []
+        for action, expected, raw_step_id in zip(actions, expected_results, submitted_step_ids):
+            action, expected = action.strip(), expected.strip()
+            raw_step_id = raw_step_id.strip()
+            if raw_step_id:
+                try:
+                    source_id = int(raw_step_id)
+                except ValueError:
+                    flash('Некорректный идентификатор шага.', 'danger')
+                    return redirect(url_for('main.edit_test', project_id=project.id, test_id=test.id))
+                if source_id not in old_ids:
+                    flash('Список шагов устарел. Обновите страницу и попробуйте снова.', 'danger')
+                    return redirect(url_for('main.edit_test', project_id=project.id, test_id=test.id))
+            else:
+                source_id = None
+            if action:
+                pairs.append((action, expected, source_id))
+
+        submitted_existing_ids = [source_id for _, _, source_id in pairs if source_id is not None]
+        if len(submitted_existing_ids) != len(set(submitted_existing_ids)):
+            flash('Один и тот же существующий шаг указан несколько раз. Обновите страницу и попробуйте снова.', 'danger')
+            return redirect(url_for('main.edit_test', project_id=project.id, test_id=test.id))
 
         if not title or not pairs:
             flash('Заголовок и хотя бы один шаг обязательны', 'danger')
         else:
             test.title = title
             test.precondition = request.form.get('precondition', '').strip()
-            test.steps = '\n'.join(action for action, _ in pairs)
-            test.expected_result = '\n'.join(expected for _, expected in pairs)
-            save_test_steps(test, [a for a, _ in pairs], [e for _, e in pairs])
-            create_test_version(test)
-            db.session.commit()
+            test.steps = '\n'.join(action for action, _, _ in pairs)
+            test.expected_result = '\n'.join(expected for _, expected, _ in pairs)
+            old_screenshots_by_id = {
+                step.id: [
+                    {
+                        'stored_name': screenshot.stored_name,
+                        'original_name': screenshot.original_name,
+                        'mime_type': screenshot.mime_type,
+                        'size_bytes': screenshot.size_bytes,
+                        'created_at': screenshot.created_at,
+                    }
+                    for screenshot in step.screenshots
+                ]
+                for step in old_steps
+            }
+            old_screenshot_paths_to_remove = []
+            save_test_steps(
+                test, [a for a, _, _ in pairs], [e for _, e, _ in pairs],
+                source_step_ids=[source_id for _, _, source_id in pairs]
+            )
+            db.session.flush()
+            saved_paths = []
+            try:
+                upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+                retained_source_ids = {source_id for _, _, source_id in pairs if source_id is not None}
+                for index, step in enumerate(test.step_items):
+                    source_id = pairs[index][2]
+                    uploads = [item for item in request.files.getlist(f'test_step_screenshot_{index}[]')
+                               if item and item.filename]
+                    old_items = old_screenshots_by_id.get(source_id, [])
+                    if uploads:
+                        old_screenshot_paths_to_remove.extend(upload_dir / item['stored_name'] for item in old_items)
+                        saved_paths.extend(save_uploaded_screenshots(
+                            uploads, user_id=current_user.id, test_step_id=step.id
+                        ))
+                    else:
+                        # Сохраняем вложения именно исходного шага, даже если шаги переставили местами.
+                        for item in old_items:
+                            old_path = upload_dir / item['stored_name']
+                            if not old_path.is_file():
+                                continue
+                            extension = old_path.suffix.lstrip('.') or 'img'
+                            new_name = secrets.token_hex(24) + '.' + extension
+                            new_path = upload_dir / new_name
+                            new_path.write_bytes(old_path.read_bytes())
+                            saved_paths.append(new_path)
+                            db.session.add(TestStepScreenshot(
+                                test_step_id=step.id,
+                                user_id=current_user.id,
+                                stored_name=new_name,
+                                original_name=item['original_name'],
+                                mime_type=item['mime_type'],
+                                size_bytes=item['size_bytes'],
+                                created_at=item['created_at'],
+                            ))
+                            old_screenshot_paths_to_remove.append(old_path)
+                # Вложения шагов, удалённых из формы, удаляем только после успешного commit.
+                for old_id, items in old_screenshots_by_id.items():
+                    if old_id not in retained_source_ids:
+                        old_screenshot_paths_to_remove.extend(upload_dir / item['stored_name'] for item in items)
+                create_test_version(test)
+                db.session.commit()
+                for old_path in old_screenshot_paths_to_remove:
+                    old_path.unlink(missing_ok=True)
+            except ValueError as error:
+                db.session.rollback()
+                for path in saved_paths:
+                    path.unlink(missing_ok=True)
+                flash(str(error), 'danger')
+                return redirect(url_for('main.edit_test', project_id=project.id, test_id=test.id))
             flash('Тест-кейс обновлён! Создана новая версия.', 'success')
             return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
 
@@ -423,18 +622,87 @@ def run_tests(project_id):
             )
             db.session.add(run)
             db.session.flush()
+            uploaded_paths = []
+            try:
+                for index, (step, status, comment) in enumerate(zip(steps, statuses, comments)):
+                    step_run = StepRun(
+                        test_run_id=run.id,
+                        test_step_id=step.id,
+                        status=status,
+                        comment=comment.strip(),
+                        step_text=step.action,
+                        expected_result=step.expected_result or ''
+                    )
+                    db.session.add(step_run)
+                    db.session.flush()
 
-            for step, status, comment in zip(steps, statuses, comments):
-                db.session.add(StepRun(
-                    test_run_id=run.id,
-                    test_step_id=step.id,
-                    status=status,
-                    comment=comment.strip(),
-                    step_text=step.action,
-                    expected_result=step.expected_result or ''
-                ))
+                    uploads = request.files.getlist(f'step_screenshot_{index}[]')
+                    uploads = [item for item in uploads if item and item.filename]
+                    if len(uploads) > 5:
+                        raise ValueError(f'Для шага {index + 1} можно прикрепить не более 5 изображений.')
 
-            db.session.commit()
+                    for upload in uploads:
+                        data = upload.read(5 * 1024 * 1024 + 1)
+                        if not data:
+                            continue
+                        if len(data) > 5 * 1024 * 1024:
+                            raise ValueError('Размер одного изображения не должен превышать 5 МБ.')
+                        if data.startswith(b'\xff\xd8\xff'):
+                            image_type = 'jpeg'
+                        elif data.startswith(b'\x89PNG\r\n\x1a\n'):
+                            image_type = 'png'
+                        elif data.startswith((b'GIF87a', b'GIF89a')):
+                            image_type = 'gif'
+                        else:
+                            image_type = None
+                        mime_types = {'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif'}
+                        if image_type not in mime_types:
+                            # WEBP: RIFF....WEBP signature.
+                            if not (len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP'):
+                                raise ValueError('Разрешены только изображения PNG, JPEG, GIF и WEBP.')
+                            mime_type = 'image/webp'
+                            extension = 'webp'
+                        else:
+                            mime_type = mime_types[image_type]
+                            extension = 'jpg' if image_type == 'jpeg' else image_type
+
+                        stored_name = secrets.token_hex(24) + '.' + extension
+                        upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+                        upload_dir.mkdir(parents=True, exist_ok=True)
+                        file_path = upload_dir / stored_name
+                        file_path.write_bytes(data)
+                        uploaded_paths.append(file_path)
+
+                        original_name = secure_filename(upload.filename or '')[:255] or f'screenshot.{extension}'
+                        db.session.add(StepRunScreenshot(
+                            step_run_id=step_run.id,
+                            user_id=current_user.id,
+                            stored_name=stored_name,
+                            original_name=original_name,
+                            mime_type=mime_type,
+                            size_bytes=len(data)
+                        ))
+
+                db.session.commit()
+            except ValueError as error:
+                db.session.rollback()
+                for file_path in uploaded_paths:
+                    try:
+                        file_path.unlink(missing_ok=True)
+                    except OSError:
+                        current_app.logger.exception('Could not remove a temporary screenshot after validation failure')
+                flash(str(error), 'danger')
+                return redirect(url_for('main.run_tests', project_id=project.id,
+                                        test_id=(test.id if single_test else None), index=current_index))
+            except Exception:
+                db.session.rollback()
+                for file_path in uploaded_paths:
+                    try:
+                        file_path.unlink(missing_ok=True)
+                    except OSError:
+                        current_app.logger.exception('Could not remove a screenshot after a failed test-run save')
+                raise
+
             next_index = current_index + 1
             if next_index < len(tests):
                 if single_test:
@@ -446,6 +714,38 @@ def run_tests(project_id):
     return render_template('run.html', project=project, test=test, steps=steps,
                            current_index=current_index, total=len(tests),
                            single_test=single_test, status_labels=STATUS_LABELS)
+
+
+@main_bp.route('/test-step-screenshots/<int:screenshot_id>')
+@login_required
+def view_test_step_screenshot(screenshot_id):
+    screenshot = TestStepScreenshot.query.filter_by(
+        id=screenshot_id, user_id=current_user.id
+    ).first_or_404()
+    step = TestStep.query.get_or_404(screenshot.test_step_id)
+    test = TestCase.query.get_or_404(step.test_case_id)
+    project = Project.query.get_or_404(test.project_id)
+    if project.user_id != current_user.id:
+        abort(404)
+    file_path = Path(current_app.instance_path) / 'step-screenshots' / screenshot.stored_name
+    if not file_path.is_file():
+        abort(404)
+    return send_file(file_path, mimetype=screenshot.mime_type, as_attachment=False,
+                     download_name=screenshot.original_name, max_age=0)
+
+
+@main_bp.route('/screenshots/<int:screenshot_id>')
+@login_required
+def view_step_screenshot(screenshot_id):
+    screenshot = StepRunScreenshot.query.filter_by(
+        id=screenshot_id, user_id=current_user.id
+    ).first_or_404()
+    upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+    file_path = upload_dir / screenshot.stored_name
+    if not file_path.is_file():
+        abort(404)
+    return send_file(file_path, mimetype=screenshot.mime_type, as_attachment=False,
+                     download_name=screenshot.original_name, max_age=0)
 
 
 @main_bp.route('/project/<int:project_id>/stats')
@@ -488,7 +788,7 @@ def run_history(project_id):
 @login_required
 def export_pdf(project_id):
     from reportlab.lib.pagesizes import A4
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib import colors
     from reportlab.lib.units import inch
@@ -598,8 +898,26 @@ def export_pdf(project_id):
                     Paragraph(escape(step_run.comment or '').replace(NL, '<br/>'), cell_style),
                     Paragraph(escape(step_run.expected_result or '').replace(NL, '<br/>'), cell_style)
                 ])
+                # В исторический PDF включаем только снимки, прикреплённые к этому прогону.
+                # Скриншоты ожидаемого результата относятся к текущей версии тест-кейса
+                # и не должны подменять вложения старого прогона.
+                related_screenshots = list(step_run.screenshots)
+                for screenshot in related_screenshots:
+                    screenshot_path = Path(current_app.instance_path) / 'step-screenshots' / screenshot.stored_name
+                    if os.path.isfile(screenshot_path):
+                        try:
+                            screenshot_image = Image(screenshot_path, width=1.25 * inch, height=0.9 * inch, kind='proportional')
+                            data.append([
+                                Paragraph('', cell_style),
+                                Paragraph('Скриншот: ' + escape(screenshot.original_name), cell_style),
+                                Paragraph('', cell_style),
+                                Paragraph(escape(step_run.comment or '').replace(NL, '<br/>'), cell_style),
+                                screenshot_image
+                            ])
+                        except Exception:
+                            current_app.logger.exception('Could not add screenshot %s to PDF', screenshot.id)
 
-    table = Table(data, colWidths=[0.35*inch, 2.2*inch, 0.85*inch, 2.0*inch, 1.6*inch], repeatRows=1)
+    table = Table(data, colWidths=[0.3*inch, 1.55*inch, 0.65*inch, 1.55*inch, 1.45*inch], repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
