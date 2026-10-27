@@ -240,3 +240,39 @@ def test_pdf_export_uses_instance_screenshot_and_contains_image(app):
     assert response.mimetype == "application/pdf"
     assert response.data.startswith(b"%PDF")
     assert b"/Subtype /Image" in response.data
+
+
+
+def test_history_page_renders_historical_step_snapshots_after_current_steps_change(app):
+    with app.app_context():
+        user, case, old_step, run, step_run = _user_and_step()
+        project = db.session.get(Project, case.project_id)
+        user_id, project_id = user.id, project.id
+        old_run_id = run.id
+        old_step_run_id = step_run.id
+
+        save_test_steps(
+            case, ["Completely new current action"], ["Completely new current expectation"]
+        )
+        db.session.commit()
+
+        # Ensure the stored run snapshot is still the original record.
+        saved_run_step = db.session.get(StepRun, old_step_run_id)
+        assert saved_run_step.step_text == "Open page"
+        assert saved_run_step.expected_result == "Page appears"
+        assert saved_run_step.comment == "original comment"
+
+    client = app.test_client()
+    with client.session_transaction() as session:
+        session["_user_id"] = str(user_id)
+        session["_fresh"] = True
+
+    response = client.get(f"/project/{project_id}/history")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert f"Прогон #{old_run_id}" in html
+    assert "Open page" in html
+    assert "Page appears" in html
+    assert "original comment" in html
+    assert "Completely new current action" not in html
+    assert "Completely new current expectation" not in html
