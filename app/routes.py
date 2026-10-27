@@ -61,15 +61,20 @@ def save_test_steps(test, actions, expected_results, source_step_ids=None):
     points to. If its original step was removed, use the first remaining step
     only to satisfy the non-null FK; history display must use StepRun snapshots.
     """
+    normalized_pairs = [
+        (action.strip(), expected.strip())
+        for action, expected in zip(actions, expected_results)
+        if action and action.strip()
+    ]
+    if not normalized_pairs:
+        raise ValueError('Тест-кейс должен содержать хотя бы один шаг.')
+
     old_steps = TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
     old_by_id = {step.id: step for step in old_steps}
     source_step_ids = list(source_step_ids or [])
     new_steps = []
     source_to_new = {}
-    for position, (action, expected) in enumerate(zip(actions, expected_results), start=1):
-        action = action.strip()
-        expected = expected.strip()
-        if action:
+    for position, (action, expected) in enumerate(normalized_pairs, start=1):
             step = TestStep(
                 test_case_id=test.id,
                 position=position,
@@ -831,7 +836,6 @@ def export_pdf(project_id):
                 continue
 
     buffer = BytesIO()
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     doc = SimpleDocTemplate(buffer, pagesize=A4,
                             rightMargin=72, leftMargin=72,
                             topMargin=72, bottomMargin=72)
@@ -894,7 +898,7 @@ def export_pdf(project_id):
                 # и не должны подменять вложения старого прогона.
                 related_screenshots = list(step_run.screenshots)
                 for screenshot in related_screenshots:
-                    screenshot_path = os.path.join(project_root, 'instance', 'step-screenshots', screenshot.stored_name)
+                    screenshot_path = Path(current_app.instance_path) / 'step-screenshots' / screenshot.stored_name
                     if os.path.isfile(screenshot_path):
                         try:
                             screenshot_image = Image(screenshot_path, width=1.25 * inch, height=0.9 * inch, kind='proportional')
