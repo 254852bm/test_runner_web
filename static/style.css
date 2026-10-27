@@ -461,3 +461,21 @@ html[data-theme="dark"] .text-dark {
     outline: 3px solid #0d6efd;
     outline-offset: 2px;
 }
+
+
+/* Keep quick links to the left and align the logo to the far right. */
+@media (min-width: 768px) {
+    .app-navbar .container-fluid {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .app-navbar-start {
+        width: 100%;
+    }
+
+    .app-logo {
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+}
