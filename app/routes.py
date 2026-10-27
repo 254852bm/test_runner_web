@@ -8,7 +8,6 @@ from datetime import datetime
 import secrets
 import os
 import re
-import imghdr
 from pathlib import Path
 from werkzeug.utils import secure_filename
 
@@ -452,7 +451,14 @@ def run_tests(project_id):
                             continue
                         if len(data) > 5 * 1024 * 1024:
                             raise ValueError('Размер одного изображения не должен превышать 5 МБ.')
-                        image_type = imghdr.what(None, h=data)
+                        if data.startswith(b'\xff\xd8\xff'):
+                            image_type = 'jpeg'
+                        elif data.startswith(b'\x89PNG\r\n\x1a\n'):
+                            image_type = 'png'
+                        elif data.startswith((b'GIF87a', b'GIF89a')):
+                            image_type = 'gif'
+                        else:
+                            image_type = None
                         mime_types = {'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif'}
                         if image_type not in mime_types:
                             # WEBP: RIFF....WEBP signature.
