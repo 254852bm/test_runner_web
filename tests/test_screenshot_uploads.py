@@ -199,3 +199,44 @@ def test_save_test_steps_rejects_empty_steps_without_deleting_existing_data(app)
 
         assert db.session.get(TestStep, old_step_id) is not None
         assert db.session.get(StepRun, step_run.id).test_step_id == old_step_id
+
+
+
+def test_pdf_export_uses_instance_screenshot_and_contains_image(app):
+    import base64
+    from app.models import StepRunScreenshot
+
+    # Valid 1x1 PNG, so ReportLab exercises the real image embedding path.
+    png = base64.b64decode(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/"
+        "l1sAAAAASUVORK5CYII="
+    )
+    with app.app_context():
+        user, case, step, run, step_run = _user_and_step()
+        project = db.session.get(Project, case.project_id)
+        project.name = "Проект с кириллицей"
+        case.title = "Тест с изображением"
+        image_path = Path(app.instance_path) / "step-screenshots" / "history.png"
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(png)
+        db.session.add(StepRunScreenshot(
+            step_run_id=step_run.id,
+            user_id=user.id,
+            stored_name=image_path.name,
+            original_name="Скриншот.png",
+            mime_type="image/png",
+            size_bytes=len(png),
+        ))
+        db.session.commit()
+        user_id, project_id = user.id, project.id
+
+    client = app.test_client()
+    with client.session_transaction() as session:
+        session["_user_id"] = str(user_id)
+        session["_fresh"] = True
+
+    response = client.get(f"/project/{project_id}/export_pdf")
+    assert response.status_code == 200
+    assert response.mimetype == "application/pdf"
+    assert response.data.startswith(b"%PDF")
+    assert b"/Subtype /Image" in response.data
