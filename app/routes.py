@@ -425,23 +425,67 @@ def edit_test(project_id, test_id):
             test.precondition = request.form.get('precondition', '').strip()
             test.steps = '\n'.join(action for action, _ in pairs)
             test.expected_result = '\n'.join(expected for _, expected in pairs)
-            old_screenshot_paths = [
-                Path(current_app.instance_path) / 'step-screenshots' / screenshot.stored_name
-                for old_step in TestStep.query.filter_by(test_case_id=test.id).all()
-                for screenshot in old_step.screenshots
-            ]
+            old_steps = TestStep.query.filter_by(test_case_id=test.id).order_by(TestStep.position).all()
+            old_screenshots_by_index = {
+                index: [
+                    {
+                        'stored_name': screenshot.stored_name,
+                        'original_name': screenshot.original_name,
+                        'mime_type': screenshot.mime_type,
+                        'size_bytes': screenshot.size_bytes,
+                        'created_at': screenshot.created_at,
+                    }
+                    for screenshot in step.screenshots
+                ]
+                for index, step in enumerate(old_steps)
+            }
+            old_screenshot_paths_to_remove = []
             save_test_steps(test, [a for a, _ in pairs], [e for _, e in pairs])
             db.session.flush()
             saved_paths = []
             try:
+                upload_dir = Path(current_app.instance_path) / 'step-screenshots'
                 for index, step in enumerate(test.step_items):
-                    saved_paths.extend(save_uploaded_screenshots(
-                        request.files.getlist(f'test_step_screenshot_{index}[]'),
-                        user_id=current_user.id, test_step_id=step.id
-                    ))
+                    uploads = [item for item in request.files.getlist(f'test_step_screenshot_{index}[]')
+                               if item and item.filename]
+                    if uploads:
+                        old_screenshot_paths_to_remove.extend(
+                            upload_dir / item['stored_name']
+                            for item in old_screenshots_by_index.get(index, [])
+                        )
+                        saved_paths.extend(save_uploaded_screenshots(
+                            uploads, user_id=current_user.id, test_step_id=step.id
+                        ))
+                    else:
+                        # Сохраняем прежние вложения, если пользователь не выбрал новые.
+                        for item in old_screenshots_by_index.get(index, []):
+                            old_path = upload_dir / item['stored_name']
+                            if not old_path.is_file():
+                                continue
+                            extension = old_path.suffix.lstrip('.') or 'img'
+                            new_name = secrets.token_hex(24) + '.' + extension
+                            new_path = upload_dir / new_name
+                            new_path.write_bytes(old_path.read_bytes())
+                            saved_paths.append(new_path)
+                            db.session.add(TestStepScreenshot(
+                                test_step_id=step.id,
+                                user_id=current_user.id,
+                                stored_name=new_name,
+                                original_name=item['original_name'],
+                                mime_type=item['mime_type'],
+                                size_bytes=item['size_bytes'],
+                                created_at=item['created_at'],
+                            ))
+                            old_screenshot_paths_to_remove.append(old_path)
+                # При удалении шагов очищаем файлы их скриншотов после успешного commit.
+                for old_index, items in old_screenshots_by_index.items():
+                    if old_index >= len(test.step_items):
+                        old_screenshot_paths_to_remove.extend(
+                            upload_dir / item['stored_name'] for item in items
+                        )
                 create_test_version(test)
                 db.session.commit()
-                for old_path in old_screenshot_paths:
+                for old_path in old_screenshot_paths_to_remove:
                     old_path.unlink(missing_ok=True)
             except ValueError as error:
                 db.session.rollback()
