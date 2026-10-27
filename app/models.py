@@ -75,6 +75,8 @@ class TestStep(db.Model):
     position = db.Column(db.Integer, nullable=False)
     action = db.Column(db.Text, nullable=False)
     expected_result = db.Column(db.Text)
+    screenshots = db.relationship('TestStepScreenshot', backref='test_step', lazy=True,
+                                 cascade='all, delete-orphan', order_by='TestStepScreenshot.created_at')
 
 
 class TestStepScreenshot(db.Model):
