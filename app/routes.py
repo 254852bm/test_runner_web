@@ -54,15 +54,10 @@ def ensure_test_steps(test):
 
 
 def save_test_steps(test, actions, expected_results):
-    # Шаги пересоздаются при редактировании; убираем файлы их старых скриншотов.
+    # Записи скриншотов удаляем в транзакции; сами файлы удалим только после commit.
     old_steps = TestStep.query.filter_by(test_case_id=test.id).all()
-    upload_dir = Path(current_app.instance_path) / 'step-screenshots'
     for old_step in old_steps:
         for screenshot in old_step.screenshots:
-            try:
-                (upload_dir / screenshot.stored_name).unlink(missing_ok=True)
-            except OSError:
-                current_app.logger.exception('Could not remove old test-step screenshot %s', screenshot.id)
             db.session.delete(screenshot)
     TestStep.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
     for position, (action, expected) in enumerate(zip(actions, expected_results), start=1):
@@ -395,6 +390,8 @@ def create_test(project_id):
                     ))
                 create_test_version(test)
                 db.session.commit()
+                for old_path in old_screenshot_paths:
+                    old_path.unlink(missing_ok=True)
             except ValueError as error:
                 db.session.rollback()
                 for path in saved_paths:
@@ -431,6 +428,11 @@ def edit_test(project_id, test_id):
             test.precondition = request.form.get('precondition', '').strip()
             test.steps = '\n'.join(action for action, _ in pairs)
             test.expected_result = '\n'.join(expected for _, expected in pairs)
+            old_screenshot_paths = [
+                Path(current_app.instance_path) / 'step-screenshots' / screenshot.stored_name
+                for old_step in TestStep.query.filter_by(test_case_id=test.id).all()
+                for screenshot in old_step.screenshots
+            ]
             save_test_steps(test, [a for a, _ in pairs], [e for _, e in pairs])
             db.session.flush()
             saved_paths = []
