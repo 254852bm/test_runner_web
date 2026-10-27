@@ -340,3 +340,65 @@ def test_edit_route_keeps_screenshots_with_original_steps_when_reordered(app):
         assert first_file.name not in current_files
         assert second_file.name not in current_files
         assert len(current_files) == 2
+
+
+
+def _login(client, user_id):
+    with client.session_transaction() as session:
+        session["_user_id"] = str(user_id)
+        session["_fresh"] = True
+
+
+def test_create_test_route_saves_step_and_expected_result(app):
+    with app.app_context():
+        user, case, step, run, step_run = _user_and_step()
+        project_id, user_id = case.project_id, user.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/create_test",
+        data={
+            "title": "New test case",
+            "precondition": "User is logged in",
+            "step_action[]": ["Click Save"],
+            "step_expected[]": ["Success message is shown"],
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        created = TestCase.query.filter_by(project_id=project_id, title="New test case").one()
+        created_step = TestStep.query.filter_by(test_case_id=created.id).one()
+        assert created_step.action == "Click Save"
+        assert created_step.expected_result == "Success message is shown"
+        assert created.precondition == "User is logged in"
+
+
+def test_user_cannot_edit_another_users_test_case(app):
+    with app.app_context():
+        owner, case, step, run, step_run = _user_and_step()
+        other_user = User(email="other@example.test", password="not-a-real-password")
+        db.session.add(other_user)
+        db.session.commit()
+        owner_project_id, case_id, other_user_id = case.project_id, case.id, other_user.id
+
+    client = app.test_client()
+    _login(client, other_user_id)
+    response = client.post(
+        f"/project/{owner_project_id}/test/{case_id}/edit",
+        data={
+            "title": "Unauthorized edit",
+            "step_id[]": ["1"],
+            "step_action[]": ["Changed"],
+            "step_expected[]": ["Changed"],
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code in (302, 403, 404)
+
+    with app.app_context():
+        saved = db.session.get(TestCase, case_id)
+        assert saved.title == "Screenshot test"
+        assert TestStep.query.filter_by(test_case_id=case_id).one().action == "Open page"
