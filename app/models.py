@@ -77,6 +77,18 @@ class TestStep(db.Model):
     expected_result = db.Column(db.Text)
 
 
+class TestStepScreenshot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    test_step_id = db.Column(db.Integer, db.ForeignKey('test_step.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    stored_name = db.Column(db.String(100), unique=True, nullable=False)
+    original_name = db.Column(db.String(255), nullable=False)
+    mime_type = db.Column(db.String(30), nullable=False)
+    size_bytes = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    user = db.relationship('User', backref='test_step_screenshots')
+
+
 class TestRun(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     status = db.Column(db.String(20), nullable=False)
