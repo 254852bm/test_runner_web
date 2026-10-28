@@ -625,14 +625,14 @@ def test_pdf_export_includes_historical_test_version_and_snapshot_title(app):
     assert response.mimetype == "application/pdf"
 
     # ReportLab compresses page streams; inspect decoded streams for the visible PDF text.
-    streams = re.findall(rb"stream\\r?\\n(.*?)\\r?\\nendstream", response.data, re.DOTALL)
+    streams = re.findall(rb"stream\r?\n(.*?)\r?\nendstream", response.data, re.DOTALL)
     decoded = []
     for stream in streams:
         try:
             decoded.append(zlib.decompress(stream))
         except zlib.error:
             decoded.append(stream)
-    page_text = b"\\n".join(decoded)
+    page_text = b"\n".join(decoded)
     assert b"v7" in page_text
     assert b"Historical title from version seven" in page_text
     assert b"New live title after the run" not in page_text
