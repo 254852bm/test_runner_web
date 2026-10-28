@@ -586,6 +586,32 @@ def test_delete_project_route_removes_related_screenshot_records_and_files_only(
         assert other_file.is_file()
 
 
+def test_run_rejects_invalid_screenshot_and_rolls_back_run(app):
+    with app.app_context():
+        user, case, step, existing_run, existing_step_run = _user_and_step()
+        project_id, case_id, user_id = case.project_id, case.id, user.id
+        existing_run_count = TestRun.query.filter_by(test_case_id=case_id).count()
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/run?test_id={case_id}",
+        data={
+            "step_status[]": ["PASS"],
+            "step_comment[]": ["Invalid screenshot must not save the run"],
+            "step_screenshot_0[]": _upload(b"this is not an image"),
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        assert TestRun.query.filter_by(test_case_id=case_id).count() == existing_run_count
+        assert StepRunScreenshot.query.count() == 0
+        upload_dir = Path(app.instance_path) / "step-screenshots"
+        assert not upload_dir.exists() or list(upload_dir.iterdir()) == []
+
+
 def test_run_is_linked_to_the_test_case_version_used(app):
     with app.app_context():
         user, case, step, old_run, old_step_run = _user_and_step()
