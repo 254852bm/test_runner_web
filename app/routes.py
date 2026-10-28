@@ -999,16 +999,22 @@ def export_pdf(project_id):
                      Spacer(1, 0.25 * inch)])
 
     data = [[Paragraph('#', cell_style), Paragraph('Тест', cell_style),
-             Paragraph('Статус', cell_style), Paragraph('Комментарий', cell_style),
-             Paragraph('Дата', cell_style)]]
+             Paragraph('Версия', cell_style), Paragraph('Статус', cell_style),
+             Paragraph('Комментарий', cell_style), Paragraph('Дата', cell_style)]]
     NL = chr(10)
     for idx, run in enumerate(runs, start=1):
-        test_title = run.test_case.title if run.test_case else ('Тест #' + str(run.test_case_id))
+        # Prefer the historical snapshot title; the live test case may have been renamed later.
+        test_title = (
+            run.version.title if run.version
+            else (run.test_case.title if run.test_case else ('Тест #' + str(run.test_case_id)))
+        )
+        version_label = 'v' + str(run.version.version_number) if run.version else '—'
         comment = run.comment or ''
         comment = escape(comment).replace(NL, '<br/>')
         data.append([
             Paragraph(str(idx), cell_style),
             Paragraph(escape(test_title).replace(NL, '<br/>'), cell_style),
+            Paragraph(escape(version_label), cell_style),
             Paragraph(escape(STATUS_LABELS.get(run.status, run.status)), cell_style),
             Paragraph(comment, cell_style),
             Paragraph(run.timestamp.strftime('%d.%m.%Y %H:%M'), cell_style)
@@ -1016,12 +1022,13 @@ def export_pdf(project_id):
 
         if run.step_runs:
             data.append([Paragraph('', cell_style), Paragraph('<b>Шаги</b>', cell_style),
-                         Paragraph('Статус', cell_style), Paragraph('Комментарий', cell_style),
-                         Paragraph('Ожидаемый результат', cell_style)])
+                         Paragraph('', cell_style), Paragraph('Статус', cell_style),
+                         Paragraph('Комментарий', cell_style), Paragraph('Ожидаемый результат', cell_style)])
             for step_run in sorted(run.step_runs, key=lambda item: item.id):
                 data.append([
                     Paragraph('', cell_style),
                     Paragraph(escape(step_run.step_text).replace(NL, '<br/>'), cell_style),
+                    Paragraph('', cell_style),
                     Paragraph(escape(STATUS_LABELS.get(step_run.status, step_run.status)), cell_style),
                     Paragraph(escape(step_run.comment or '').replace(NL, '<br/>'), cell_style),
                     Paragraph(escape(step_run.expected_result or '').replace(NL, '<br/>'), cell_style)
@@ -1039,13 +1046,14 @@ def export_pdf(project_id):
                                 Paragraph('', cell_style),
                                 Paragraph('Скриншот: ' + escape(screenshot.original_name), cell_style),
                                 Paragraph('', cell_style),
+                                Paragraph('', cell_style),
                                 Paragraph(escape(step_run.comment or '').replace(NL, '<br/>'), cell_style),
                                 screenshot_image
                             ])
                         except Exception:
                             current_app.logger.exception('Could not add screenshot %s to PDF', screenshot.id)
 
-    table = Table(data, colWidths=[0.3*inch, 1.55*inch, 0.65*inch, 1.55*inch, 1.45*inch], repeatRows=1)
+    table = Table(data, colWidths=[0.25*inch, 1.5*inch, 0.45*inch, 0.6*inch, 1.35*inch, 1.35*inch], repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
