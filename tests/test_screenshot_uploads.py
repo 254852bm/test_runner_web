@@ -586,3 +586,7 @@ def test_run_is_linked_to_the_test_case_version_used(app):
         assert saved_run is not None
         assert saved_run.version_id == version.id
         assert saved_run.version.version_number == 1
+
+    history_response = client.get(f"/project/{project_id}/history")
+    assert history_response.status_code == 200
+    assert b"Версия теста: v1" in history_response.data
