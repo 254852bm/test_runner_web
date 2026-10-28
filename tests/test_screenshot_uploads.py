@@ -376,6 +376,39 @@ def test_create_test_route_saves_step_and_expected_result(app):
         assert created.precondition == "User is logged in"
 
 
+def test_create_test_removes_uploaded_screenshots_after_unexpected_failure(app, monkeypatch):
+    with app.app_context():
+        user, case, step, run, step_run = _user_and_step()
+        project_id, user_id = case.project_id, user.id
+
+    def fail_version_creation(test_case):
+        raise RuntimeError("simulated version persistence failure")
+
+    monkeypatch.setattr("app.routes.create_test_version", fail_version_creation)
+    client = app.test_client()
+    _login(client, user_id)
+
+    with pytest.raises(RuntimeError, match="simulated version persistence failure"):
+        client.post(
+            f"/project/{project_id}/create_test",
+            data={
+                "title": "Must be rolled back",
+                "step_action[]": ["Click Save"],
+                "step_expected[]": ["Success message appears"],
+                "test_step_screenshot_0[]": _upload(PNG_HEADER + b"test image payload"),
+            },
+            follow_redirects=False,
+        )
+
+    with app.app_context():
+        assert TestCase.query.filter_by(
+            project_id=project_id, title="Must be rolled back"
+        ).count() == 0
+        assert TestStepScreenshot.query.count() == 0
+        upload_dir = Path(app.instance_path) / "step-screenshots"
+        assert list(upload_dir.iterdir()) == [] if upload_dir.exists() else True
+
+
 def test_user_cannot_edit_another_users_test_case(app):
     with app.app_context():
         owner, case, step, run, step_run = _user_and_step()
