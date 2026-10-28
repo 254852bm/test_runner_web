@@ -485,3 +485,67 @@ def test_delete_test_route_removes_related_screenshot_records_and_files_only(app
         assert TestStepScreenshot.query.filter_by(stored_name=other_file.name).count() == 1
         assert other_file.is_file()
 
+
+
+
+def test_delete_project_route_removes_related_screenshot_records_and_files_only(app):
+    with app.app_context():
+        user, case, step, run, step_run = _user_and_step()
+        test_step_file = save_uploaded_screenshots(
+            [_upload(PNG_HEADER + b"project-test-step-image")],
+            user.id,
+            test_step_id=step.id,
+        )[0]
+        run_file = save_uploaded_screenshots(
+            [_upload(PNG_HEADER + b"project-run-image")],
+            user.id,
+            step_run_id=step_run.id,
+        )[0]
+        project_id = case.project_id
+        user_id = user.id
+
+        other_project = Project(name="Keep this project", user_id=user.id)
+        db.session.add(other_project)
+        db.session.flush()
+        other_case = TestCase(
+            title="Keep this case", steps="keep", project_id=other_project.id
+        )
+        db.session.add(other_case)
+        db.session.flush()
+        other_step = TestStep(
+            test_case_id=other_case.id,
+            position=1,
+            action="Keep step",
+            expected_result="Keep result",
+        )
+        db.session.add(other_step)
+        db.session.flush()
+        other_file = save_uploaded_screenshots(
+            [_upload(PNG_HEADER + b"other-project-image")],
+            user.id,
+            test_step_id=other_step.id,
+        )[0]
+        other_project_id = other_project.id
+        other_case_id = other_case.id
+        db.session.commit()
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/delete",
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        assert db.session.get(Project, project_id) is None
+        assert db.session.get(TestCase, case.id) is None
+        assert TestStepScreenshot.query.filter_by(stored_name=test_step_file.name).count() == 0
+        assert StepRunScreenshot.query.filter_by(stored_name=run_file.name).count() == 0
+        assert not test_step_file.exists()
+        assert not run_file.exists()
+
+        assert db.session.get(Project, other_project_id) is not None
+        assert db.session.get(TestCase, other_case_id) is not None
+        assert TestStepScreenshot.query.filter_by(stored_name=other_file.name).count() == 1
+        assert other_file.is_file()
