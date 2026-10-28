@@ -337,18 +337,72 @@ def delete_project(project_id):
     if not project:
         return redirect(url_for('main.projects'))
 
-    test_ids = [test.id for test in TestCase.query.filter_by(project_id=project.id).all()]
+    # Collect all related screenshot paths before bulk deletes, which bypass ORM cascades.
+    test_ids = [
+        test_id for (test_id,) in db.session.query(TestCase.id)
+        .filter_by(project_id=project.id).all()
+    ]
+    screenshot_names = []
     if test_ids:
-        run_ids = [run.id for run in TestRun.query.filter(TestRun.test_case_id.in_(test_ids)).all()]
+        step_ids = [
+            step_id for (step_id,) in db.session.query(TestStep.id)
+            .filter(TestStep.test_case_id.in_(test_ids)).all()
+        ]
+        run_ids = [
+            run_id for (run_id,) in db.session.query(TestRun.id)
+            .filter(TestRun.test_case_id.in_(test_ids)).all()
+        ]
+        step_run_ids = []
         if run_ids:
-            StepRun.query.filter(StepRun.test_run_id.in_(run_ids)).delete(synchronize_session=False)
-        TestRun.query.filter(TestRun.test_case_id.in_(test_ids)).delete(synchronize_session=False)
-        TestStep.query.filter(TestStep.test_case_id.in_(test_ids)).delete(synchronize_session=False)
-        TestCaseVersion.query.filter(TestCaseVersion.test_case_id.in_(test_ids)).delete(synchronize_session=False)
-        TestCase.query.filter(TestCase.project_id == project.id).delete(synchronize_session=False)
+            step_run_ids = [
+                step_run_id for (step_run_id,) in db.session.query(StepRun.id)
+                .filter(StepRun.test_run_id.in_(run_ids)).all()
+            ]
+
+        if step_ids:
+            screenshot_names.extend(
+                name for (name,) in db.session.query(TestStepScreenshot.stored_name)
+                .filter(TestStepScreenshot.test_step_id.in_(step_ids)).all()
+            )
+            TestStepScreenshot.query.filter(
+                TestStepScreenshot.test_step_id.in_(step_ids)
+            ).delete(synchronize_session=False)
+
+        if step_run_ids:
+            screenshot_names.extend(
+                name for (name,) in db.session.query(StepRunScreenshot.stored_name)
+                .filter(StepRunScreenshot.step_run_id.in_(step_run_ids)).all()
+            )
+            StepRunScreenshot.query.filter(
+                StepRunScreenshot.step_run_id.in_(step_run_ids)
+            ).delete(synchronize_session=False)
+            StepRun.query.filter(StepRun.id.in_(step_run_ids)).delete(synchronize_session=False)
+
+        if run_ids:
+            TestRun.query.filter(TestRun.id.in_(run_ids)).delete(synchronize_session=False)
+        if step_ids:
+            TestStep.query.filter(TestStep.id.in_(step_ids)).delete(synchronize_session=False)
+        TestCaseVersion.query.filter(
+            TestCaseVersion.test_case_id.in_(test_ids)
+        ).delete(synchronize_session=False)
+        TestCase.query.filter(TestCase.id.in_(test_ids)).delete(synchronize_session=False)
 
     db.session.delete(project)
     db.session.commit()
+
+    # Remove files only after the database transaction succeeds.
+    upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+    for stored_name in set(screenshot_names):
+        if not stored_name or Path(stored_name).name != stored_name:
+            current_app.logger.warning('Skipping invalid screenshot filename during project deletion')
+            continue
+        try:
+            (upload_dir / stored_name).unlink(missing_ok=True)
+        except OSError:
+            current_app.logger.exception(
+                'Could not remove screenshot file after project deletion'
+            )
+
     flash('Проект и все его тест-кейсы удалены.', 'success')
     return redirect(url_for('main.projects'))
 
@@ -545,13 +599,33 @@ def edit_test(project_id, test_id):
                 create_test_version(test)
                 db.session.commit()
                 for old_path in old_screenshot_paths_to_remove:
-                    old_path.unlink(missing_ok=True)
+                    try:
+                        old_path.unlink(missing_ok=True)
+                    except OSError:
+                        current_app.logger.exception(
+                            'Could not remove replaced screenshot after test case update'
+                        )
             except ValueError as error:
                 db.session.rollback()
                 for path in saved_paths:
-                    path.unlink(missing_ok=True)
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        current_app.logger.exception(
+                            'Could not remove temporary screenshot after validation failure'
+                        )
                 flash(str(error), 'danger')
                 return redirect(url_for('main.edit_test', project_id=project.id, test_id=test.id))
+            except Exception:
+                db.session.rollback()
+                for path in saved_paths:
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        current_app.logger.exception(
+                            'Could not remove temporary screenshot after failed test case update'
+                        )
+                raise
             flash('Тест-кейс обновлён! Создана новая версия.', 'success')
             return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
 
