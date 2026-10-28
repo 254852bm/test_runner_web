@@ -624,7 +624,7 @@ def test_pdf_export_includes_historical_test_version_and_snapshot_title(app):
     assert response.mimetype == "application/pdf"
 
     pdf = PdfReader(BytesIO(response.data))
-    page_text = "\\n".join(page.extract_text() or "" for page in pdf.pages)
+    page_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
     assert "v7" in page_text
     assert "Historical title from version seven" in page_text
     assert "New live title after the run" not in page_text
