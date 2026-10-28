@@ -5,7 +5,7 @@ import pytest
 from werkzeug.datastructures import FileStorage
 
 from app import create_app, db
-from app.models import Project, TestCase, TestRun, TestStep, TestStepScreenshot, StepRunScreenshot, StepRun, User
+from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRunScreenshot, StepRun, User
 from app.routes import save_test_steps, save_uploaded_screenshots
 
 
@@ -550,3 +550,39 @@ def test_delete_project_route_removes_related_screenshot_records_and_files_only(
         assert db.session.get(TestCase, other_case_id) is not None
         assert TestStepScreenshot.query.filter_by(stored_name=other_file.name).count() == 1
         assert other_file.is_file()
+
+
+def test_run_is_linked_to_the_test_case_version_used(app):
+    with app.app_context():
+        user, case, step, old_run, old_step_run = _user_and_step()
+        project_id = case.project_id
+        case_id = case.id
+        user_id = user.id
+
+        # This fixture's pre-existing run models legacy data without a version link.
+        assert old_run.version_id is None
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/run?test_id={case_id}",
+        data={
+            "step_status[]": ["PASS"],
+            "step_comment[]": ["Run against current version"],
+        },
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        version = TestCaseVersion.query.filter_by(
+            test_case_id=case_id
+        ).order_by(TestCaseVersion.version_number.desc()).first()
+        assert version is not None
+        saved_run = TestRun.query.filter_by(
+            test_case_id=case_id,
+            user_id=user_id,
+        ).order_by(TestRun.id.desc()).first()
+        assert saved_run is not None
+        assert saved_run.version_id == version.id
+        assert saved_run.version.version_number == 1
