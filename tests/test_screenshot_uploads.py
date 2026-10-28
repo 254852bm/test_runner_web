@@ -593,8 +593,7 @@ def test_run_is_linked_to_the_test_case_version_used(app):
 
 
 def test_pdf_export_includes_historical_test_version_and_snapshot_title(app):
-    import re
-    import zlib
+    from pypdf import PdfReader
 
     with app.app_context():
         user, case, step, run, step_run = _user_and_step()
@@ -624,15 +623,8 @@ def test_pdf_export_includes_historical_test_version_and_snapshot_title(app):
     assert response.status_code == 200
     assert response.mimetype == "application/pdf"
 
-    # ReportLab compresses page streams; inspect decoded streams for the visible PDF text.
-    streams = re.findall(rb"stream\r?\n(.*?)\r?\nendstream", response.data, re.DOTALL)
-    decoded = []
-    for stream in streams:
-        try:
-            decoded.append(zlib.decompress(stream))
-        except zlib.error:
-            decoded.append(stream)
-    page_text = b"\n".join(decoded)
-    assert b"v7" in page_text
-    assert b"Historical title from version seven" in page_text
-    assert b"New live title after the run" not in page_text
+    pdf = PdfReader(BytesIO(response.data))
+    page_text = "\\n".join(page.extract_text() or "" for page in pdf.pages)
+    assert "v7" in page_text
+    assert "Historical title from version seven" in page_text
+    assert "New live title after the run" not in page_text
