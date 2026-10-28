@@ -25,7 +25,7 @@
                                 {{ status_labels.get(run.status, run.status) }}
                             </span>
                         </div>
-                        <h5 class="mb-1 test-case-title">{{ run.test_case.title if run.test_case else 'Тест удалён' }}</h5>
+                        <h5 class="mb-1 test-case-title">{{ run.version.title if run.version else (run.test_case.title if run.test_case else 'Тест удалён') }}</h5>
                         {% if run.version %}
                             <span class="badge bg-light text-dark border mb-1">Версия теста: v{{ run.version.version_number }}</span>
                         {% else %}
