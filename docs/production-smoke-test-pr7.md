@@ -20,8 +20,12 @@ umask 077
 BACKUP_DIR="/root/backups/testrunner-pre-pr7-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 sqlite3 instance/test_runner.db ".backup '$BACKUP_DIR/test_runner.db'"
-test -d instance/step-screenshots
-tar -czf "$BACKUP_DIR/step-screenshots.tar.gz" -C instance step-screenshots
+if [ -d instance/step-screenshots ]; then
+  tar -czf "$BACKUP_DIR/step-screenshots.tar.gz" -C instance step-screenshots
+else
+  # No screenshots have been uploaded yet; still create a valid empty archive.
+  tar -czf "$BACKUP_DIR/step-screenshots.tar.gz" --files-from /dev/null
+fi
 sqlite3 "$BACKUP_DIR/test_runner.db" "PRAGMA integrity_check;"
 tar -tzf "$BACKUP_DIR/step-screenshots.tar.gz" >/dev/null
 sha256sum "$BACKUP_DIR/test_runner.db" "$BACKUP_DIR/step-screenshots.tar.gz" > "$BACKUP_DIR/SHA256SUMS"
