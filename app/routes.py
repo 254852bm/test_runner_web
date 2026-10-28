@@ -565,14 +565,65 @@ def delete_test(project_id, test_id):
     if not project:
         return redirect(url_for('main.projects'))
     test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
-    run_ids = [run.id for run in TestRun.query.filter_by(test_case_id=test.id).all()]
+
+    # Collect related IDs and filenames before bulk-deleting rows. Bulk deletes
+    # bypass SQLAlchemy ORM cascades, so screenshot records need explicit cleanup.
+    step_ids = [
+        step_id for (step_id,) in db.session.query(TestStep.id)
+        .filter_by(test_case_id=test.id).all()
+    ]
+    run_ids = [
+        run_id for (run_id,) in db.session.query(TestRun.id)
+        .filter_by(test_case_id=test.id).all()
+    ]
+    step_run_ids = []
     if run_ids:
-        StepRun.query.filter(StepRun.test_run_id.in_(run_ids)).delete(synchronize_session=False)
-    TestRun.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
-    TestStep.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
+        step_run_ids = [
+            step_run_id for (step_run_id,) in db.session.query(StepRun.id)
+            .filter(StepRun.test_run_id.in_(run_ids)).all()
+        ]
+
+    screenshot_names = []
+    if step_ids:
+        screenshot_names.extend(
+            name for (name,) in db.session.query(TestStepScreenshot.stored_name)
+            .filter(TestStepScreenshot.test_step_id.in_(step_ids)).all()
+        )
+        TestStepScreenshot.query.filter(
+            TestStepScreenshot.test_step_id.in_(step_ids)
+        ).delete(synchronize_session=False)
+
+    if step_run_ids:
+        screenshot_names.extend(
+            name for (name,) in db.session.query(StepRunScreenshot.stored_name)
+            .filter(StepRunScreenshot.step_run_id.in_(step_run_ids)).all()
+        )
+        StepRunScreenshot.query.filter(
+            StepRunScreenshot.step_run_id.in_(step_run_ids)
+        ).delete(synchronize_session=False)
+        StepRun.query.filter(StepRun.id.in_(step_run_ids)).delete(synchronize_session=False)
+
+    if run_ids:
+        TestRun.query.filter(TestRun.id.in_(run_ids)).delete(synchronize_session=False)
+    if step_ids:
+        TestStep.query.filter(TestStep.id.in_(step_ids)).delete(synchronize_session=False)
     TestCaseVersion.query.filter_by(test_case_id=test.id).delete(synchronize_session=False)
     db.session.delete(test)
     db.session.commit()
+
+    # Delete physical files only after the database transaction succeeds.
+    upload_dir = Path(current_app.instance_path) / 'step-screenshots'
+    for stored_name in set(screenshot_names):
+        if not stored_name or Path(stored_name).name != stored_name:
+            current_app.logger.warning('Skipping invalid screenshot filename during test deletion')
+            continue
+        try:
+            (upload_dir / stored_name).unlink(missing_ok=True)
+        except OSError:
+            current_app.logger.exception(
+                'Could not remove screenshot file after test case deletion'
+            )
+
     flash('Тест-кейс удалён вместе с его результатами.', 'success')
     return redirect(url_for('main.project_detail', project_id=project.id))
 
