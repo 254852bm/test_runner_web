@@ -589,4 +589,4 @@ def test_run_is_linked_to_the_test_case_version_used(app):
 
     history_response = client.get(f"/project/{project_id}/history")
     assert history_response.status_code == 200
-    assert b"Версия теста: v1" in history_response.data
+    assert "Версия теста: v1" in history_response.get_data(as_text=True)
