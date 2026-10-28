@@ -502,6 +502,7 @@ def test_delete_project_route_removes_related_screenshot_records_and_files_only(
             step_run_id=step_run.id,
         )[0]
         project_id = case.project_id
+        case_id = case.id
         user_id = user.id
 
         other_project = Project(name="Keep this project", user_id=user.id)
@@ -539,7 +540,7 @@ def test_delete_project_route_removes_related_screenshot_records_and_files_only(
 
     with app.app_context():
         assert db.session.get(Project, project_id) is None
-        assert db.session.get(TestCase, case.id) is None
+        assert db.session.get(TestCase, case_id) is None
         assert TestStepScreenshot.query.filter_by(stored_name=test_step_file.name).count() == 0
         assert StepRunScreenshot.query.filter_by(stored_name=run_file.name).count() == 0
         assert not test_step_file.exists()
