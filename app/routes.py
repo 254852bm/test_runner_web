@@ -736,12 +736,15 @@ def run_tests(project_id):
         elif any(status not in STATUS_LABELS for status in statuses):
             flash('Некорректный статус шага', 'danger')
         else:
+            # Pin each run to the exact test-case snapshot that was current when it started.
+            version = ensure_test_version(test)
             overall_status = step_status_summary([
                 type('StepStatus', (), {'status': status})() for status in statuses
             ])
             run = TestRun(
                 status=overall_status,
                 test_case_id=test.id,
+                version_id=version.id,
                 user_id=current_user.id,
                 comment=''
             )
