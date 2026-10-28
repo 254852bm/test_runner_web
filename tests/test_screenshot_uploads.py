@@ -388,17 +388,18 @@ def test_create_test_removes_uploaded_screenshots_after_unexpected_failure(app, 
     client = app.test_client()
     _login(client, user_id)
 
-    with pytest.raises(RuntimeError, match="simulated version persistence failure"):
-        client.post(
-            f"/project/{project_id}/create_test",
-            data={
-                "title": "Must be rolled back",
-                "step_action[]": ["Click Save"],
-                "step_expected[]": ["Success message appears"],
-                "test_step_screenshot_0[]": _upload(PNG_HEADER + b"test image payload"),
-            },
-            follow_redirects=False,
-        )
+    response = client.post(
+        f"/project/{project_id}/create_test",
+        data={
+            "title": "Must be rolled back",
+            "step_action[]": ["Click Save"],
+            "step_expected[]": ["Success message appears"],
+            "test_step_screenshot_0[]": _upload(PNG_HEADER + b"test image payload"),
+        },
+        follow_redirects=False,
+    )
+    # The app-level error handler converts unexpected exceptions into HTTP 500.
+    assert response.status_code == 500
 
     with app.app_context():
         assert TestCase.query.filter_by(
