@@ -477,9 +477,24 @@ def create_test(project_id):
             except ValueError as error:
                 db.session.rollback()
                 for path in saved_paths:
-                    path.unlink(missing_ok=True)
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        current_app.logger.exception(
+                            'Could not remove temporary screenshot after validation failure'
+                        )
                 flash(str(error), 'danger')
                 return render_template('create_test.html', project_id=project.id)
+            except Exception:
+                db.session.rollback()
+                for path in saved_paths:
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        current_app.logger.exception(
+                            'Could not remove temporary screenshot after failed test creation'
+                        )
+                raise
             flash('Тест добавлен!', 'success')
             return redirect(url_for('main.project_detail', project_id=project.id))
         flash('Заполните заголовок и добавьте хотя бы один шаг', 'danger')
