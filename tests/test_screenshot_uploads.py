@@ -609,7 +609,7 @@ def test_pdf_export_includes_historical_test_version_and_snapshot_title(app):
         )
         db.session.add(version)
         db.session.flush()
-        run.version_id = version.id
+        run.version = version
         case.title = "New live title after the run"
         db.session.commit()
         user_id, project_id = user.id, project.id
