@@ -746,8 +746,8 @@ def run_tests(project_id):
         statuses = request.form.getlist('step_status[]')
         comments = request.form.getlist('step_comment[]')
 
-        if len(statuses) != len(steps):
-            flash('Укажите статус для каждого шага', 'danger')
+        if len(statuses) != len(steps) or len(comments) != len(steps):
+            flash('Укажите статус и комментарий для каждого шага', 'danger')
         elif any(status not in STATUS_LABELS for status in statuses):
             flash('Некорректный статус шага', 'danger')
         else:
