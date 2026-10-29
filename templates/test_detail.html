@@ -26,7 +26,18 @@
             <div class="card-body">
                 <h6>Шаг {{ loop.index }}</h6>
                 <div class="mb-2"><strong>Действие:</strong><div class="test-case-text">{{ step.action }}</div></div>
-                <div><strong>Ожидаемый результат:</strong><div class="test-case-text">{{ step.expected_result or 'Не указан' }}</div></div>
+                <div class="mb-2"><strong>Ожидаемый результат:</strong><div class="test-case-text">{{ step.expected_result or 'Не указан' }}</div></div>
+                {% if step.screenshots %}
+                    <div><strong>Скриншоты ожидаемого результата:</strong>
+                        <div class="step-screenshot-gallery mt-2">
+                        {% for screenshot in step.screenshots %}
+                            <a href="{{ url_for('main.view_test_step_screenshot', screenshot_id=screenshot.id) }}" target="_blank" rel="noopener" title="{{ screenshot.original_name }}">
+                                <img src="{{ url_for('main.view_test_step_screenshot', screenshot_id=screenshot.id) }}" alt="{{ screenshot.original_name }}" loading="lazy">
+                            </a>
+                        {% endfor %}
+                        </div>
+                    </div>
+                {% endif %}
             </div>
         </div>
         {% endfor %}

@@ -37,7 +37,7 @@
             </div>
         </div>
 
-        <form method="POST" class="mt-4" action="{{ url_for('main.run_tests', project_id=project.id, index=current_index, test_id=(test.id if single_test else None)) }}">
+        <form method="POST" enctype="multipart/form-data" class="mt-4" action="{{ url_for('main.run_tests', project_id=project.id, index=current_index, test_id=(test.id if single_test else None)) }}">
             {% for step in steps %}
             <div class="card mb-3">
                 <div class="card-body">
@@ -59,9 +59,15 @@
                             <option value="SKIP">Пропущен</option>
                         </select>
                     </div>
-                    <div>
+                    <div class="mb-3">
                         <label class="form-label">Комментарий к шагу</label>
                         <textarea class="form-control" name="step_comment[]" rows="2" placeholder="Например: кнопка не активна"></textarea>
+                    </div>
+                    <div>
+                        <label class="form-label">Скриншоты шага</label>
+                        <input class="form-control" type="file" name="step_screenshot_{{ loop.index0 }}[]"
+                               accept="image/png,image/jpeg,image/gif,image/webp" multiple>
+                        <div class="form-text">До 5 изображений на шаг, не более 5 МБ каждое. Форматы: PNG, JPEG, GIF, WEBP.</div>
                     </div>
                 </div>
             </div>

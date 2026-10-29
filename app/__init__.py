@@ -10,11 +10,24 @@ load_dotenv()
 db = SQLAlchemy()
 login_manager = LoginManager()
 
-def create_app():
-    app = Flask(__name__, template_folder='../templates', static_folder='../static')
+def create_app(test_config=None):
+    # Позволяет запускать тестовую копию с отдельной папкой instance и базой данных.
+    # По умолчанию поведение production-приложения остаётся прежним.
+    test_config = dict(test_config or {})
+    configured_instance_path = test_config.pop('INSTANCE_PATH', None)
+    flask_kwargs = {
+        'template_folder': '../templates',
+        'static_folder': '../static',
+    }
+    if configured_instance_path:
+        flask_kwargs['instance_path'] = os.path.abspath(configured_instance_path)
+    app = Flask(__name__, **flask_kwargs)
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key')
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///../instance/test_runner.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    # Ограничиваем общий размер запроса с изображениями, чтобы избежать чрезмерной загрузки памяти.
+    app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
+    app.config.update(test_config)
     if not os.getenv('SECRET_KEY') or os.getenv('SECRET_KEY') == 'dev-key':
         app.logger.warning('SECRET_KEY is missing or using the development fallback')
     os.makedirs(app.instance_path, exist_ok=True)
@@ -80,7 +93,7 @@ def create_app():
             app.logger.exception('Could not persist application error record')
         return 'Внутренняя ошибка сервера. Попробуйте позже.', 500
 
-    if os.getenv('SKIP_DB_CREATE_ALL') != '1':
+    if os.getenv('SKIP_DB_CREATE_ALL') != '1' and not app.config.get('SKIP_DB_CREATE_ALL', False):
         with app.app_context():
             db.create_all()
 
