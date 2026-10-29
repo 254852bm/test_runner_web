@@ -472,7 +472,8 @@ def create_test(project_id):
                         request.files.getlist(f'test_step_screenshot_{index}[]'),
                         user_id=current_user.id, test_step_id=step.id
                     ))
-                create_test_version(test)
+                if content_changed:
+                    create_test_version(test)
                 db.session.commit()
             except ValueError as error:
                 db.session.rollback()
@@ -549,8 +550,21 @@ def edit_test(project_id, test_id):
         if not title or not pairs:
             flash('Заголовок и хотя бы один шаг обязательны', 'danger')
         else:
+            new_precondition = request.form.get('precondition', '').strip()
+            old_content = (
+                test.title,
+                test.precondition or '',
+                [(step.action.strip(), (step.expected_result or '').strip()) for step in old_steps],
+            )
+            new_content = (
+                title,
+                new_precondition,
+                [(action, expected) for action, expected, _ in pairs],
+            )
+            content_changed = old_content != new_content
+
             test.title = title
-            test.precondition = request.form.get('precondition', '').strip()
+            test.precondition = new_precondition
             test.steps = '\n'.join(action for action, _, _ in pairs)
             test.expected_result = '\n'.join(expected for _, expected, _ in pairs)
             old_screenshots_by_id = {
@@ -641,7 +655,10 @@ def edit_test(project_id, test_id):
                             'Could not remove temporary screenshot after failed test case update'
                         )
                 raise
-            flash('Тест-кейс обновлён! Создана новая версия.', 'success')
+            if content_changed:
+                flash('Тест-кейс обновлён! Создана новая версия.', 'success')
+            else:
+                flash('Изменения сохранены. Содержимое тест-кейса не изменилось, новая версия не создавалась.', 'success')
             return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
 
     return render_template('edit_test.html', project=project, test=test, steps=steps)
