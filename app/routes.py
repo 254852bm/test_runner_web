@@ -472,8 +472,7 @@ def create_test(project_id):
                         request.files.getlist(f'test_step_screenshot_{index}[]'),
                         user_id=current_user.id, test_step_id=step.id
                     ))
-                if content_changed:
-                    create_test_version(test)
+                create_test_version(test)
                 db.session.commit()
             except ValueError as error:
                 db.session.rollback()
@@ -625,7 +624,8 @@ def edit_test(project_id, test_id):
                 for old_id, items in old_screenshots_by_id.items():
                     if old_id not in retained_source_ids:
                         old_screenshot_paths_to_remove.extend(upload_dir / item['stored_name'] for item in items)
-                create_test_version(test)
+                if content_changed:
+                    create_test_version(test)
                 db.session.commit()
                 for old_path in old_screenshot_paths_to_remove:
                     try:
