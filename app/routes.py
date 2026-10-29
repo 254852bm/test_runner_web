@@ -490,9 +490,11 @@ def compare_test_versions(project_id, test_id):
         new_action = new_actions[index] if index < len(new_actions) else ''
         old_result = old_expected[index] if index < len(old_expected) else ''
         new_result = new_expected[index] if index < len(new_expected) else ''
-        if index >= len(old_actions) and index >= len(old_expected):
+        old_present = index < len(old_actions) or index < len(old_expected)
+        new_present = index < len(new_actions) or index < len(new_expected)
+        if not old_present:
             state = 'added'
-        elif index >= len(new_actions) and index >= len(new_expected):
+        elif not new_present:
             state = 'removed'
         elif old_action != new_action or old_result != new_result:
             state = 'changed'
