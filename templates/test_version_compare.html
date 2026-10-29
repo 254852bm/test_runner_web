@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
+    <div>
+        <div class="text-muted small mb-1">Сравнение версий тест-кейса</div>
+        <h2 class="test-case-title mb-0">{{ test.title }}</h2>
+    </div>
+    <a href="{{ url_for('main.test_detail', project_id=project.id, test_id=test.id) }}" class="btn btn-outline-secondary">← К тест-кейсу</a>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3 align-items-end">
+            <div class="col-md-5">
+                <label for="older" class="form-label">Старая версия</label>
+                <select id="older" name="older" class="form-select" required>
+                    {% for item in versions %}
+                    <option value="{{ item.version_number }}" {% if item.id == older.id %}selected{% endif %}>v{{ item.version_number }} — {{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label for="newer" class="form-label">Новая версия</label>
+                <select id="newer" name="newer" class="form-select" required>
+                    {% for item in versions %}
+                    <option value="{{ item.version_number }}" {% if item.id == newer.id %}selected{% endif %}>v{{ item.version_number }} — {{ item.created_at.strftime('%d.%m.%Y %H:%M') }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-primary">Сравнить</button>
+            </div>
+        </form>
+        <div class="text-muted small mt-2">Выберите две разные версии. Отличия отмечены в сравнении ниже.</div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    {% for field in fields %}
+    <div class="col-12">
+        <div class="card h-100 {% if field.changed %}border-warning{% endif %}">
+            <div class="card-header d-flex justify-content-between align-items-center gap-2">
+                <strong>{{ field.label }}</strong>
+                {% if field.changed %}<span class="badge bg-warning text-dark">Изменено</span>{% else %}<span class="badge bg-secondary">Без изменений</span>{% endif %}
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="small text-muted mb-1">v{{ older.version_number }}</div>
+                        <div class="test-case-text">{{ field.older or 'Не указано' }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="small text-muted mb-1">v{{ newer.version_number }}</div>
+                        <div class="test-case-text">{{ field.newer or 'Не указано' }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0">Шаги и ожидаемые результаты</h5>
+    </div>
+    <div class="card-body">
+        {% for step in step_comparisons %}
+        <div class="border rounded p-3 mb-3 {% if step.state == 'changed' %}border-warning{% elif step.state == 'added' %}border-success{% elif step.state == 'removed' %}border-danger{% endif %}">
+            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
+                <strong>Шаг {{ step.number }}</strong>
+                {% if step.state == 'changed' %}<span class="badge bg-warning text-dark">Изменён</span>
+                {% elif step.state == 'added' %}<span class="badge bg-success">Добавлен</span>
+                {% elif step.state == 'removed' %}<span class="badge bg-danger">Удалён</span>
+                {% else %}<span class="badge bg-secondary">Без изменений</span>{% endif %}
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="small text-muted mb-2">v{{ older.version_number }}</div>
+                    <div class="mb-3"><strong>Действие</strong><div class="test-case-text">{{ step.older_action or '—' }}</div></div>
+                    <div><strong>Ожидаемый результат</strong><div class="test-case-text">{{ step.older_expected or '—' }}</div></div>
+                </div>
+                <div class="col-md-6">
+                    <div class="small text-muted mb-2">v{{ newer.version_number }}</div>
+                    <div class="mb-3"><strong>Действие</strong><div class="test-case-text">{{ step.newer_action or '—' }}</div></div>
+                    <div><strong>Ожидаемый результат</strong><div class="test-case-text">{{ step.newer_expected or '—' }}</div></div>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <p class="text-muted mb-0">В этих версиях нет шагов для сравнения.</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="mt-3">
+    <a href="{{ url_for('main.test_detail', project_id=project.id, test_id=test.id) }}" class="btn btn-secondary">← К тест-кейсу</a>
+</div>
+{% endblock %}

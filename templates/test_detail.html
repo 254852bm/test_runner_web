@@ -46,7 +46,12 @@
 
 <div class="card">
     <div class="card-body">
-        <h5 class="mb-3">История версий</h5>
+        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
+            <h5 class="mb-0">История версий</h5>
+            {% if versions|length > 1 %}
+            <a href="{{ url_for('main.compare_test_versions', project_id=project.id, test_id=test.id) }}" class="btn btn-sm btn-outline-primary">⇄ Сравнить версии</a>
+            {% endif %}
+        </div>
         {% for version in versions %}
         <div class="border rounded p-3 mb-2">
             <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap">
