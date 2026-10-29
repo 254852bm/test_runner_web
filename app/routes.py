@@ -441,6 +441,73 @@ def test_version_detail(project_id, test_id, version_number):
                            version_expected=version_expected)
 
 
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/versions/compare')
+@login_required
+def compare_test_versions(project_id, test_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    versions = TestCaseVersion.query.filter_by(test_case_id=test.id).order_by(
+        TestCaseVersion.version_number.asc()
+    ).all()
+    if len(versions) < 2:
+        flash('Для сравнения нужны как минимум две версии тест-кейса.', 'warning')
+        return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
+
+    version_by_number = {version.version_number: version for version in versions}
+    try:
+        old_number = int(request.args.get('older', ''))
+        new_number = int(request.args.get('newer', ''))
+    except (TypeError, ValueError):
+        old_number, new_number = versions[-2].version_number, versions[-1].version_number
+
+    if old_number == new_number or old_number not in version_by_number or new_number not in version_by_number:
+        flash('Выберите две разные существующие версии.', 'danger')
+        return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
+
+    older = version_by_number[old_number]
+    newer = version_by_number[new_number]
+    fields = [
+        {'label': 'Название', 'older': older.title or '', 'newer': newer.title or ''},
+        {'label': 'Предусловие', 'older': older.precondition or '', 'newer': newer.precondition or ''},
+    ]
+    for field in fields:
+        field['changed'] = field['older'] != field['newer']
+
+    old_actions = [line.strip() for line in (older.steps or '').splitlines() if line.strip()]
+    new_actions = [line.strip() for line in (newer.steps or '').splitlines() if line.strip()]
+    old_expected = [line.strip() for line in (older.expected_result or '').splitlines() if line.strip()]
+    new_expected = [line.strip() for line in (newer.expected_result or '').splitlines() if line.strip()]
+    step_comparisons = []
+    for index in range(max(len(old_actions), len(new_actions), len(old_expected), len(new_expected))):
+        old_action = old_actions[index] if index < len(old_actions) else ''
+        new_action = new_actions[index] if index < len(new_actions) else ''
+        old_result = old_expected[index] if index < len(old_expected) else ''
+        new_result = new_expected[index] if index < len(new_expected) else ''
+        if index >= len(old_actions) and index >= len(old_expected):
+            state = 'added'
+        elif index >= len(new_actions) and index >= len(new_expected):
+            state = 'removed'
+        elif old_action != new_action or old_result != new_result:
+            state = 'changed'
+        else:
+            state = 'same'
+        step_comparisons.append({
+            'number': index + 1,
+            'older_action': old_action,
+            'newer_action': new_action,
+            'older_expected': old_result,
+            'newer_expected': new_result,
+            'state': state,
+        })
+
+    return render_template(
+        'test_version_compare.html', project=project, test=test, versions=versions,
+        older=older, newer=newer, fields=fields, step_comparisons=step_comparisons
+    )
+
+
 @main_bp.route('/project/<int:project_id>/create_test', methods=['GET', 'POST'])
 @login_required
 def create_test(project_id):
