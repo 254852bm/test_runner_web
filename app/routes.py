@@ -475,10 +475,10 @@ def compare_test_versions(project_id, test_id):
     for field in fields:
         field['changed'] = field['older'] != field['newer']
 
-    old_actions = [line.strip() for line in (older.steps or '').splitlines() if line.strip()]
-    new_actions = [line.strip() for line in (newer.steps or '').splitlines() if line.strip()]
-    old_expected = [line.strip() for line in (older.expected_result or '').splitlines() if line.strip()]
-    new_expected = [line.strip() for line in (newer.expected_result or '').splitlines() if line.strip()]
+    old_actions = [line.strip() for line in (older.steps or '').splitlines()]
+    new_actions = [line.strip() for line in (newer.steps or '').splitlines()]
+    old_expected = [line.strip() for line in (older.expected_result or '').splitlines()]
+    new_expected = [line.strip() for line in (newer.expected_result or '').splitlines()]
     step_comparisons = []
     for index in range(max(len(old_actions), len(new_actions), len(old_expected), len(new_expected))):
         old_action = old_actions[index] if index < len(old_actions) else ''
