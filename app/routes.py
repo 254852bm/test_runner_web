@@ -466,6 +466,11 @@ def compare_test_versions(project_id, test_id):
         flash('Выберите две разные существующие версии.', 'danger')
         return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
 
+    # Keep the comparison left-to-right in chronological order even if the
+    # user selected the versions in reverse order.
+    if old_number > new_number:
+        old_number, new_number = new_number, old_number
+
     older = version_by_number[old_number]
     newer = version_by_number[new_number]
     fields = [
