@@ -707,3 +707,54 @@ html[data-theme="dark"] .project-test-count {
         font-size: 0.72rem;
     }
 }
+
+
+/* ===== Run statistics: compact result cards ===== */
+.run-stats-summary {
+    --bs-gutter-x: 0.65rem;
+    --bs-gutter-y: 0.65rem;
+}
+
+.run-stats-card {
+    min-height: 96px;
+    border: 0;
+    border-radius: 0.65rem;
+}
+
+.run-stats-card .card-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0.75rem 0.6rem;
+}
+
+.run-stats-value {
+    margin: 0 0 0.2rem;
+    font-size: clamp(1.5rem, 2.2vw, 2rem);
+    line-height: 1;
+    font-weight: 700;
+}
+
+.run-stats-label {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.2;
+}
+
+@media (max-width: 575.98px) {
+    .run-stats-card {
+        min-height: 82px;
+    }
+
+    .run-stats-card .card-body {
+        padding: 0.6rem 0.45rem;
+    }
+
+    .run-stats-value {
+        font-size: 1.5rem;
+    }
+
+    .run-stats-label {
+        font-size: 0.78rem;
+    }
+}
