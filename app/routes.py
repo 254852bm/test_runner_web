@@ -245,7 +245,7 @@ def documentation():
 @main_bp.route('/dashboard')
 @login_required
 def dashboard():
-    projects = Project.query.filter_by(user_id=current_user.id).order_by(Project.created_at.desc()).all()
+    projects = Project.query.filter_by(user_id=current_user.id).order_by(Project.created_at.desc()).limit(5).all()
     status_filter = request.args.get('status', '').upper()
     if status_filter not in ['PASS', 'FAIL', 'SKIP']:
         status_filter = None
