@@ -11,34 +11,34 @@
     </div>
 </div>
 
-<div class="row g-3 mb-4">
-    {% for status, label, icon in [('PASS', 'Пройдено', '✓'), ('FAIL', 'Не пройдено', '✕'), ('SKIP', 'Пропущено', '–')] %}
-    <div class="col-sm-6 col-xl-3">
+<div class="row g-2 g-lg-3 mb-4 dashboard-stats">
+    {% for status, label, icon in [('PASS', 'Пройдено', '✓'), ('FAIL', 'Не пройдено', '×'), ('SKIP', 'Пропущено', '–')] %}
+    <div class="col-6 col-xl-3">
         <a href="{{ url_for('main.dashboard', status=status) }}" class="text-decoration-none text-reset">
-            <div class="card dashboard-stat-card h-100 {% if status_filter == status %}border-primary{% endif %}">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="small text-muted text-uppercase fw-semibold">{{ label }}</div>
-                            <div class="display-6 fw-bold mt-2">{{ stats[status] }}</div>
+            <div class="card dashboard-stat-card dashboard-stat-card--{{ status|lower }} h-100 {% if status_filter == status %}dashboard-stat-card--active{% endif %}">
+                <div class="card-body py-3 px-3">
+                    <div class="d-flex justify-content-between align-items-center gap-2">
+                        <div class="min-w-0">
+                            <div class="small text-muted fw-semibold">{{ label }}</div>
+                            <div class="dashboard-stat-value mt-1">{{ stats[status] }}</div>
                         </div>
-                        <div class="dashboard-stat-icon">{{ icon }}</div>
+                        <span class="dashboard-stat-icon" aria-hidden="true">{{ icon }}</span>
                     </div>
                 </div>
             </div>
         </a>
     </div>
     {% endfor %}
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-6 col-xl-3">
         <a href="{{ url_for('main.dashboard') }}" class="text-decoration-none text-reset">
-            <div class="card dashboard-stat-card h-100 {% if not status_filter %}border-primary{% endif %}">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div>
-                            <div class="small text-muted text-uppercase fw-semibold">Всего прогонов</div>
-                            <div class="display-6 fw-bold mt-2">{{ stats.TOTAL }}</div>
+            <div class="card dashboard-stat-card dashboard-stat-card--total h-100 {% if not status_filter %}dashboard-stat-card--active{% endif %}">
+                <div class="card-body py-3 px-3">
+                    <div class="d-flex justify-content-between align-items-center gap-2">
+                        <div class="min-w-0">
+                            <div class="small text-muted fw-semibold">Всего прогонов</div>
+                            <div class="dashboard-stat-value mt-1">{{ stats.TOTAL }}</div>
                         </div>
-                        <div class="dashboard-stat-icon">Σ</div>
+                        <span class="dashboard-stat-icon" aria-hidden="true">Σ</span>
                     </div>
                 </div>
             </div>
@@ -75,28 +75,37 @@
     </div>
 </div>
 
-<h4 class="mb-3">Мои проекты</h4>
-<div class="row g-3 mb-4">
+<div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
+    <div>
+        <h4 class="mb-1">Последние проекты</h4>
+        <div class="text-muted small">Пять недавно созданных проектов</div>
+    </div>
+    <a href="{{ url_for('main.projects') }}" class="btn btn-sm btn-outline-primary">Все проекты</a>
+</div>
+<div class="row g-2 g-lg-3 mb-4 dashboard-projects">
 {% for project in projects %}
-    <div class="col-md-4">
+    <div class="col-12 col-md-4">
         <div class="card h-100 project-dashboard-card">
-            <div class="card-body d-flex flex-column">
-                <div class="d-flex justify-content-between gap-2">
-                    <h5 class="project-name mb-1">{{ project.name }}</h5>
-                    <span class="badge text-bg-primary align-self-start">{{ project.test_cases|length }}</span>
+            <div class="card-body d-flex flex-column p-3">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                    <h5 class="project-name project-dashboard-title mb-0">{{ project.name }}</h5>
+                    <span class="project-test-count" title="{{ project.test_cases|length }} тест-кейсов">
+                        {{ project.test_cases|length }} <span>тест-к.</span>
+                    </span>
                 </div>
-                <p class="text-muted small">тест-кейсов</p>
                 <div class="action-buttons mt-auto">
-                    <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-primary">Открыть проект</a>
-                    <a href="{{ url_for('main.run_tests', project_id=project.id) }}" class="btn btn-success">Запустить прогон</a>
+                    <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-sm btn-primary">Открыть</a>
+                    <a href="{{ url_for('main.run_tests', project_id=project.id) }}" class="btn btn-sm btn-success">Запустить прогон</a>
                 </div>
             </div>
         </div>
     </div>
 {% else %}
-    <div class="alert alert-info">
-        Проектов пока нет.
-        <a href="{{ url_for('main.create_project') }}" class="alert-link">Создать проект</a>
+    <div class="col-12">
+        <div class="alert alert-info mb-0">
+            Проектов пока нет.
+            <a href="{{ url_for('main.create_project') }}" class="alert-link">Создать проект</a>
+        </div>
     </div>
 {% endfor %}
 </div>

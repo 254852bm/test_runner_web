@@ -479,3 +479,282 @@ html[data-theme="dark"] .text-dark {
         flex-shrink: 0;
     }
 }
+
+
+/* ===== Dashboard: lighter statistics and compact project cards ===== */
+.dashboard-stats .dashboard-stat-card {
+    border-radius: 0.7rem;
+    box-shadow: 0 1px 4px rgba(20, 30, 45, 0.035);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.dashboard-stats .dashboard-stat-card:hover,
+.dashboard-projects .project-dashboard-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0.35rem 0.9rem rgba(20, 30, 45, 0.075);
+}
+
+.dashboard-stats .dashboard-stat-card--active {
+    border-color: #5272ea;
+    box-shadow: 0 0 0 1px rgba(82, 114, 234, 0.16);
+}
+
+.dashboard-stat-value {
+    font-size: clamp(1.45rem, 2vw, 1.8rem);
+    line-height: 1.1;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    color: var(--app-text);
+    font-variant-numeric: tabular-nums;
+}
+
+.dashboard-stat-card--pass .dashboard-stat-value,
+.dashboard-stat-card--pass .dashboard-stat-icon {
+    color: #43875a;
+}
+
+.dashboard-stat-card--fail .dashboard-stat-value,
+.dashboard-stat-card--fail .dashboard-stat-icon {
+    color: #c64b50;
+}
+
+.dashboard-stat-card--skip .dashboard-stat-value,
+.dashboard-stat-card--skip .dashboard-stat-icon {
+    color: #858b93;
+}
+
+.dashboard-stat-card--total .dashboard-stat-value,
+.dashboard-stat-card--total .dashboard-stat-icon {
+    color: #5272ea;
+}
+
+.dashboard-stat-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 1.65rem;
+    height: 1.65rem;
+    border-radius: 0;
+    background: transparent;
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.project-dashboard-card {
+    border-radius: 0.7rem;
+    box-shadow: 0 1px 4px rgba(20, 30, 45, 0.035);
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.project-dashboard-title {
+    min-width: 0;
+    font-size: 1rem;
+    line-height: 1.35;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+    min-height: 2.7em;
+}
+
+.project-test-count {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.2rem 0.45rem;
+    border-radius: 999px;
+    background: rgba(82, 114, 234, 0.09);
+    color: #496cf0;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.project-test-count span {
+    font-weight: 500;
+}
+
+.project-dashboard-card .action-buttons {
+    gap: 0.4rem;
+}
+
+.project-dashboard-card .action-buttons .btn {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.82rem;
+}
+
+html[data-theme="dark"] .project-test-count {
+    background: rgba(125, 150, 255, 0.16);
+    color: #aebeff;
+}
+
+@media (max-width: 575.98px) {
+    .dashboard-stats .card-body {
+        padding: 0.7rem !important;
+    }
+
+    .dashboard-stats .small {
+        font-size: 0.72rem;
+    }
+
+    .project-dashboard-card .action-buttons .btn {
+        font-size: 0.78rem;
+    }
+}
+
+
+/* ===== Compact, paginated project list ===== */
+.project-list-table {
+    border: 1px solid var(--app-border);
+    border-radius: 0.65rem;
+    background: var(--app-card-bg);
+}
+.project-list-table .table {
+    color: var(--app-text);
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--app-text);
+    --bs-table-border-color: var(--app-border);
+}
+.project-list-table th,
+.project-list-table td {
+    padding: 0.7rem 0.9rem;
+}
+.project-row-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+.project-row-actions form {
+    margin: 0;
+}
+@media (max-width: 575.98px) {
+    .project-list-table th,
+    .project-list-table td {
+        padding: 0.55rem;
+        font-size: 0.88rem;
+    }
+    .project-row-actions {
+        min-width: 150px;
+    }
+    .project-row-actions .btn {
+        padding: 0.25rem 0.4rem;
+        font-size: 0.75rem;
+    }
+}
+
+
+/* ===== Dashboard statistics: compact horizontal tiles ===== */
+.dashboard-stats {
+    --bs-gutter-x: 0.65rem;
+    --bs-gutter-y: 0.65rem;
+}
+
+.dashboard-stats > [class*="col-"] {
+    min-width: 0;
+}
+
+.dashboard-stats .dashboard-stat-card {
+    min-height: 76px;
+    border-radius: 0.55rem;
+}
+
+.dashboard-stats .dashboard-stat-card .card-body {
+    padding: 0.65rem 0.8rem !important;
+}
+
+.dashboard-stats .dashboard-stat-value {
+    margin-top: 0.15rem !important;
+    font-size: clamp(1.2rem, 1.7vw, 1.5rem);
+    line-height: 1;
+}
+
+.dashboard-stats .dashboard-stat-icon {
+    width: 1.35rem;
+    height: 1.35rem;
+    font-size: 1rem;
+}
+
+.dashboard-stats .dashboard-stat-card .small {
+    font-size: 0.78rem;
+    line-height: 1.15;
+}
+
+.dashboard-chart-card .card-body {
+    padding: 1rem;
+}
+
+@media (max-width: 575.98px) {
+    .dashboard-stats {
+        --bs-gutter-x: 0.5rem;
+        --bs-gutter-y: 0.5rem;
+    }
+
+    .dashboard-stats .dashboard-stat-card {
+        min-height: 68px;
+    }
+
+    .dashboard-stats .dashboard-stat-card .card-body {
+        padding: 0.55rem 0.65rem !important;
+    }
+
+    .dashboard-stats .dashboard-stat-value {
+        font-size: 1.2rem;
+    }
+
+    .dashboard-stats .dashboard-stat-card .small {
+        font-size: 0.72rem;
+    }
+}
+
+
+/* ===== Run statistics: compact result cards ===== */
+.run-stats-summary {
+    --bs-gutter-x: 0.65rem;
+    --bs-gutter-y: 0.65rem;
+}
+
+.run-stats-card {
+    min-height: 96px;
+    border: 0;
+    border-radius: 0.65rem;
+}
+
+.run-stats-card .card-body {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0.75rem 0.6rem;
+}
+
+.run-stats-value {
+    margin: 0 0 0.2rem;
+    font-size: clamp(1.5rem, 2.2vw, 2rem);
+    line-height: 1;
+    font-weight: 700;
+}
+
+.run-stats-label {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.2;
+}
+
+@media (max-width: 575.98px) {
+    .run-stats-card {
+        min-height: 82px;
+    }
+
+    .run-stats-card .card-body {
+        padding: 0.6rem 0.45rem;
+    }
+
+    .run-stats-value {
+        font-size: 1.5rem;
+    }
+
+    .run-stats-label {
+        font-size: 0.78rem;
+    }
+}
