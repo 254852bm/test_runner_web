@@ -16,8 +16,10 @@
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="mb-3">
-      <label class="form-label" for="message">Ответ</label>
-      <textarea class="form-control" id="message" name="message" rows="5" maxlength="10000" required></textarea>
+      <label class="form-label" for="message">{% if is_admin %}Ответ (необязательно){% else %}Ответ{% endif %}</label>
+      <textarea class="form-control" id="message" name="message" rows="5" maxlength="10000"
+        {% if not is_admin %}required{% endif %}
+        placeholder="{% if is_admin %}Можно оставить пустым, если нужно только изменить статус.{% else %}Введите сообщение{% endif %}"></textarea>
     </div>
     {% if is_admin %}
     <div class="mb-3">
@@ -28,7 +30,7 @@
       </select>
     </div>
     {% endif %}
-    <button class="btn btn-primary" type="submit">Отправить ответ</button>
+    <button class="btn btn-primary" type="submit">{% if is_admin %}Сохранить изменения{% else %}Отправить ответ{% endif %}</button>
   </form>
 </div>
 {% endblock %}
