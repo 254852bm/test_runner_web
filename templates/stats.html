@@ -6,18 +6,18 @@
 </div>
 <p>Проект: <strong class="project-name">{{ project.name }}</strong></p>
 
-<div class="row mb-4">
-    <div class="col-md-3">
-        <div class="card text-white bg-success"><div class="card-body text-center"><h1>{{ stats.PASS }}</h1><p>Пройдено</p></div></div>
+<div class="row g-2 mb-3 run-stats-summary">
+    <div class="col-6 col-md-3">
+        <div class="card text-white bg-success run-stats-card"><div class="card-body text-center"><h2 class="run-stats-value">{{ stats.PASS }}</h2><p class="run-stats-label">Пройдено</p></div></div>
     </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-danger"><div class="card-body text-center"><h1>{{ stats.FAIL }}</h1><p>Не пройдено</p></div></div>
+    <div class="col-6 col-md-3">
+        <div class="card text-white bg-danger run-stats-card"><div class="card-body text-center"><h2 class="run-stats-value">{{ stats.FAIL }}</h2><p class="run-stats-label">Не пройдено</p></div></div>
     </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-secondary"><div class="card-body text-center"><h1>{{ stats.SKIP }}</h1><p>Пропущено</p></div></div>
+    <div class="col-6 col-md-3">
+        <div class="card text-white bg-secondary run-stats-card"><div class="card-body text-center"><h2 class="run-stats-value">{{ stats.SKIP }}</h2><p class="run-stats-label">Пропущено</p></div></div>
     </div>
-    <div class="col-md-3">
-        <div class="card text-white bg-info"><div class="card-body text-center"><h1>{{ stats.TOTAL }}</h1><p>Всего</p></div></div>
+    <div class="col-6 col-md-3">
+        <div class="card text-white bg-info run-stats-card"><div class="card-body text-center"><h2 class="run-stats-value">{{ stats.TOTAL }}</h2><p class="run-stats-label">Всего</p></div></div>
     </div>
 </div>
 
@@ -45,15 +45,15 @@
         <h5 class="card-title">📄 Экспорт отчёта в PDF</h5>
         <p class="text-muted small mb-3">Выберите период прогонов. Если оставить поля пустыми — в отчёт попадут все прогоны проекта.</p>
         <form method="GET" action="{{ url_for('main.export_pdf', project_id=project.id) }}" class="row g-2 align-items-end">
-            <div class="col-md-3">
+            <div class="col-6 col-md-3">
                 <label class="form-label small mb-1">С даты</label>
                 <input type="date" name="from_date" class="form-control form-control-sm">
             </div>
-            <div class="col-md-3">
+            <div class="col-6 col-md-3">
                 <label class="form-label small mb-1">По дату</label>
                 <input type="date" name="to_date" class="form-control form-control-sm">
             </div>
-            <div class="col-md-3">
+            <div class="col-6 col-md-3">
                 <button type="submit" class="btn btn-warning w-100">📄 Скачать отчёт</button>
             </div>
         </form>
