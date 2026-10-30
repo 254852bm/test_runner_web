@@ -299,8 +299,39 @@ def profile():
 @main_bp.route('/projects')
 @login_required
 def projects():
-    user_projects = Project.query.filter_by(user_id=current_user.id).all()
-    return render_template('projects.html', projects=user_projects)
+    search = request.args.get('q', '').strip()[:100]
+    sort = request.args.get('sort', 'newest')
+    page = request.args.get('page', 1, type=int) or 1
+    per_page = 25
+
+    projects_query = db.session.query(
+        Project,
+        db.func.count(TestCase.id).label('test_count')
+    ).outerjoin(
+        TestCase, TestCase.project_id == Project.id
+    ).filter(
+        Project.user_id == current_user.id
+    ).group_by(Project.id)
+
+    if search:
+        projects_query = projects_query.filter(Project.name.ilike(f'%{search}%'))
+
+    if sort == 'name':
+        projects_query = projects_query.order_by(Project.name.asc(), Project.id.asc())
+    elif sort == 'name_desc':
+        projects_query = projects_query.order_by(Project.name.desc(), Project.id.desc())
+    else:
+        sort = 'newest'
+        projects_query = projects_query.order_by(Project.created_at.desc(), Project.id.desc())
+
+    pagination = projects_query.paginate(page=page, per_page=per_page, error_out=False)
+    return render_template(
+        'projects.html',
+        pagination=pagination,
+        projects=pagination.items,
+        search=search,
+        sort=sort
+    )
 
 
 @main_bp.route('/projects/create', methods=['GET', 'POST'])
