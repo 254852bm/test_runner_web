@@ -20,7 +20,7 @@ def _get_user_by_token(token):
     if not api_token:
         return None
     user = api_token.user
-    if not user or user.is_blocked_now:
+    if not user or user.is_deleted or user.is_blocked_now:
         return None
     api_token.last_used_at = datetime.utcnow()
     db.session.commit()

@@ -7,6 +7,14 @@
 <input class="form-control mb-2" id="company_name" name="company_name" maxlength="100" value="{{ current_user.company_name or '' }}">
 <button class="btn btn-primary" type="submit">Сохранить профиль</button>
 </form>
+<h4 class="mt-4">Изменить пароль</h4>
+<form method="post" action="{{ url_for('auth.change_password') }}" class="mb-4">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<div class="mb-2"><label class="form-label" for="current_password">Текущий пароль</label><input class="form-control" type="password" id="current_password" name="current_password" autocomplete="current-password" required></div>
+<div class="mb-2"><label class="form-label" for="new_password">Новый пароль</label><input class="form-control" type="password" id="new_password" name="new_password" minlength="8" autocomplete="new-password" required></div>
+<div class="mb-2"><label class="form-label" for="confirm_password">Повторите новый пароль</label><input class="form-control" type="password" id="confirm_password" name="confirm_password" minlength="8" autocomplete="new-password" required></div>
+<button class="btn btn-outline-primary" type="submit">Изменить пароль</button>
+</form>
 <p><strong>Email:</strong> {{ current_user.email }}</p>
 <p><strong>Тариф:</strong> {{ current_user.tariff }}</p>
 <p><strong>Регистрация:</strong> {{ current_user.created_at.strftime("%d.%m.%Y") if current_user.created_at else "—" }}</p>

@@ -72,6 +72,10 @@ def create_app(test_config=None):
 
     @app.before_request
     def reject_blocked_sessions():
+        if current_user.is_authenticated and getattr(current_user, 'is_deleted', False):
+            logout_user()
+            flash('Этот аккаунт удалён. Обратитесь к администратору.', 'danger')
+            return redirect(url_for('auth.login'))
         if current_user.is_authenticated and getattr(current_user, 'is_blocked_now', False):
             logout_user()
             flash('Доступ к аккаунту временно ограничен.', 'danger')
