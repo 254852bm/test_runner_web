@@ -31,6 +31,13 @@ def _check_csrf():
         abort(400, description="Недействительный CSRF-токен")
 
 
+def _redirect_to_users():
+    status = request.form.get("status", "active")
+    if status not in ("active", "deleted", "all"):
+        status = "active"
+    return redirect(url_for("admin.users", q=request.form.get("q", ""), status=status))
+
+
 def _audit(action, target_user=None, reason=None, details=None):
     db.session.add(AdminAuditLog(
         actor_user_id=current_user.id,
@@ -95,14 +102,14 @@ def block_user(user_id):
     days = request.form.get("days", type=int)
     if not reason or len(reason) > 300 or days not in range(1, 31):
         flash("Укажите причину и срок блокировки от 1 до 30 дней.", "danger")
-        return redirect(url_for("admin.users", q=request.form.get("q", "")))
+        return _redirect_to_users()
     user.is_blocked = True
     user.blocked_until = datetime.utcnow() + timedelta(days=days)
     user.blocked_reason = reason
     _audit("user_blocked", user, reason, f"duration_days={days}")
     db.session.commit()
     flash(f"Пользователь {user.email} заблокирован на {days} дн.", "success")
-    return redirect(url_for("admin.users", q=request.form.get("q", "")))
+    return _redirect_to_users()
 
 
 @admin_bp.route("/users/<int:user_id>/unblock", methods=["POST"])
@@ -113,7 +120,7 @@ def unblock_user(user_id):
     user = User.query.get_or_404(user_id)
     if not user.is_blocked:
         flash("Аккаунт уже не заблокирован.", "info")
-        return redirect(url_for("admin.users", q=request.form.get("q", "")))
+        return _redirect_to_users()
     old_reason = user.blocked_reason
     user.is_blocked = False
     user.blocked_until = None
@@ -121,7 +128,7 @@ def unblock_user(user_id):
     _audit("user_unblocked", user, old_reason, "manual unblock")
     db.session.commit()
     flash(f"Пользователь {user.email} разблокирован.", "success")
-    return redirect(url_for("admin.users", q=request.form.get("q", "")))
+    return _redirect_to_users()
 
 
 @admin_bp.route("/support")
@@ -177,7 +184,7 @@ def reset_user_password(user_id):
         _audit("user_password_reset", user, details="admin password reset")
         db.session.commit()
         flash("Пароль пользователя изменён.", "success")
-    return redirect(url_for("admin.users", q=request.form.get("q", ""), status=request.form.get("status", "active")))
+    return _redirect_to_users()
 
 
 @admin_bp.route("/users/<int:user_id>/soft-delete", methods=["POST"])
