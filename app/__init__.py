@@ -1,4 +1,5 @@
 from flask import Flask, request
+from flask_wtf.csrf import generate_csrf
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from dotenv import load_dotenv
@@ -57,6 +58,10 @@ def create_app(test_config=None):
     app.register_blueprint(api_bp)
     from .admin_routes import admin_bp
     app.register_blueprint(admin_bp)
+
+    @app.context_processor
+    def inject_csrf_token():
+        return {'csrf_token': generate_csrf}
 
     @app.context_processor
     def inject_admin_context():
