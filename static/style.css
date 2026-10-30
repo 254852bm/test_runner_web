@@ -553,10 +553,6 @@ html[data-theme="dark"] .text-dark {
     line-height: 1.35;
     font-weight: 600;
     overflow-wrap: anywhere;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
     min-height: 2.7em;
 }
 
