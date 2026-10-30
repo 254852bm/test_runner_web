@@ -2,12 +2,13 @@ import os
 from datetime import datetime, timedelta
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from werkzeug.security import generate_password_hash
 from flask_login import current_user, login_required
 from flask_wtf.csrf import generate_csrf, validate_csrf, ValidationError
 from sqlalchemy import or_
 
 from app import db
-from app.models import User, FeedbackTicket, AdminAuditLog, AppErrorLog
+from app.models import User, FeedbackTicket, AdminAuditLog, AppErrorLog, ApiToken
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -63,7 +64,14 @@ def users():
     _require_admin()
     search = request.args.get("q", "").strip()[:100]
     page = max(request.args.get("page", 1, type=int) or 1, 1)
+    status = request.args.get("status", "active")
+    if status not in ("active", "deleted", "all"):
+        status = "active"
     query = User.query
+    if status == "active":
+        query = query.filter(User.is_deleted.is_(False))
+    elif status == "deleted":
+        query = query.filter(User.is_deleted.is_(True))
     if search:
         pattern = f"%{search}%"
         filters = [User.email.ilike(pattern), User.company_name.ilike(pattern)]
@@ -71,7 +79,7 @@ def users():
             filters.append(User.id == int(search))
         query = query.filter(or_(*filters))
     pagination = query.order_by(User.created_at.desc(), User.id.desc()).paginate(page=page, per_page=50, error_out=False)
-    return render_template("admin/users.html", pagination=pagination, search=search)
+    return render_template("admin/users.html", pagination=pagination, search=search, status=status)
 
 
 @admin_bp.route("/users/<int:user_id>/block", methods=["POST"])
@@ -152,3 +160,53 @@ def logs():
     _require_admin()
     records = AppErrorLog.query.order_by(AppErrorLog.created_at.desc()).limit(100).all()
     return render_template("admin/logs.html", records=records)
+
+
+@admin_bp.route("/users/<int:user_id>/password", methods=["POST"])
+@login_required
+def reset_user_password(user_id):
+    _require_admin()
+    _check_csrf()
+    user = User.query.get_or_404(user_id)
+    password = request.form.get("new_password", "")
+    confirmation = request.form.get("confirm_password", "")
+    if len(password) < 8 or password != confirmation:
+        flash("Пароль должен содержать не менее 8 символов, а поля должны совпадать.", "danger")
+    else:
+        user.password = generate_password_hash(password)
+        _audit("user_password_reset", user, details="admin password reset")
+        db.session.commit()
+        flash("Пароль пользователя изменён.", "success")
+    return redirect(url_for("admin.users", q=request.form.get("q", ""), status=request.form.get("status", "active")))
+
+
+@admin_bp.route("/users/<int:user_id>/soft-delete", methods=["POST"])
+@login_required
+def soft_delete_user(user_id):
+    _require_admin()
+    _check_csrf()
+    user = User.query.get_or_404(user_id)
+    admin_email = os.getenv("ADMIN_EMAIL", "").strip().lower()
+    if user.id == current_user.id or user.email.strip().lower() == admin_email:
+        abort(400, description="Нельзя удалить аккаунт администратора.")
+    if not user.is_deleted:
+        user.is_deleted = True
+        ApiToken.query.filter_by(user_id=user.id).delete(synchronize_session=False)
+        _audit("user_soft_deleted", user, details="soft delete; API tokens revoked")
+        db.session.commit()
+        flash(f"Аккаунт {user.email} удалён. История сохранена.", "success")
+    return redirect(url_for("admin.users", q=request.form.get("q", ""), status="active"))
+
+
+@admin_bp.route("/users/<int:user_id>/restore", methods=["POST"])
+@login_required
+def restore_user(user_id):
+    _require_admin()
+    _check_csrf()
+    user = User.query.get_or_404(user_id)
+    if user.is_deleted:
+        user.is_deleted = False
+        _audit("user_restored", user, details="soft-deleted account restored")
+        db.session.commit()
+        flash(f"Аккаунт {user.email} восстановлен.", "success")
+    return redirect(url_for("admin.users", q=request.form.get("q", ""), status="deleted"))
