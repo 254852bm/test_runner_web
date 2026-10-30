@@ -643,3 +643,67 @@ html[data-theme="dark"] .project-test-count {
         font-size: 0.75rem;
     }
 }
+
+
+/* ===== Dashboard statistics: compact horizontal tiles ===== */
+.dashboard-stats {
+    --bs-gutter-x: 0.65rem;
+    --bs-gutter-y: 0.65rem;
+}
+
+.dashboard-stats > [class*="col-"] {
+    min-width: 0;
+}
+
+.dashboard-stats .dashboard-stat-card {
+    min-height: 76px;
+    border-radius: 0.55rem;
+}
+
+.dashboard-stats .dashboard-stat-card .card-body {
+    padding: 0.65rem 0.8rem !important;
+}
+
+.dashboard-stats .dashboard-stat-value {
+    margin-top: 0.15rem !important;
+    font-size: clamp(1.2rem, 1.7vw, 1.5rem);
+    line-height: 1;
+}
+
+.dashboard-stats .dashboard-stat-icon {
+    width: 1.35rem;
+    height: 1.35rem;
+    font-size: 1rem;
+}
+
+.dashboard-stats .dashboard-stat-card .small {
+    font-size: 0.78rem;
+    line-height: 1.15;
+}
+
+.dashboard-chart-card .card-body {
+    padding: 1rem;
+}
+
+@media (max-width: 575.98px) {
+    .dashboard-stats {
+        --bs-gutter-x: 0.5rem;
+        --bs-gutter-y: 0.5rem;
+    }
+
+    .dashboard-stats .dashboard-stat-card {
+        min-height: 68px;
+    }
+
+    .dashboard-stats .dashboard-stat-card .card-body {
+        padding: 0.55rem 0.65rem !important;
+    }
+
+    .dashboard-stats .dashboard-stat-value {
+        font-size: 1.2rem;
+    }
+
+    .dashboard-stats .dashboard-stat-card .small {
+        font-size: 0.72rem;
+    }
+}
