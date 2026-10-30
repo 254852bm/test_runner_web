@@ -602,3 +602,44 @@ html[data-theme="dark"] .project-test-count {
         font-size: 0.78rem;
     }
 }
+
+
+/* ===== Compact, paginated project list ===== */
+.project-list-table {
+    border: 1px solid var(--app-border);
+    border-radius: 0.65rem;
+    background: var(--app-card-bg);
+}
+.project-list-table .table {
+    color: var(--app-text);
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--app-text);
+    --bs-table-border-color: var(--app-border);
+}
+.project-list-table th,
+.project-list-table td {
+    padding: 0.7rem 0.9rem;
+}
+.project-row-actions {
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+.project-row-actions form {
+    margin: 0;
+}
+@media (max-width: 575.98px) {
+    .project-list-table th,
+    .project-list-table td {
+        padding: 0.55rem;
+        font-size: 0.88rem;
+    }
+    .project-row-actions {
+        min-width: 150px;
+    }
+    .project-row-actions .btn {
+        padding: 0.25rem 0.4rem;
+        font-size: 0.75rem;
+    }
+}
