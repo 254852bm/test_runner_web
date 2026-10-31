@@ -11,6 +11,7 @@ class User(UserMixin, db.Model):
     tariff = db.Column(db.String(20), default='free')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     is_blocked = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+    is_deleted = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
     blocked_until = db.Column(db.DateTime, nullable=True)
     blocked_reason = db.Column(db.String(300), nullable=True)
 
@@ -159,7 +160,8 @@ from app import login_manager
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    user = User.query.get(int(user_id))
+    return user if user and not user.is_deleted else None
 
 
 class FeedbackTicket(db.Model):

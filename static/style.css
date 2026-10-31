@@ -758,3 +758,188 @@ html[data-theme="dark"] .project-test-count {
         font-size: 0.78rem;
     }
 }
+
+
+/* ===== Profile page: calm, structured sections ===== */
+.profile-page {
+    max-width: 1040px;
+}
+
+.profile-section {
+    border: 1px solid var(--app-border);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    box-shadow: 0 0.15rem 0.65rem rgba(25, 35, 50, 0.035) !important;
+}
+
+.profile-section .card-title {
+    color: var(--app-text);
+    font-size: 1rem;
+    font-weight: 650;
+}
+
+.profile-section--company {
+    background: #f4f7f5;
+    border-left: 4px solid #9bb8a5;
+}
+.profile-section--account {
+    background: #f3f6f9;
+    border-left: 4px solid #9db2c8;
+}
+.profile-section--stats {
+    background: #f7f6f1;
+    border-left: 4px solid #c5b995;
+}
+.profile-section--projects {
+    background: #f2f6f7;
+    border-left: 4px solid #98b8bd;
+}
+.profile-section--security {
+    background: #f7f3f2;
+    border-left: 4px solid #c5a7a0;
+}
+.profile-section--support {
+    background: #f5f3f8;
+    border-left: 4px solid #b5a7c8;
+}
+
+.profile-info-label,
+.profile-stat-label {
+    color: var(--app-muted);
+    font-size: 0.82rem;
+    margin-bottom: 0.2rem;
+}
+.profile-info-value {
+    color: var(--app-text);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+.profile-stat-value {
+    color: var(--app-text);
+    font-size: 1.45rem;
+    line-height: 1.2;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+.profile-section-toggle {
+    width: 100%;
+    min-height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+    border: 0;
+    background: transparent;
+    color: var(--app-text);
+    text-align: left;
+}
+.profile-section-toggle:hover,
+.profile-section-toggle:focus-visible {
+    background: rgba(70, 90, 100, 0.045);
+}
+.profile-section-toggle:focus-visible {
+    outline: 2px solid #7898a3;
+    outline-offset: -3px;
+}
+.profile-section-heading {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    min-width: 0;
+}
+.profile-section-title {
+    font-weight: 650;
+}
+.profile-section-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.7rem;
+    height: 1.7rem;
+    padding: 0 0.45rem;
+    border-radius: 999px;
+    background: rgba(70, 105, 115, 0.12);
+    color: var(--app-text);
+    font-size: 0.8rem;
+    font-weight: 650;
+    font-variant-numeric: tabular-nums;
+}
+.profile-section-chevron {
+    flex: 0 0 auto;
+    color: var(--app-muted);
+    font-size: 1.25rem;
+    line-height: 1;
+    transition: transform 0.18s ease;
+}
+.profile-section-toggle[aria-expanded="true"] .profile-section-chevron {
+    transform: rotate(180deg);
+}
+.profile-project-list .list-group-item,
+.profile-ticket-list .list-group-item {
+    background: transparent;
+    color: var(--app-text);
+    border-color: rgba(100, 115, 125, 0.18);
+}
+.profile-project-list .list-group-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    overflow-wrap: anywhere;
+}
+.profile-project-list .list-group-item:hover {
+    background: rgba(70, 90, 100, 0.055);
+}
+.profile-ticket-list .list-group-item {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+html[data-theme="dark"] .profile-section--company {
+    background: #202a25;
+    border-left-color: #668d75;
+}
+html[data-theme="dark"] .profile-section--account {
+    background: #202832;
+    border-left-color: #6885a2;
+}
+html[data-theme="dark"] .profile-section--stats {
+    background: #2b2921;
+    border-left-color: #96875d;
+}
+html[data-theme="dark"] .profile-section--projects {
+    background: #202b2d;
+    border-left-color: #628d93;
+}
+html[data-theme="dark"] .profile-section--security {
+    background: #2d2524;
+    border-left-color: #9a7068;
+}
+html[data-theme="dark"] .profile-section--support {
+    background: #292431;
+    border-left-color: #88759f;
+}
+html[data-theme="dark"] .profile-section-count {
+    background: rgba(190, 205, 210, 0.13);
+}
+html[data-theme="dark"] .profile-project-list .list-group-item,
+html[data-theme="dark"] .profile-ticket-list .list-group-item {
+    border-color: rgba(190, 200, 210, 0.14);
+}
+html[data-theme="dark"] .profile-section-toggle:hover,
+html[data-theme="dark"] .profile-section-toggle:focus-visible,
+html[data-theme="dark"] .profile-project-list .list-group-item:hover {
+    background: rgba(220, 230, 235, 0.055);
+}
+
+@media (max-width: 575.98px) {
+    .profile-section-toggle {
+        min-height: 58px;
+        padding: 0.85rem 1rem;
+    }
+    .profile-section .card-body {
+        padding: 1rem !important;
+    }
+}

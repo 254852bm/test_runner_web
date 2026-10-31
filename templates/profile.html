@@ -1,21 +1,174 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container py-4">
-<h2>Личный кабинет</h2>
-<form method="post" class="mb-4">
-<label for="company_name">Компания</label>
-<input class="form-control mb-2" id="company_name" name="company_name" maxlength="100" value="{{ current_user.company_name or '' }}">
-<button class="btn btn-primary" type="submit">Сохранить профиль</button>
-</form>
-<p><strong>Email:</strong> {{ current_user.email }}</p>
-<p><strong>Тариф:</strong> {{ current_user.tariff }}</p>
-<p><strong>Регистрация:</strong> {{ current_user.created_at.strftime("%d.%m.%Y") if current_user.created_at else "—" }}</p>
-<h4>Моя статистика</h4>
-<p>Проекты: {{ projects|length }} · Тест-кейсы: {{ test_count }} · Всего прогонов: {{ stats.TOTAL }}</p>
-<p>Пройдено: {{ stats.PASS }} · Не пройдено: {{ stats.FAIL }} · Пропущено: {{ stats.SKIP }}</p>
-<h4>Мои проекты</h4>
-<ul>{% for project in projects %}<li><a href="{{ url_for("main.project_detail", project_id=project.id) }}">{{ project.name }}</a></li>{% else %}<li>Проектов пока нет</li>{% endfor %}</ul>
-<h4>Последние обращения в поддержку</h4>
-<ul>{% for ticket in recent_tickets %}<li>{{ ticket.subject }} — {{ ticket.status }}{% if ticket.messages and ticket.messages[-1].sender_id != current_user.id %} <strong class="text-success">💬 Есть ответ от поддержки</strong>{% endif %}</li>{% else %}<li>Обращений пока нет</li>{% endfor %}</ul>
+<div class="container py-4 profile-page">
+    <div class="mb-4">
+        <h2 class="mb-1">Личный кабинет</h2>
+        <p class="text-muted mb-0">Настройки профиля и информация об учётной записи</p>
+    </div>
+
+    <section class="card shadow-sm mb-3 profile-section profile-section--company">
+        <div class="card-body p-3 p-md-4">
+            <h5 class="card-title mb-3">Профиль компании</h5>
+            <form method="post">
+                <label class="form-label" for="company_name">Название компании</label>
+                <div class="row g-2 align-items-center">
+                    <div class="col-12 col-md-8 col-lg-9">
+                        <input class="form-control" id="company_name" name="company_name"
+                               maxlength="100" value="{{ current_user.company_name or '' }}">
+                    </div>
+                    <div class="col-12 col-md-4 col-lg-3">
+                        <button class="btn btn-primary w-100" type="submit">Сохранить профиль</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <section class="card shadow-sm mb-3 profile-section profile-section--account">
+        <div class="card-body p-3 p-md-4">
+            <h5 class="card-title mb-3">Учётная запись</h5>
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <div class="profile-info-label">Email</div>
+                    <div class="profile-info-value">{{ current_user.email }}</div>
+                </div>
+                <div class="col-6 col-md-4">
+                    <div class="profile-info-label">Тариф</div>
+                    <div class="profile-info-value">{{ current_user.tariff }}</div>
+                </div>
+                <div class="col-6 col-md-4">
+                    <div class="profile-info-label">Регистрация</div>
+                    <div class="profile-info-value">{{ current_user.created_at.strftime("%d.%m.%Y") if current_user.created_at else "—" }}</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card shadow-sm mb-3 profile-section profile-section--stats">
+        <div class="card-body p-3 p-md-4">
+            <h5 class="card-title mb-3">Моя статистика</h5>
+            <div class="row g-3">
+                <div class="col-6 col-lg-3">
+                    <div class="profile-stat-value">{{ projects|length }}</div>
+                    <div class="profile-stat-label">Проектов</div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="profile-stat-value">{{ test_count }}</div>
+                    <div class="profile-stat-label">Тест-кейсов</div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="profile-stat-value">{{ stats.TOTAL }}</div>
+                    <div class="profile-stat-label">Всего прогонов</div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="profile-stat-value">{{ stats.PASS }}</div>
+                    <div class="profile-stat-label">Пройдено</div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="profile-stat-value">{{ stats.FAIL }}</div>
+                    <div class="profile-stat-label">Не пройдено</div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="profile-stat-value">{{ stats.SKIP }}</div>
+                    <div class="profile-stat-label">Пропущено</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card shadow-sm mb-3 profile-section profile-section--projects">
+        <div class="card-header bg-transparent p-0 border-0">
+            <button class="profile-section-toggle" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#profileProjects"
+                    aria-expanded="false" aria-controls="profileProjects">
+                <span class="profile-section-heading">
+                    <span class="profile-section-title">Мои проекты</span>
+                    <span class="profile-section-count">{{ projects|length }}</span>
+                </span>
+                <span class="profile-section-chevron" aria-hidden="true">⌄</span>
+            </button>
+        </div>
+        <div class="collapse" id="profileProjects">
+            <div class="card-body pt-0 px-3 px-md-4 pb-3">
+                {% if projects %}
+                    <div class="list-group list-group-flush profile-project-list">
+                        {% for project in projects %}
+                            <a class="list-group-item list-group-item-action"
+                               href="{{ url_for('main.project_detail', project_id=project.id) }}">
+                                <span>{{ project.name }}</span>
+                                <span class="text-muted" aria-hidden="true">→</span>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted mb-0">Проектов пока нет</p>
+                {% endif %}
+            </div>
+        </div>
+    </section>
+
+    <section class="card shadow-sm mb-3 profile-section profile-section--security profile-security-card">
+        <div class="card-header bg-transparent p-0 border-0">
+            <button class="profile-section-toggle" type="button"
+                    data-bs-toggle="collapse" data-bs-target="#profileSecurityOptions"
+                    aria-expanded="false" aria-controls="profileSecurityOptions">
+                <span class="profile-section-heading">
+                    <span class="profile-section-title">Безопасность — Смена пароля УЗ</span>
+                </span>
+                <span class="profile-section-chevron" aria-hidden="true">⌄</span>
+            </button>
+        </div>
+        <div class="collapse" id="profileSecurityOptions">
+            <div class="card-body pt-0 px-3 px-md-4 pb-3">
+                <p class="text-muted small mb-3">Изменение пароля учётной записи</p>
+                <form method="post" action="{{ url_for('auth.change_password') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <label class="form-label" for="current_password">Текущий пароль</label>
+                            <input class="form-control" type="password" id="current_password" name="current_password"
+                                   autocomplete="current-password" required>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label" for="new_password">Новый пароль</label>
+                            <input class="form-control" type="password" id="new_password" name="new_password"
+                                   minlength="8" autocomplete="new-password" required>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label class="form-label" for="confirm_password">Повторите новый пароль</label>
+                            <input class="form-control" type="password" id="confirm_password" name="confirm_password"
+                                   minlength="8" autocomplete="new-password" required>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end mt-3">
+                        <button class="btn btn-outline-primary" type="submit">Изменить пароль</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <section class="card shadow-sm mb-3 profile-section profile-section--support">
+        <div class="card-body p-3 p-md-4">
+            <h5 class="card-title mb-3">Последние обращения в поддержку</h5>
+            {% if recent_tickets %}
+                <div class="list-group list-group-flush profile-ticket-list">
+                    {% for ticket in recent_tickets %}
+                        <div class="list-group-item">
+                            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+                                <span>{{ ticket.subject }}</span>
+                                <span class="badge text-bg-secondary">{{ ticket.status }}</span>
+                            </div>
+                            {% if ticket.messages and ticket.messages[-1].sender_id != current_user.id %}
+                                <div class="small text-success mt-1">💬 Есть ответ от поддержки</div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-muted mb-0">Обращений пока нет</p>
+            {% endif %}
+        </div>
+    </section>
 </div>
 {% endblock %}

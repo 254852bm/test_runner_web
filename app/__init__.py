@@ -1,4 +1,5 @@
 from flask import Flask, request
+from flask_wtf.csrf import generate_csrf
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from dotenv import load_dotenv
@@ -59,6 +60,10 @@ def create_app(test_config=None):
     app.register_blueprint(admin_bp)
 
     @app.context_processor
+    def inject_csrf_token():
+        return {'csrf_token': generate_csrf}
+
+    @app.context_processor
     def inject_admin_context():
         from flask_login import current_user
         expected = os.getenv('ADMIN_EMAIL', '').strip().lower()
@@ -72,6 +77,10 @@ def create_app(test_config=None):
 
     @app.before_request
     def reject_blocked_sessions():
+        if current_user.is_authenticated and getattr(current_user, 'is_deleted', False):
+            logout_user()
+            flash('Этот аккаунт удалён. Обратитесь к администратору.', 'danger')
+            return redirect(url_for('auth.login'))
         if current_user.is_authenticated and getattr(current_user, 'is_blocked_now', False):
             logout_user()
             flash('Доступ к аккаунту временно ограничен.', 'danger')

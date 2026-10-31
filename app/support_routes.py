@@ -38,19 +38,15 @@ support_bp = Blueprint("support", __name__, url_prefix="/support")
 def inject_support_csrf():
     return {"csrf_token": generate_csrf}
 
-
-
 def is_admin():
     admin_email = os.getenv("ADMIN_EMAIL", "").strip().lower()
     return bool(admin_email) and current_user.email.strip().lower() == admin_email
-
 
 def check_support_csrf():
     try:
         validate_csrf(request.form.get("csrf_token"))
     except ValidationError:
         abort(400, description="Недействительный CSRF-токен")
-
 
 @support_bp.route("/")
 @login_required
@@ -60,7 +56,6 @@ def index():
         query = query.filter_by(user_id=current_user.id)
     tickets = query.order_by(FeedbackTicket.updated_at.desc()).all()
     return render_template("support.html", tickets=tickets, is_admin=is_admin())
-
 
 @support_bp.route("/new", methods=["GET", "POST"])
 @login_required
@@ -73,12 +68,8 @@ def new_ticket():
         if not subject or len(subject) > 200 or not message or len(message) > 10000:
             flash("Укажите тему до 200 символов и сообщение до 10000 символов.", "danger")
             return render_template("support_new.html")
-        ticket = FeedbackTicket(
-            user_id=current_user.id,
-            subject=subject,
-            category=category if category in ("Вопрос", "Ошибка", "Предложение") else "Вопрос",
-            status="open"
-        )
+        ticket = FeedbackTicket(user_id=current_user.id, subject=subject,
+            category=category if category in ("Вопрос", "Ошибка", "Предложение") else "Вопрос", status="open")
         db.session.add(ticket)
         db.session.flush()
         db.session.add(FeedbackMessage(ticket_id=ticket.id, sender_id=current_user.id, message=message))
@@ -87,7 +78,6 @@ def new_ticket():
         flash("Обращение создано.", "success")
         return redirect(url_for("support.detail", ticket_id=ticket.id))
     return render_template("support_new.html")
-
 
 @support_bp.route("/<int:ticket_id>", methods=["GET", "POST"])
 @login_required
@@ -99,15 +89,20 @@ def detail(ticket_id):
     if request.method == "POST":
         check_support_csrf()
         message = request.form.get("message", "").strip()
-        if not message or len(message) > 10000:
-            flash("Сообщение не должно быть пустым или длиннее 10000 символов.", "danger")
+        requested_status = request.form.get("status", "")
+        if len(message) > 10000:
+            flash("Сообщение не должно быть длиннее 10000 символов.", "danger")
+        elif not admin and not message:
+            flash("Введите сообщение.", "danger")
+        elif admin and requested_status not in ("open", "closed"):
+            flash("Выберите корректный статус обращения.", "danger")
+        elif admin and not message and requested_status == ticket.status:
+            flash("Нет изменений для сохранения.", "info")
         else:
-            db.session.add(FeedbackMessage(ticket_id=ticket.id, sender_id=current_user.id, message=message))
-            if admin and request.form.get("status") in ("open", "closed"):
-                ticket.status = request.form["status"]
-            elif not admin:
-                ticket.status = "open"
+            if message:
+                db.session.add(FeedbackMessage(ticket_id=ticket.id, sender_id=current_user.id, message=message))
+            ticket.status = requested_status if admin else "open"
             db.session.commit()
-            flash("Ответ отправлен.", "success")
+            flash("Изменения сохранены." if admin else "Ответ отправлен.", "success")
             return redirect(url_for("support.detail", ticket_id=ticket.id))
     return render_template("support_detail.html", ticket=ticket, is_admin=admin)
