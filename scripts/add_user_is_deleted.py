@@ -7,6 +7,12 @@ The script never creates a database and never calls db.create_all().
 """
 import argparse
 from pathlib import Path
+import sys
+
+# Direct execution sets scripts/ as sys.path[0]; add the repository root
+# so the project package can be imported without a custom PYTHONPATH.
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from sqlalchemy.engine import URL
 
