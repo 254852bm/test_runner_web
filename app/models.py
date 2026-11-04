@@ -213,3 +213,89 @@ class AppErrorLog(db.Model):
     error_type = db.Column(db.String(120), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     user = db.relationship('User', foreign_keys=[user_id])
+
+
+class TestDataSet(db.Model):
+    """A named collection of parameter rows belonging to one test case."""
+    id = db.Column(db.Integer, primary_key=True)
+    test_case_id = db.Column(
+        db.Integer, db.ForeignKey('test_case.id'), nullable=False, index=True
+    )
+    name = db.Column(db.String(120), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    columns = db.relationship(
+        'TestDataColumn', backref='dataset', lazy=True,
+        cascade='all, delete-orphan', order_by='TestDataColumn.position'
+    )
+    rows = db.relationship(
+        'TestDataRow', backref='dataset', lazy=True,
+        cascade='all, delete-orphan', order_by='TestDataRow.position'
+    )
+
+
+class TestDataColumn(db.Model):
+    """A named variable definition in a test data set."""
+    id = db.Column(db.Integer, primary_key=True)
+    dataset_id = db.Column(
+        db.Integer, db.ForeignKey('test_data_set.id'), nullable=False, index=True
+    )
+    key = db.Column(db.String(64), nullable=False)
+    label = db.Column(db.String(120), nullable=False)
+    is_secret = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+    position = db.Column(db.Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        db.UniqueConstraint('dataset_id', 'key', name='uq_test_data_column_dataset_key'),
+    )
+
+
+class TestDataRow(db.Model):
+    """One row of values; values are JSON keyed by TestDataColumn.key.
+
+    Secret-column encryption must be implemented before secret values are accepted
+    through any UI or API. The model alone does not provide encryption.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    dataset_id = db.Column(
+        db.Integer, db.ForeignKey('test_data_set.id'), nullable=False, index=True
+    )
+    name = db.Column(db.String(120), nullable=False)
+    values_json = db.Column(db.JSON, nullable=False, default=dict)
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default='1')
+    position = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+
+class TestRunDataSnapshot(db.Model):
+    """Immutable, non-secret data snapshot attached to one historical run.
+
+    This separate table avoids altering the existing test_run table, so existing
+    production databases can gain the feature additively via create_all().
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    test_run_id = db.Column(
+        db.Integer, db.ForeignKey('test_run.id'), nullable=False, unique=True, index=True
+    )
+    dataset_id = db.Column(
+        db.Integer, db.ForeignKey('test_data_set.id', ondelete='SET NULL'), nullable=True
+    )
+    data_row_id = db.Column(
+        db.Integer, db.ForeignKey('test_data_row.id', ondelete='SET NULL'), nullable=True
+    )
+    dataset_name_snapshot = db.Column(db.String(120), nullable=False)
+    row_name_snapshot = db.Column(db.String(120), nullable=False)
+    values_snapshot_json = db.Column(db.JSON, nullable=False, default=dict)
+    snapshot_version = db.Column(db.Integer, nullable=False, default=1)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    test_run = db.relationship('TestRun', backref=db.backref(
+        'data_snapshot', uselist=False, cascade='all, delete-orphan'
+    ))
+
