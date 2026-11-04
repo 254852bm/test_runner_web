@@ -1436,10 +1436,13 @@ def export_pdf(project_id):
 
         # Parameter data labels are historical snapshots; never export raw values
         # that might later be classified as sensitive.
-        if run.data_snapshot:
+        run_data_snapshot = TestRunDataSnapshot.query.filter_by(
+            test_run_id=run.id
+        ).first()
+        if run_data_snapshot:
             snapshot_label = (
-                run.data_snapshot.dataset_name_snapshot + ' / '
-                + run.data_snapshot.row_name_snapshot
+                run_data_snapshot.dataset_name_snapshot + ' / '
+                + run_data_snapshot.row_name_snapshot
             )
             data.append([
                 Paragraph('', cell_style),
