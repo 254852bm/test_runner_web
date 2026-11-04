@@ -55,6 +55,10 @@ def _reserve_generation_slot():
     """Atomically reserve and commit one metadata-only attempt before provider I/O."""
     now = datetime.utcnow()
     cutoff = now - timedelta(hours=1)
+    retention_cutoff = now - timedelta(days=7)
+    db.session.execute(text(
+        "DELETE FROM ai_generation_attempt WHERE created_at < :retention_cutoff"
+    ), {"retention_cutoff": retention_cutoff})
     result = db.session.execute(text("""
         INSERT INTO ai_generation_attempt (user_id, created_at)
         SELECT :user_id, :created_at
