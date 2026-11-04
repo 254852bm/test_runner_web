@@ -1410,6 +1410,10 @@ def run_tests(project_id):
                     flash('Последовательный запуск уже завершён.', 'warning')
                     return redirect(url_for('main.run_stats', project_id=project.id))
 
+                # Keep the ORM object in sync with the atomic SQL update. Later
+                # completion/redirect logic reads next_index from this object.
+                data_batch.next_index = data_index + 1
+
             # Pin each run to the exact test-case snapshot that was current when it started.
             version = ensure_test_version(test)
             overall_status = step_status_summary([
