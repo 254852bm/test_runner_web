@@ -77,7 +77,17 @@ def settings():
             credential.is_enabled = True
             credential.consent_version = CONSENT_VERSION
             credential.consented_at = now
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception as error:
+            db.session.rollback()
+            current_app.logger.warning(
+                "AI credential save failed (user_id=%s, error_type=%s)",
+                current_user.id,
+                type(error).__name__,
+            )
+            flash("Не удалось сохранить ключ. Проверьте настройки и попробуйте ещё раз.", "danger")
+            return redirect(url_for("ai_credentials.settings"))
         flash("Ключ сохранён в зашифрованном виде. Проверочный запрос не выполнялся.", "success")
         return redirect(url_for("ai_credentials.settings"))
 
