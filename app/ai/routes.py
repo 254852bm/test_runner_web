@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from math import ceil
 
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
+from app import db
 from flask_login import current_user, login_required
 from flask_wtf.csrf import ValidationError, validate_csrf
 from sqlalchemy import text
