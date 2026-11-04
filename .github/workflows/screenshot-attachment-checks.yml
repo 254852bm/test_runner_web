@@ -4,6 +4,9 @@ on:
   pull_request:
     branches:
       - feature/stage4-test-management
+  push:
+    branches:
+      - fix/parameterization-delete-integrity
 
 jobs:
   syntax-and-template-checks:
