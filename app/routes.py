@@ -527,6 +527,145 @@ def create_test_data_set(project_id, test_id):
     return redirect(target)
 
 
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/columns/add', methods=['POST'])
+@login_required
+def add_test_data_column(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    key = request.form.get('column_key', '').strip()
+    label = request.form.get('column_label', '').strip()
+    is_secret = request.form.get('is_secret') == '1'
+
+    if len(dataset.columns) >= 30:
+        flash('В одном наборе можно создать не более 30 колонок.', 'danger')
+        return redirect(target)
+    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key):
+        flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
+        return redirect(target)
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
+    if re.search(sensitive_pattern, key, re.IGNORECASE) and not is_secret:
+        flash('Колонки с паролями, токенами и ключами необходимо отметить как секретные.', 'danger')
+        return redirect(target)
+    if not label or len(label) > 120:
+        flash('Укажите название колонки (до 120 символов).', 'danger')
+        return redirect(target)
+    if TestDataColumn.query.filter_by(dataset_id=dataset.id, key=key).first():
+        flash('Переменная с таким именем уже существует.', 'danger')
+        return redirect(target)
+    if is_secret:
+        try:
+            encrypt_secret_values({'_key_check': 'configured'})
+        except ValueError as error:
+            flash(str(error), 'danger')
+            return redirect(target)
+
+    db.session.add(TestDataColumn(
+        dataset_id=dataset.id, key=key, label=label,
+        position=len(dataset.columns), is_secret=is_secret
+    ))
+    db.session.commit()
+    flash('Колонка добавлена. В существующих строках её значение пока пустое.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/columns/<int:column_id>/edit', methods=['POST'])
+@login_required
+def edit_test_data_column(project_id, test_id, dataset_id, column_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    column = TestDataColumn.query.filter_by(id=column_id, dataset_id=dataset.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    new_key = request.form.get('column_key', '').strip()
+    new_label = request.form.get('column_label', '').strip()
+
+    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', new_key):
+        flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
+        return redirect(target)
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
+    if re.search(sensitive_pattern, new_key, re.IGNORECASE) and not column.is_secret:
+        flash('Колонки с паролями, токенами и ключами должны быть секретными.', 'danger')
+        return redirect(target)
+    if not new_label or len(new_label) > 120:
+        flash('Укажите название колонки (до 120 символов).', 'danger')
+        return redirect(target)
+    duplicate = TestDataColumn.query.filter(
+        TestDataColumn.dataset_id == dataset.id,
+        TestDataColumn.key == new_key,
+        TestDataColumn.id != column.id,
+    ).first()
+    if duplicate:
+        flash('Переменная с таким именем уже существует.', 'danger')
+        return redirect(target)
+
+    old_key = column.key
+    if new_key != old_key:
+        if column.is_secret:
+            try:
+                for row in dataset.rows:
+                    secret_values = decrypt_secret_values(row.encrypted_values_json)
+                    if old_key in secret_values:
+                        secret_values[new_key] = secret_values.pop(old_key)
+                        row.encrypted_values_json = encrypt_secret_values(secret_values)
+            except ValueError as error:
+                db.session.rollback()
+                flash(str(error), 'danger')
+                return redirect(target)
+        else:
+            for row in dataset.rows:
+                values = dict(row.values_json or {})
+                if old_key in values:
+                    values[new_key] = values.pop(old_key)
+                    row.values_json = values
+        column.key = new_key
+
+    column.label = new_label
+    db.session.commit()
+    flash('Колонка обновлена. История ранее выполненных запусков не меняется.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/columns/<int:column_id>/delete', methods=['POST'])
+@login_required
+def delete_test_data_column(project_id, test_id, dataset_id, column_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    column = TestDataColumn.query.filter_by(id=column_id, dataset_id=dataset.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    if len(dataset.columns) <= 1:
+        flash('В наборе должна остаться хотя бы одна колонка.', 'warning')
+        return redirect(target)
+
+    try:
+        for row in dataset.rows:
+            if column.is_secret:
+                secret_values = decrypt_secret_values(row.encrypted_values_json)
+                secret_values.pop(column.key, None)
+                row.encrypted_values_json = encrypt_secret_values(secret_values)
+            else:
+                values = dict(row.values_json or {})
+                values.pop(column.key, None)
+                row.values_json = values
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), 'danger')
+        return redirect(target)
+
+    db.session.delete(column)
+    db.session.commit()
+    flash('Колонка удалена из текущего набора. Исторические снимки запусков не изменены.', 'success')
+    return redirect(target)
+
+
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/create', methods=['POST'])
 @login_required
 def create_test_data_row(project_id, test_id, dataset_id):

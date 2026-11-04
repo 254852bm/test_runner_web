@@ -379,3 +379,89 @@ def test_api_token_secret_permission_is_opt_in_and_user_managed(app):
     with app.app_context():
         token = db.session.get(ApiToken, token_id)
         assert token.allow_secret_data is False
+
+
+def test_column_structure_edits_move_current_values_but_preserve_run_snapshots(app):
+    from app.test_data_crypto import decrypt_secret_values, encrypt_secret_values
+
+    with app.app_context():
+        user, project, case, dataset, row, step, token = _secret_case()
+        run = TestRun(
+            status="PASS", test_case_id=case.id, user_id=user.id,
+            source="manual", comment="historical",
+        )
+        db.session.add(run)
+        db.session.flush()
+        snapshot = TestRunDataSnapshot(
+            test_run_id=run.id,
+            dataset_id=dataset.id,
+            data_row_id=row.id,
+            dataset_name_snapshot=dataset.name,
+            row_name_snapshot=row.name,
+            values_snapshot_json={"login": "qa@example.test"},
+            encrypted_values_snapshot=encrypt_secret_values(
+                {"password": "secret-phrase-123"}
+            ),
+        )
+        db.session.add(snapshot)
+        db.session.flush()
+        user_id, project_id, case_id = user.id, project.id, case.id
+        dataset_id, row_id = dataset.id, row.id
+        login_column = next(column for column in dataset.columns if column.key == "login")
+        password_column = next(column for column in dataset.columns if column.key == "password")
+        base_url_column = next(column for column in dataset.columns if column.key == "base_url")
+        login_column_id, password_column_id, base_url_column_id = (
+            login_column.id, password_column.id, base_url_column.id
+        )
+        snapshot_id = snapshot.id
+        old_encrypted_snapshot = snapshot.encrypted_values_snapshot
+
+    client = app.test_client()
+    _login(client, user_id)
+
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/columns/{login_column_id}/edit",
+        data={"column_key": "username", "column_label": "User name"},
+    )
+    assert response.status_code == 302
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/columns/{password_column_id}/edit",
+        data={"column_key": "credential", "column_label": "Credential"},
+    )
+    assert response.status_code == 302
+
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/columns/add",
+        data={
+            "column_key": "expected_message",
+            "column_label": "Expected message",
+        },
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        edited_row = db.session.get(TestDataRow, row_id)
+        assert edited_row.values_json["username"] == "qa@example.test"
+        assert "login" not in edited_row.values_json
+        encrypted_values = decrypt_secret_values(edited_row.encrypted_values_json)
+        assert encrypted_values["credential"] == "secret-phrase-123"
+        assert "password" not in encrypted_values
+        snapshot = db.session.get(TestRunDataSnapshot, snapshot_id)
+        assert snapshot.values_snapshot_json == {"login": "qa@example.test"}
+        assert snapshot.encrypted_values_snapshot == old_encrypted_snapshot
+
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/columns/{base_url_column_id}/delete"
+    )
+    assert response.status_code == 302
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/columns/{password_column_id}/delete"
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        edited_row = db.session.get(TestDataRow, row_id)
+        assert "base_url" not in edited_row.values_json
+        assert decrypt_secret_values(edited_row.encrypted_values_json) == {}
+        snapshot = db.session.get(TestRunDataSnapshot, snapshot_id)
+        assert snapshot.encrypted_values_snapshot == old_encrypted_snapshot
