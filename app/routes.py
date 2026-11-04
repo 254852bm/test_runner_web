@@ -1,9 +1,10 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file, abort, current_app
 from flask_login import login_required, current_user
+import re
 from markdown import markdown
 from markdown.extensions.toc import slugify_unicode
 from app import db
-from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User
+from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User, TestDataSet, TestDataColumn, TestDataRow
 from datetime import datetime
 import secrets
 import os
@@ -453,6 +454,165 @@ def test_detail(project_id, test_id):
     return render_template('test_detail.html', project=project, test=test, steps=steps,
                            status_labels=STATUS_LABELS, current_version=current_version,
                            versions=versions)
+
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data', methods=['GET'])
+@login_required
+def test_data_sets(project_id, test_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    datasets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
+        TestDataSet.created_at.asc()
+    ).all()
+    return render_template('test_data.html', project=project, test=test, datasets=datasets)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/create', methods=['POST'])
+@login_required
+def create_test_data_set(project_id, test_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    name = request.form.get('dataset_name', '').strip()
+    keys = [value.strip() for value in request.form.getlist('column_key[]')]
+    labels = [value.strip() for value in request.form.getlist('column_label[]')]
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+
+    if not name or len(name) > 120:
+        flash('Укажите название набора данных (до 120 символов).', 'danger')
+        return redirect(target)
+    if not keys or len(keys) > 30 or len(keys) != len(labels):
+        flash('Добавьте от 1 до 30 корректных колонок.', 'danger')
+        return redirect(target)
+    if any(not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key) for key in keys):
+        flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
+        return redirect(target)
+    if len(keys) != len(set(keys)):
+        flash('Имена переменных в одном наборе должны быть уникальными.', 'danger')
+        return redirect(target)
+    if any(not label or len(label) > 120 for label in labels):
+        flash('Укажите название каждой колонки (до 120 символов).', 'danger')
+        return redirect(target)
+
+    dataset = TestDataSet(test_case_id=test.id, name=name)
+    db.session.add(dataset)
+    db.session.flush()
+    for position, (key, label) in enumerate(zip(keys, labels)):
+        db.session.add(TestDataColumn(
+            dataset_id=dataset.id, key=key, label=label,
+            position=position, is_secret=False
+        ))
+    db.session.commit()
+    flash('Набор тестовых данных создан.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/create', methods=['POST'])
+@login_required
+def create_test_data_row(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    name = request.form.get('row_name', '').strip()
+    if not name or len(name) > 120:
+        flash('Укажите название строки данных (до 120 символов).', 'danger')
+        return redirect(target)
+    if len(dataset.rows) >= 500:
+        flash('В одном наборе можно создать не более 500 строк.', 'danger')
+        return redirect(target)
+    values = {}
+    for column in dataset.columns:
+        value = request.form.get(f'value_{column.id}', '')
+        if len(value) > 10000:
+            flash(f'Значение «{column.label}» превышает 10 000 символов.', 'danger')
+            return redirect(target)
+        values[column.key] = value
+    db.session.add(TestDataRow(
+        dataset_id=dataset.id, name=name, values_json=values,
+        is_enabled=True, position=len(dataset.rows)
+    ))
+    db.session.commit()
+    flash('Строка тестовых данных добавлена.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/edit', methods=['POST'])
+@login_required
+def edit_test_data_row(project_id, test_id, dataset_id, row_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    row = TestDataRow.query.filter_by(id=row_id, dataset_id=dataset.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    name = request.form.get('row_name', '').strip()
+    if not name or len(name) > 120:
+        flash('Укажите название строки данных (до 120 символов).', 'danger')
+        return redirect(target)
+    values = {}
+    for column in dataset.columns:
+        value = request.form.get(f'value_{column.id}', '')
+        if len(value) > 10000:
+            flash(f'Значение «{column.label}» превышает 10 000 символов.', 'danger')
+            return redirect(target)
+        values[column.key] = value
+    row.name = name
+    row.values_json = values
+    db.session.commit()
+    flash('Строка тестовых данных обновлена.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/toggle', methods=['POST'])
+@login_required
+def toggle_test_data_row(project_id, test_id, dataset_id, row_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    row = TestDataRow.query.filter_by(id=row_id, dataset_id=dataset.id).first_or_404()
+    row.is_enabled = request.form.get('is_enabled') == '1'
+    db.session.commit()
+    flash('Статус строки обновлён.', 'success')
+    return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/delete', methods=['POST'])
+@login_required
+def delete_test_data_row(project_id, test_id, dataset_id, row_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    row = TestDataRow.query.filter_by(id=row_id, dataset_id=dataset.id).first_or_404()
+    db.session.delete(row)
+    db.session.commit()
+    flash('Строка удалена. Исторические результаты сохраняются.', 'success')
+    return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/delete', methods=['POST'])
+@login_required
+def delete_test_data_set(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    db.session.delete(dataset)
+    db.session.commit()
+    flash('Набор удалён. Исторические результаты и снимки данных сохраняются.', 'success')
+    return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
 
 
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/versions/<int:version_number>')
