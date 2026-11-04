@@ -347,3 +347,24 @@ class TestDataBatch(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     user = db.relationship('User', backref='test_data_batches')
+
+
+
+class AIProviderCredential(db.Model):
+    """Encrypted provider credential owned by exactly one TestRun user."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True, index=True
+    )
+    provider = db.Column(db.String(40), nullable=False)
+    encrypted_api_key = db.Column(db.Text, nullable=False)
+    folder_id = db.Column(db.String(200), nullable=False)
+    model_uri = db.Column(db.String(300), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    user = db.relationship('User', backref=db.backref(
+        'ai_provider_credential', uselist=False, cascade='all, delete-orphan'
+    ))
