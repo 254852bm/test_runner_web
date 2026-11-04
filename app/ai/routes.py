@@ -5,6 +5,8 @@ set in the server environment. Draft generation never writes to the database.
 """
 
 import os
+import re
+import secrets
 from datetime import datetime, timedelta
 from math import ceil
 
@@ -13,8 +15,9 @@ from app import db
 from flask_login import current_user, login_required
 from flask_wtf.csrf import ValidationError, validate_csrf
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
-from app.models import AICredential, AIGenerationAttempt, Project
+from app.models import AICredential, AIGenerationAttempt, AIDraftSave, Project
 from app.ai_credentials import AICredentialEncryptionError, decrypt_ai_credential
 from .provider import AIProviderError, YandexAIStudioConfig, YandexAIStudioProvider
 from .schemas import MAX_REQUIREMENT_LENGTH, MAX_STEPS, MAX_STEP_TEXT_LENGTH
@@ -203,10 +206,12 @@ def test_case_draft(project_id):
             except AIProviderError as error:
                 flash(str(error), "warning")
 
+    draft_save_token = secrets.token_hex(16) if draft is not None else None
     return render_template(
         "ai_test_case_draft.html",
         project=project,
         draft=draft,
+        draft_save_token=draft_save_token,
         requirement=requirement,
         ai_enabled=_generation_enabled(),
         ai_credential_available=ai_credential_available,
@@ -267,6 +272,11 @@ def save_ai_test_case_draft(project_id):
         flash("Предусловие слишком длинное.", "warning")
         return redirect(url_for("ai.test_case_draft", project_id=project.id))
 
+    save_token = request.form.get("draft_save_token", "")
+    if not re.fullmatch(r"[a-f0-9]{32}", save_token):
+        flash("Срок действия черновика истёк. Сгенерируйте его ещё раз.", "warning")
+        return redirect(url_for("ai.test_case_draft", project_id=project.id))
+
     test = TestCase(
         title=title,
         precondition=precondition,
@@ -275,8 +285,20 @@ def save_ai_test_case_draft(project_id):
         project_id=project.id,
     )
     try:
+        # Keep only a short-lived idempotency window; no draft content is stored here.
+        db.session.query(AIDraftSave).filter(
+            AIDraftSave.created_at < datetime.utcnow() - timedelta(days=30)
+        ).delete(synchronize_session=False)
+        reservation = AIDraftSave(
+            token=save_token,
+            user_id=current_user.id,
+            project_id=project.id,
+        )
+        db.session.add(reservation)
+        db.session.flush()
         db.session.add(test)
         db.session.flush()
+        reservation.test_case_id = test.id
         save_test_steps(
             test,
             [action for action, _ in pairs],
@@ -284,6 +306,22 @@ def save_ai_test_case_draft(project_id):
         )
         create_test_version(test)
         db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        existing = AIDraftSave.query.filter_by(
+            token=save_token,
+            user_id=current_user.id,
+            project_id=project.id,
+        ).first()
+        if existing and existing.test_case_id:
+            flash("Этот черновик уже был сохранён. Повторная копия не создана.", "info")
+            return redirect(url_for(
+                "main.test_detail",
+                project_id=project.id,
+                test_id=existing.test_case_id,
+            ))
+        flash("Не удалось подтвердить сохранение черновика. Попробуйте ещё раз.", "warning")
+        return redirect(url_for("ai.test_case_draft", project_id=project.id))
     except Exception as error:
         db.session.rollback()
         current_app.logger.warning(
