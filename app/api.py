@@ -4,6 +4,7 @@ from datetime import datetime
 from app import db
 from app.models import ApiToken, TestCase, TestRun, StepRun, TestStep, TestDataSet, TestDataRow, TestRunDataSnapshot
 from app.test_data import prepare_test_data, redact_secrets
+from app.test_data_crypto import decrypt_secret_values
 
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
