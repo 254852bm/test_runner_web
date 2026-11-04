@@ -9,6 +9,7 @@ import re
 _PLACEHOLDER_RE = re.compile(r"{{([A-Za-z_][A-Za-z0-9_]*)}}")
 _ANY_PLACEHOLDER_RE = re.compile(r"{{(.*?)}}")
 _KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_SENSITIVE_KEY_RE = re.compile(r"(password|passwd|secret|token|api[_-]?key|access[_-]?key)", re.IGNORECASE)
 
 
 def _text(value):
@@ -48,7 +49,10 @@ def prepare_test_data(test_case, dataset, row):
     if len(keys) != len(set(keys)):
         raise ValueError("В наборе есть повторяющиеся имена переменных.")
 
-    secret_keys = [column.key for column in columns if column.is_secret]
+    secret_keys = [
+        column.key for column in columns
+        if column.is_secret or _SENSITIVE_KEY_RE.search(column.key)
+    ]
     if secret_keys:
         raise ValueError(
             "В наборе есть секретные поля. Их использование станет доступно "

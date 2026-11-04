@@ -207,3 +207,22 @@ def test_data_management_page_renders_empty_state(app):
     response = client.get(f"/project/{project_id}/test/{case_id}/data")
     assert response.status_code == 200
     assert "Создать набор данных" in response.get_data(as_text=True)
+
+
+def test_route_rejects_password_like_column_name_until_encryption_exists(app):
+    with app.app_context():
+        user, project, case = _case()
+        user_id, project_id, case_id = user.id, project.id, case.id
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/create",
+        data={
+            "dataset_name": "Unsafe credentials",
+            "column_key[]": ["password"],
+            "column_label[]": ["Password"],
+        },
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert TestDataSet.query.filter_by(test_case_id=case_id).count() == 0

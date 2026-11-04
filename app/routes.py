@@ -492,6 +492,9 @@ def create_test_data_set(project_id, test_id):
     if any(not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key) for key in keys):
         flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
         return redirect(target)
+    if any(re.search(r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)', key, re.IGNORECASE) for key in keys):
+        flash('Поля с паролями, токенами и ключами пока нельзя добавлять: безопасное шифрование ещё не подключено.', 'danger')
+        return redirect(target)
     if len(keys) != len(set(keys)):
         flash('Имена переменных в одном наборе должны быть уникальными.', 'danger')
         return redirect(target)

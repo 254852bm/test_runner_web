@@ -172,3 +172,13 @@ def test_deleting_test_case_cascades_its_data_sets_and_rows(app):
         db.session.commit()
         assert db.session.get(TestDataSet, dataset_id) is None
         assert db.session.get(TestDataRow, row_id) is None
+
+
+def test_prepare_test_data_rejects_password_like_column_name(app):
+    with app.app_context():
+        case, dataset, row, columns = _objects()
+        columns[2].key = "password"
+        row.values_json = dict(row.values_json, password="plain-text-password")
+        db.session.commit()
+        with pytest.raises(ValueError, match="секретные поля"):
+            prepare_test_data(case, dataset, row)
