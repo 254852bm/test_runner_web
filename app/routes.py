@@ -12,6 +12,7 @@ import secrets
 import os
 from pathlib import Path
 from werkzeug.utils import secure_filename
+from sqlalchemy.exc import OperationalError
 
 main_bp = Blueprint('main', __name__)
 
@@ -1357,14 +1358,38 @@ def run_tests(project_id):
             if data_batch:
                 # Claim this iteration atomically. Two tabs may submit the same form;
                 # only the request that advances the expected index may create a run.
-                claimed = TestDataBatch.query.filter_by(
-                    id=data_batch.id,
-                    user_id=current_user.id,
-                    next_index=data_index,
-                ).update(
-                    {TestDataBatch.next_index: data_index + 1},
-                    synchronize_session=False,
-                )
+                try:
+                    claimed = TestDataBatch.query.filter_by(
+                        id=data_batch.id,
+                        user_id=current_user.id,
+                        next_index=data_index,
+                    ).update(
+                        {TestDataBatch.next_index: data_index + 1},
+                        synchronize_session=False,
+                    )
+                except OperationalError as error:
+                    db.session.rollback()
+                    message = str(getattr(error, 'orig', error)).lower()
+                    if 'database is locked' not in message and 'database is busy' not in message:
+                        raise
+                    current_batch = TestDataBatch.query.filter_by(
+                        token=batch_token, user_id=current_user.id,
+                        test_case_id=test.id,
+                    ).first()
+                    if current_batch:
+                        flash(
+                            'База данных занята другим запросом. Повторите сохранение: '
+                            'текущая итерация ещё не подтверждена.',
+                            'warning'
+                        )
+                        return redirect(url_for(
+                            'main.run_tests', project_id=project.id,
+                            test_id=test.id, data_set_id=current_batch.dataset_id,
+                            run_all=1, batch_id=current_batch.token,
+                            data_index=current_batch.next_index,
+                        ))
+                    flash('Последовательный запуск уже завершён.', 'warning')
+                    return redirect(url_for('main.run_stats', project_id=project.id))
                 if claimed != 1:
                     db.session.rollback()
                     current_batch = TestDataBatch.query.filter_by(
