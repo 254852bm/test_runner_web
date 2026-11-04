@@ -10,7 +10,9 @@ from flask import Blueprint, abort, current_app, flash, redirect, render_templat
 from flask_login import current_user, login_required
 from flask_wtf.csrf import ValidationError, validate_csrf
 
-from app.models import Project
+from app import db
+from app.models import AIProviderCredential, Project
+from .credentials import CredentialEncryptionError, decrypt_api_key, encrypt_api_key
 from .provider import AIProviderError, YandexAIStudioConfig, YandexAIStudioProvider
 from .schemas import MAX_REQUIREMENT_LENGTH
 from .service import generate_test_case_draft
@@ -36,16 +38,106 @@ def _owned_project(project_id):
 
 
 def _provider():
-    api_key = current_app.config.get("YANDEX_AI_API_KEY") or os.getenv("YANDEX_AI_API_KEY", "")
-    folder_id = current_app.config.get("YANDEX_AI_FOLDER_ID") or os.getenv("YANDEX_AI_FOLDER_ID", "")
-    model_uri = current_app.config.get("YANDEX_AI_MODEL_URI") or os.getenv("YANDEX_AI_MODEL_URI", "")
+    """Build a provider from the authenticated user's own encrypted credential."""
+    credential = AIProviderCredential.query.filter_by(user_id=current_user.id).first()
+    if credential is None:
+        raise AIProviderError("Сначала подключите собственный API-ключ в настройках ИИ.")
+    try:
+        api_key = decrypt_api_key(credential.encrypted_api_key)
+    except CredentialEncryptionError as error:
+        raise AIProviderError(str(error)) from error
     return YandexAIStudioProvider(YandexAIStudioConfig(
         api_key=api_key,
-        folder_id=folder_id,
-        model_uri=model_uri,
+        folder_id=credential.folder_id,
+        model_uri=credential.model_uri,
         timeout_seconds=current_app.config.get("AI_PROVIDER_TIMEOUT_SECONDS", 25),
         max_completion_tokens=current_app.config.get("AI_MAX_COMPLETION_TOKENS", 3000),
     ))
+
+
+@ai_bp.route("/settings/ai", methods=["GET", "POST"])
+@login_required
+def ai_settings():
+    credential = AIProviderCredential.query.filter_by(user_id=current_user.id).first()
+
+    if request.method == "POST":
+        try:
+            validate_csrf(request.form.get("csrf_token"))
+        except ValidationError:
+            abort(400, description="Недействительный CSRF-токен")
+
+        if request.form.get("billing_acknowledged") != "yes":
+            flash("Подтвердите, что понимаете условия оплаты провайдера.", "warning")
+            return redirect(url_for("ai.ai_settings"))
+
+        api_key = request.form.get("api_key", "").strip()
+        folder_id = request.form.get("folder_id", "").strip()
+        model_uri = request.form.get("model_uri", "").strip()
+        if not api_key or len(api_key) > 4096:
+            flash("Введите корректный API-ключ (не более 4096 символов).", "warning")
+            return redirect(url_for("ai.ai_settings"))
+        if not folder_id or len(folder_id) > 200 or not model_uri or len(model_uri) > 300:
+            flash("Проверьте Folder ID и URI модели.", "warning")
+            return redirect(url_for("ai.ai_settings"))
+
+        try:
+            encrypted_key = encrypt_api_key(api_key)
+        except (ValueError, CredentialEncryptionError) as error:
+            flash(str(error), "warning")
+            return redirect(url_for("ai.ai_settings"))
+
+        if credential is None:
+            credential = AIProviderCredential(
+                user_id=current_user.id,
+                provider="yandex_ai_studio",
+                encrypted_api_key=encrypted_key,
+                folder_id=folder_id,
+                model_uri=model_uri,
+            )
+            db.session.add(credential)
+        else:
+            credential.provider = "yandex_ai_studio"
+            credential.encrypted_api_key = encrypted_key
+            credential.folder_id = folder_id
+            credential.model_uri = model_uri
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception("Could not save AI provider credential")
+            flash("Не удалось сохранить настройки ИИ. Попробуйте позже.", "danger")
+            return redirect(url_for("ai.ai_settings"))
+
+        flash("Ключ сохранён в зашифрованном виде. Генерация не запускалась.", "success")
+        return redirect(url_for("ai.ai_settings"))
+
+    return render_template(
+        "ai_settings.html",
+        credential=credential,
+        encryption_configured=bool(
+            current_app.config.get("AI_CREDENTIAL_ENCRYPTION_KEY")
+            or os.getenv("AI_CREDENTIAL_ENCRYPTION_KEY", "")
+        ),
+    )
+
+
+@ai_bp.route("/settings/ai/delete", methods=["POST"])
+@login_required
+def delete_ai_settings():
+    try:
+        validate_csrf(request.form.get("csrf_token"))
+    except ValidationError:
+        abort(400, description="Недействительный CSRF-токен")
+
+    credential = AIProviderCredential.query.filter_by(user_id=current_user.id).first()
+    if credential is not None:
+        db.session.delete(credential)
+        db.session.commit()
+        flash("Собственный ключ ИИ удалён.", "success")
+    else:
+        flash("Подключённого ключа нет.", "info")
+    return redirect(url_for("ai.ai_settings"))
 
 
 @ai_bp.route("/project/<int:project_id>/ai-draft", methods=["GET", "POST"])
@@ -64,6 +156,8 @@ def test_case_draft(project_id):
         requirement = request.form.get("requirement", "").strip()
         if not _generation_enabled():
             flash("ИИ-помощник пока не включён администратором сервиса.", "info")
+        elif request.form.get("paid_request_confirmed") != "yes":
+            flash("Перед отправкой подтвердите, что запрос может тарифицироваться вашим провайдером.", "warning")
         else:
             try:
                 draft = generate_test_case_draft(_provider(), requirement)
@@ -79,6 +173,7 @@ def test_case_draft(project_id):
         requirement=requirement,
         ai_enabled=_generation_enabled(),
         max_requirement_length=MAX_REQUIREMENT_LENGTH,
+        has_own_ai_key=AIProviderCredential.query.filter_by(user_id=current_user.id).first() is not None,
     )
 
 
