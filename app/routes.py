@@ -1424,6 +1424,15 @@ def export_pdf(project_id):
         )
         version_label = 'v' + str(run.version.version_number) if run.version else '—'
         comment = run.comment or ''
+        run_data_snapshot = TestRunDataSnapshot.query.filter_by(
+            test_run_id=run.id
+        ).first()
+        if run_data_snapshot:
+            snapshot_label = (
+                run_data_snapshot.dataset_name_snapshot + ' / '
+                + run_data_snapshot.row_name_snapshot
+            )
+            comment = (comment + NL if comment else '') + 'Тестовые данные: ' + snapshot_label
         comment = escape(comment).replace(NL, '<br/>')
         data.append([
             Paragraph(str(idx), cell_style),
@@ -1433,25 +1442,6 @@ def export_pdf(project_id):
             Paragraph(comment, cell_style),
             Paragraph(run.timestamp.strftime('%d.%m.%Y %H:%M'), cell_style)
         ])
-
-        # Parameter data labels are historical snapshots; never export raw values
-        # that might later be classified as sensitive.
-        run_data_snapshot = TestRunDataSnapshot.query.filter_by(
-            test_run_id=run.id
-        ).first()
-        if run_data_snapshot:
-            snapshot_label = (
-                run_data_snapshot.dataset_name_snapshot + ' / '
-                + run_data_snapshot.row_name_snapshot
-            )
-            data.append([
-                Paragraph('', cell_style),
-                Paragraph('<b>Тестовые данные:</b>', cell_style),
-                Paragraph(escape(snapshot_label), cell_style),
-                Paragraph('', cell_style),
-                Paragraph('', cell_style),
-                Paragraph('', cell_style),
-            ])
 
         if run.step_runs:
             data.append([Paragraph('', cell_style), Paragraph('<b>Шаги</b>', cell_style),
