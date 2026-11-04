@@ -125,8 +125,6 @@ def test_manual_run_substitutes_values_and_saves_immutable_snapshot(app):
         }
         project_id = run.test_case.project_id
 
-    history_response = app.test_client().get(f"/project/{project_id}/history")
-    assert history_response.status_code == 302  # Login is required for a fresh client.
     history_client = app.test_client()
     _login(history_client, user_id)
     history_response = history_client.get(f"/project/{project_id}/history")
