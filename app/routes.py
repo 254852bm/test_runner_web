@@ -4,7 +4,8 @@ import re
 from markdown import markdown
 from markdown.extensions.toc import slugify_unicode
 from app import db
-from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User, TestDataSet, TestDataColumn, TestDataRow
+from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User, TestDataSet, TestDataColumn, TestDataRow, TestRunDataSnapshot
+from app.test_data import prepare_test_data
 from datetime import datetime
 import secrets
 import os
@@ -990,6 +991,11 @@ def run_tests(project_id):
         return redirect(url_for('main.projects'))
 
     selected_test_id = request.args.get('test_id', type=int)
+    data_set_id = request.args.get('data_set_id', type=int)
+    data_row_id = request.args.get('data_row_id', type=int)
+    if bool(data_set_id) != bool(data_row_id) or ((data_set_id or data_row_id) and not selected_test_id):
+        flash('Для запуска с тестовыми данными выберите тест-кейс, набор и строку.', 'danger')
+        return redirect(url_for('main.project_detail', project_id=project.id))
     if selected_test_id:
         selected_test = TestCase.query.filter_by(id=selected_test_id, project_id=project.id).first_or_404()
         tests = [selected_test]
@@ -1006,6 +1012,31 @@ def run_tests(project_id):
     current_index = max(0, min(current_index, len(tests) - 1))
     test = tests[current_index]
     steps = ensure_test_steps(test)
+    dataset = None
+    data_row = None
+    prepared_data = None
+    display_precondition = test.precondition or ''
+    display_steps = [
+        {'action': step.action, 'expected_result': step.expected_result or ''}
+        for step in steps
+    ]
+    if data_set_id and data_row_id:
+        dataset = TestDataSet.query.filter_by(
+            id=data_set_id, test_case_id=test.id
+        ).first_or_404()
+        data_row = TestDataRow.query.filter_by(
+            id=data_row_id, dataset_id=dataset.id
+        ).first_or_404()
+        if not data_row.is_enabled:
+            flash('Эта строка тестовых данных отключена.', 'warning')
+            return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
+        try:
+            prepared_data = prepare_test_data(test, dataset, data_row)
+        except ValueError as error:
+            flash(str(error), 'danger')
+            return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
+        display_precondition = prepared_data['precondition']
+        display_steps = prepared_data['steps']
 
     if request.method == 'POST':
         statuses = request.form.getlist('step_status[]')
@@ -1030,16 +1061,27 @@ def run_tests(project_id):
             )
             db.session.add(run)
             db.session.flush()
+            if prepared_data:
+                db.session.add(TestRunDataSnapshot(
+                    test_run_id=run.id,
+                    dataset_id=dataset.id,
+                    data_row_id=data_row.id,
+                    dataset_name_snapshot=prepared_data['dataset_name_snapshot'],
+                    row_name_snapshot=prepared_data['row_name_snapshot'],
+                    values_snapshot_json=prepared_data['values_snapshot'],
+                    snapshot_version=1,
+                ))
             uploaded_paths = []
             try:
                 for index, (step, status, comment) in enumerate(zip(steps, statuses, comments)):
+                    rendered_step = display_steps[index]
                     step_run = StepRun(
                         test_run_id=run.id,
                         test_step_id=step.id,
                         status=status,
                         comment=comment.strip(),
-                        step_text=step.action,
-                        expected_result=step.expected_result or ''
+                        step_text=rendered_step['action'],
+                        expected_result=rendered_step['expected_result'] or ''
                     )
                     db.session.add(step_run)
                     db.session.flush()
@@ -1101,7 +1143,8 @@ def run_tests(project_id):
                         current_app.logger.exception('Could not remove a temporary screenshot after validation failure')
                 flash(str(error), 'danger')
                 return redirect(url_for('main.run_tests', project_id=project.id,
-                                        test_id=(test.id if single_test else None), index=current_index))
+                                        test_id=(test.id if single_test else None), index=current_index,
+                                        data_set_id=data_set_id, data_row_id=data_row_id))
             except Exception:
                 db.session.rollback()
                 for file_path in uploaded_paths:
@@ -1119,9 +1162,13 @@ def run_tests(project_id):
                 return redirect(url_for('main.run_tests', project_id=project.id, index=next_index))
             return redirect(url_for('main.run_stats', project_id=project.id))
 
-    return render_template('run.html', project=project, test=test, steps=steps,
-                           current_index=current_index, total=len(tests),
-                           single_test=single_test, status_labels=STATUS_LABELS)
+    return render_template(
+        'run.html', project=project, test=test, steps=steps,
+        display_steps=display_steps, display_precondition=display_precondition,
+        dataset=dataset, data_row=data_row,
+        current_index=current_index, total=len(tests),
+        single_test=single_test, status_labels=STATUS_LABELS
+    )
 
 
 @main_bp.route('/test-step-screenshots/<int:screenshot_id>')

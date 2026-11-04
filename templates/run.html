@@ -31,14 +31,20 @@
         <div class="card">
             <div class="card-body">
                 <h5 class="card-title test-case-title">{{ test.title }}</h5>
-                {% if test.precondition %}
-                    <p class="test-case-text"><strong>Предусловие:</strong> {{ test.precondition }}</p>
+                {% if display_precondition %}
+                    <p class="test-case-text"><strong>Предусловие:</strong> {{ display_precondition }}</p>
+                {% endif %}
+                {% if dataset and data_row %}
+                    <div class="alert alert-info mt-3 mb-0">
+                        <strong>Набор данных:</strong> {{ dataset.name }} · <strong>Строка:</strong> {{ data_row.name }}
+                        <div class="small mt-1">Значения зафиксируются в истории этого прогона.</div>
+                    </div>
                 {% endif %}
             </div>
         </div>
 
-        <form method="POST" enctype="multipart/form-data" class="mt-4" action="{{ url_for('main.run_tests', project_id=project.id, index=current_index, test_id=(test.id if single_test else None)) }}">
-            {% for step in steps %}
+        <form method="POST" enctype="multipart/form-data" class="mt-4" action="{{ url_for('main.run_tests', project_id=project.id, index=current_index, test_id=(test.id if single_test else None), data_set_id=(dataset.id if dataset else None), data_row_id=(data_row.id if data_row else None)) }}">
+            {% for step in display_steps %}
             <div class="card mb-3">
                 <div class="card-body">
                     <h5 class="card-title mb-3">Шаг {{ loop.index }}</h5>

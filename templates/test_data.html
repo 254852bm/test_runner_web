@@ -54,6 +54,7 @@
     <strong>{{ row.name }}</strong>
     <div class="d-flex align-items-center gap-2">
      <span class="badge {{ 'bg-success' if row.is_enabled else 'bg-secondary' }}">{{ 'Активна' if row.is_enabled else 'Отключена' }}</span>
+     {% if row.is_enabled %}<a class="btn btn-sm btn-success" href="{{ url_for('main.run_tests', project_id=project.id, test_id=test.id, data_set_id=dataset.id, data_row_id=row.id) }}">▶ Запустить с этой строкой</a>{% endif %}
      <form method="POST" action="{{ url_for('main.toggle_test_data_row', project_id=project.id, test_id=test.id, dataset_id=dataset.id, row_id=row.id) }}"><input type="hidden" name="is_enabled" value="{{ '0' if row.is_enabled else '1' }}"><button class="btn btn-sm btn-outline-secondary" type="submit">{{ 'Отключить' if row.is_enabled else 'Включить' }}</button></form>
      <form method="POST" action="{{ url_for('main.delete_test_data_row', project_id=project.id, test_id=test.id, dataset_id=dataset.id, row_id=row.id) }}" onsubmit="return confirm('Удалить эту строку?');"><button class="btn btn-sm btn-outline-danger" type="submit">Удалить</button></form>
     </div>
