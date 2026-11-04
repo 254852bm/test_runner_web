@@ -5,6 +5,10 @@ on:
     branches:
       - feature/stage4-test-management
       - feature/test-data-parameterization
+      - integration/parameterization-integrity
+  push:
+    branches:
+      - integration/parameterization-integrity
 
 jobs:
   syntax-and-template-checks:
