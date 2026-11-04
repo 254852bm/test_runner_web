@@ -6,6 +6,7 @@ on:
       - feature/test-data-parameterization
       - feature/stage4-test-management
       - feature/ai-test-case-drafts
+      - integration/parameterization-integrity
 
 jobs:
   ai-draft-checks:
