@@ -106,7 +106,9 @@ def test_manual_run_never_persists_decrypted_secret_in_history(app):
     response = client.get(url)
     assert response.status_code == 200
     page = response.get_data(as_text=True)
-    assert "secret-phrase-123" in page
+    # Secret is present only in the dedicated password input, never in step text.
+    assert page.count("secret-phrase-123") == 1
+    assert 'type="password" value="secret-phrase-123"' in page
     assert "qa@example.test" in page
 
     response = client.post(

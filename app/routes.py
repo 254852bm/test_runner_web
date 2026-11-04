@@ -1130,6 +1130,7 @@ def run_tests(project_id):
     dataset = None
     data_row = None
     prepared_data = None
+    secret_fields = []
     display_precondition = test.precondition or ''
     display_steps = [
         {'action': step.action, 'expected_result': step.expected_result or ''}
@@ -1150,8 +1151,20 @@ def run_tests(project_id):
         except ValueError as error:
             flash(str(error), 'danger')
             return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
-        display_precondition = prepared_data['precondition']
-        display_steps = prepared_data['steps']
+        # Keep secrets out of instructional text; expose them only in
+        # dedicated password controls that are visually masked by default.
+        display_precondition = redact_secrets(
+            prepared_data['precondition'], prepared_data
+        )
+        display_steps = prepared_data['redacted_steps']
+        secret_fields = [
+            {
+                'label': column.label,
+                'key': column.key,
+                'value': prepared_data['secret_values'].get(column.key, ''),
+            }
+            for column in dataset.columns if column.is_secret
+        ]
 
     if request.method == 'POST':
         statuses = request.form.getlist('step_status[]')
@@ -1301,6 +1314,7 @@ def run_tests(project_id):
         'run.html', project=project, test=test, steps=steps,
         display_steps=display_steps, display_precondition=display_precondition,
         dataset=dataset, data_row=data_row, data_batch=data_batch, data_index=data_index,
+        secret_fields=secret_fields,
         current_index=current_index, total=len(tests),
         single_test=single_test, status_labels=STATUS_LABELS
     )

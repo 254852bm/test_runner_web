@@ -41,6 +41,21 @@
                         <div class="small mt-1">Значения зафиксируются в истории этого прогона.</div>
                     </div>
                 {% endif %}
+                {% if secret_fields %}
+                    <div class="border rounded p-3 mt-3">
+                        <strong>Секретные значения</strong>
+                        <div class="small text-muted mb-2">Они скрыты по умолчанию и не показываются в тексте шагов.</div>
+                        {% for field in secret_fields %}
+                            <div class="mb-2">
+                                <label class="form-label small">{{ field.label }} <code>{{ '{{' ~ field.key ~ '}}' }}</code></label>
+                                <div class="input-group">
+                                    <input class="form-control secret-run-value" type="password" value="{{ field.value }}" readonly autocomplete="off">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="toggleSecretRunValue(this)">Показать</button>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endif %}
             </div>
         </div>
 
@@ -92,4 +107,12 @@
         </form>
     </div>
 </div>
+<script>
+function toggleSecretRunValue(button) {
+    const input = button.parentElement.querySelector('.secret-run-value');
+    const reveal = input.type === 'password';
+    input.type = reveal ? 'text' : 'password';
+    button.textContent = reveal ? 'Скрыть' : 'Показать';
+}
+</script>
 {% endblock %}
