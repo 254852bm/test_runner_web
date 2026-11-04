@@ -280,7 +280,10 @@ class TestDataRow(db.Model):
         db.Integer, db.ForeignKey('test_data_set.id'), nullable=False, index=True
     )
     name = db.Column(db.String(120), nullable=False)
+    # Ordinary values stay in JSON. Secret values must be stored only in this
+    # authenticated-encryption payload; never put plaintext secrets in values_json.
     values_json = db.Column(db.JSON, nullable=False, default=dict)
+    encrypted_values_json = db.Column(db.Text, nullable=True)
     is_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default='1')
     position = db.Column(db.Integer, nullable=False, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -311,6 +314,9 @@ class TestRunDataSnapshot(db.Model):
     dataset_name_snapshot = db.Column(db.String(120), nullable=False)
     row_name_snapshot = db.Column(db.String(120), nullable=False)
     values_snapshot_json = db.Column(db.JSON, nullable=False, default=dict)
+    # Secret snapshot is encrypted independently so history remains immutable
+    # without exposing credentials in ordinary JSON columns.
+    encrypted_values_snapshot = db.Column(db.Text, nullable=True)
     snapshot_version = db.Column(db.Integer, nullable=False, default=1)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
