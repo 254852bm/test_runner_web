@@ -138,10 +138,10 @@ def validate_test_case_draft(payload):
         })
 
     test_type = payload["test_type"]
-    if test_type not in {"positive", "negative", "boundary"}:
+    if not isinstance(test_type, str) or test_type not in {"positive", "negative", "boundary"}:
         raise ValueError("Неизвестный тип тест-кейса.")
     priority = payload["priority"]
-    if priority not in {"low", "medium", "high"}:
+    if not isinstance(priority, str) or priority not in {"low", "medium", "high"}:
         raise ValueError("Неизвестный приоритет тест-кейса.")
 
     return {
