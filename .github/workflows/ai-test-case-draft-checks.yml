@@ -8,6 +8,10 @@ on:
       - feature/ai-test-case-drafts
       - integration/parameterization-integrity
 
+  push:
+    branches:
+      - integration/ai-provider-mvp
+
 jobs:
   ai-draft-checks:
     runs-on: ubuntu-latest
