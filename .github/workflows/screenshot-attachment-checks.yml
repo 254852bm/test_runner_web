@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - feature/stage4-test-management
+      - feature/test-data-parameterization
   push:
     branches:
       - fix/parameterization-delete-integrity
