@@ -49,7 +49,7 @@
                 {% endif %}
             </div>
 
-            <form method="POST" action="{{ url_for('main.create_test', project_id=project.id) }}" id="aiDraftSaveForm">
+            <form method="POST" action="{{ url_for('ai.save_ai_test_case_draft', project_id=project.id) }}" id="aiDraftSaveForm">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="card mb-3">
                     <div class="card-body">
