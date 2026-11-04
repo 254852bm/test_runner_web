@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file, abort, current_app
+from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file, abort, current_app, jsonify
 from flask_login import login_required, current_user
 import re
 from markdown import markdown
@@ -1199,6 +1199,40 @@ def delete_test(project_id, test_id):
     return redirect(url_for('main.project_detail', project_id=project.id))
 
 
+@main_bp.route(
+    '/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/secrets/<int:column_id>',
+    methods=['POST']
+)
+@login_required
+def reveal_run_secret(project_id, test_id, dataset_id, row_id, column_id):
+    """Reveal one secret only after an explicit, authenticated user action."""
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first_or_404()
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    row = TestDataRow.query.filter_by(id=row_id, dataset_id=dataset.id).first_or_404()
+    column = TestDataColumn.query.filter_by(
+        id=column_id, dataset_id=dataset.id, is_secret=True
+    ).first_or_404()
+
+    try:
+        values = decrypt_secret_values(row.encrypted_values_json)
+    except ValueError:
+        current_app.logger.warning(
+            'Secret reveal unavailable for user_id=%s project_id=%s dataset_id=%s column_id=%s',
+            current_user.id, project.id, dataset.id, column.id,
+        )
+        return jsonify({'error': 'Секретное значение временно недоступно.'}), 503
+
+    if column.key not in values:
+        return jsonify({'error': 'Секретное значение не найдено.'}), 404
+
+    response = jsonify({'value': values[column.key]})
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Vary'] = 'Cookie'
+    return response
+
+
 @main_bp.route('/project/<int:project_id>/run', methods=['GET', 'POST'])
 @login_required
 def run_tests(project_id):
@@ -1331,8 +1365,8 @@ def run_tests(project_id):
         except ValueError as error:
             flash(str(error), 'danger')
             return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
-        # Keep secrets out of instructional text; expose them only in
-        # dedicated password controls that are visually masked by default.
+        # Decrypted secrets are used server-side for substitution and snapshots,
+        # but are never rendered into the initial HTML response.
         display_precondition = redact_secrets(
             prepared_data['precondition'], prepared_data
         )
@@ -1341,7 +1375,15 @@ def run_tests(project_id):
             {
                 'label': column.label,
                 'key': column.key,
-                'value': prepared_data['secret_values'].get(column.key, ''),
+                'column_id': column.id,
+                'reveal_url': url_for(
+                    'main.reveal_run_secret',
+                    project_id=project.id,
+                    test_id=test.id,
+                    dataset_id=dataset.id,
+                    row_id=data_row.id,
+                    column_id=column.id,
+                ),
             }
             for column in dataset.columns if column.is_secret
         ]
