@@ -1307,7 +1307,21 @@ def run_tests(project_id):
         ).first_or_404()
         data_row = TestDataRow.query.filter_by(
             id=data_row_id, dataset_id=dataset.id
-        ).first_or_404()
+        ).first()
+        if data_row is None and data_batch:
+            # A row can be deleted in another tab after the batch was created.
+            # Stop cleanly instead of returning a 404 and leaving a stale batch.
+            db.session.delete(data_batch)
+            db.session.commit()
+            flash(
+                'Последовательный запуск остановлен: одна из строк тестовых данных была удалена.',
+                'warning'
+            )
+            return redirect(url_for(
+                'main.test_data_sets', project_id=project.id, test_id=test.id
+            ))
+        if data_row is None:
+            abort(404)
         if not data_row.is_enabled and not data_batch:
             flash('Эта строка тестовых данных отключена.', 'warning')
             return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
