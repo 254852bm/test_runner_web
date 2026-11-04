@@ -13,7 +13,7 @@ from flask_wtf.csrf import ValidationError, validate_csrf
 from app.models import AICredential, Project
 from app.ai_credentials import AICredentialEncryptionError, decrypt_ai_credential
 from .provider import AIProviderError, YandexAIStudioConfig, YandexAIStudioProvider
-from .schemas import MAX_REQUIREMENT_LENGTH
+from .schemas import MAX_REQUIREMENT_LENGTH, MAX_STEPS, MAX_STEP_TEXT_LENGTH
 from .service import generate_test_case_draft
 
 
@@ -129,18 +129,29 @@ def save_ai_test_case_draft(project_id):
     precondition = request.form.get("precondition", "").strip()
     actions = request.form.getlist("step_action[]")
     expected_results = request.form.getlist("step_expected[]")
-    pairs = [
-        (action.strip(), expected.strip())
-        for action, expected in zip(actions, expected_results)
-        if action and action.strip()
-    ]
 
-    if not title or len(title) > 200 or not pairs or len(pairs) > 30:
-        flash("Проверьте название и шаги тест-кейса. Нужен хотя бы один шаг.", "warning")
+    if len(actions) != len(expected_results):
+        flash("Не удалось проверить шаги: действия и ожидаемые результаты не совпадают.", "warning")
         return redirect(url_for("ai.test_case_draft", project_id=project.id))
 
-    if any(len(action) > 1000 or len(expected) > 1000 for action, expected in pairs):
-        flash("Текст одного шага не должен превышать 1000 символов.", "warning")
+    if not 1 <= len(actions) <= MAX_STEPS:
+        flash(f"Тест-кейс должен содержать от 1 до {MAX_STEPS} шагов.", "warning")
+        return redirect(url_for("ai.test_case_draft", project_id=project.id))
+
+    pairs = []
+    for index, (action, expected) in enumerate(zip(actions, expected_results), start=1):
+        action = action.strip()
+        expected = expected.strip()
+        if not action:
+            flash(f"Заполните действие в шаге {index}.", "warning")
+            return redirect(url_for("ai.test_case_draft", project_id=project.id))
+        if len(action) > MAX_STEP_TEXT_LENGTH or len(expected) > MAX_STEP_TEXT_LENGTH:
+            flash(f"Текст действия и ожидаемого результата в шаге {index} не должен превышать {MAX_STEP_TEXT_LENGTH} символов.", "warning")
+            return redirect(url_for("ai.test_case_draft", project_id=project.id))
+        pairs.append((action, expected))
+
+    if not title or len(title) > 200:
+        flash("Название тест-кейса обязательно и не должно превышать 200 символов.", "warning")
         return redirect(url_for("ai.test_case_draft", project_id=project.id))
 
     if len(precondition) > 5000:
@@ -164,9 +175,14 @@ def save_ai_test_case_draft(project_id):
         )
         create_test_version(test)
         db.session.commit()
-    except Exception:
+    except Exception as error:
         db.session.rollback()
-        current_app.logger.exception("Could not save reviewed AI test case draft")
+        current_app.logger.warning(
+            "AI draft save failed (project_id=%s, user_id=%s, error_type=%s)",
+            project.id,
+            current_user.id,
+            type(error).__name__,
+        )
         flash("Не удалось сохранить тест-кейс. Попробуйте ещё раз.", "danger")
         return redirect(url_for("ai.test_case_draft", project_id=project.id))
 
