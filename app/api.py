@@ -1,7 +1,8 @@
 from flask import Blueprint, request, jsonify
+import re
 from datetime import datetime
 from app import db
-from app.models import ApiToken, TestCase, TestRun, StepRun, TestStep
+from app.models import ApiToken, TestCase, TestRun, StepRun, TestStep, TestDataSet, TestDataRow
 
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -25,6 +26,115 @@ def _get_user_by_token(token):
     api_token.last_used_at = datetime.utcnow()
     db.session.commit()
     return user
+
+
+
+_SENSITIVE_KEY_RE = re.compile(
+    r"(password|passwd|secret|token|api[_-]?key|access[_-]?key)", re.IGNORECASE
+)
+
+
+def _get_user_from_request():
+    """Authenticate GET API requests without putting tokens in URLs."""
+    authorization = (request.headers.get('Authorization') or '').strip()
+    token = ''
+    if authorization.lower().startswith('bearer '):
+        token = authorization[7:].strip()
+    if not token:
+        token = (request.headers.get('X-API-Token') or '').strip()
+    return _get_user_by_token(token)
+
+
+def _owns_test_case(user, test_case):
+    return bool(
+        user and test_case and test_case.project
+        and test_case.project.user_id == user.id
+    )
+
+
+@api_bp.route('/test-cases/<int:test_case_id>/data-sets', methods=['GET'])
+def api_test_case_data_sets(test_case_id):
+    """List data sets and variable metadata for an owned test case."""
+    user = _get_user_from_request()
+    if not user:
+        return _error('Неверный или отсутствующий API-токен', 401)
+
+    test_case = TestCase.query.get(test_case_id)
+    if not test_case:
+        return _error('Тест-кейс не найден', 404)
+    if not _owns_test_case(user, test_case):
+        return _error('Доступ запрещён', 403)
+
+    datasets = TestDataSet.query.filter_by(test_case_id=test_case.id).order_by(
+        TestDataSet.id.asc()
+    ).all()
+    return jsonify({
+        "ok": True,
+        "test_case_id": test_case.id,
+        "data_sets": [
+            {
+                "id": dataset.id,
+                "name": dataset.name,
+                "columns": [
+                    {
+                        "key": column.key,
+                        "label": column.label,
+                        "is_secret": bool(
+                            column.is_secret or _SENSITIVE_KEY_RE.search(column.key or '')
+                        ),
+                    }
+                    for column in dataset.columns
+                ],
+                "active_rows_count": sum(1 for row in dataset.rows if row.is_enabled),
+            }
+            for dataset in datasets
+        ],
+    })
+
+
+@api_bp.route('/data-sets/<int:dataset_id>/rows', methods=['GET'])
+def api_data_set_rows(dataset_id):
+    """Return active rows with ordinary values only; never expose secret-like columns."""
+    user = _get_user_from_request()
+    if not user:
+        return _error('Неверный или отсутствующий API-токен', 401)
+
+    dataset = TestDataSet.query.get(dataset_id)
+    if not dataset:
+        return _error('Набор данных не найден', 404)
+    test_case = TestCase.query.get(dataset.test_case_id)
+    if not _owns_test_case(user, test_case):
+        return _error('Доступ запрещён', 403)
+
+    safe_columns = [
+        column for column in dataset.columns
+        if not column.is_secret and not _SENSITIVE_KEY_RE.search(column.key or '')
+    ]
+    rows = TestDataRow.query.filter_by(
+        dataset_id=dataset.id, is_enabled=True
+    ).order_by(TestDataRow.position.asc(), TestDataRow.id.asc()).all()
+
+    return jsonify({
+        "ok": True,
+        "data_set_id": dataset.id,
+        "test_case_id": test_case.id,
+        "data_set_name": dataset.name,
+        "columns": [
+            {"key": column.key, "label": column.label}
+            for column in safe_columns
+        ],
+        "rows": [
+            {
+                "id": row.id,
+                "name": row.name,
+                "values": {
+                    column.key: (row.values_json or {}).get(column.key, "")
+                    for column in safe_columns
+                },
+            }
+            for row in rows
+        ],
+    })
 
 
 @api_bp.route('/run', methods=['POST'])
