@@ -122,12 +122,28 @@
 (function () {
     const container = document.getElementById('ai-draft-steps');
     const addButton = document.getElementById('add-ai-step');
+    const saveForm = document.getElementById('aiDraftSaveForm');
+    const saveButton = saveForm.querySelector('button[type="submit"]');
+    const maxSteps = 30;
 
     function renumber() {
-        container.querySelectorAll('.ai-draft-step').forEach((card, index) => {
+        const cards = container.querySelectorAll('.ai-draft-step');
+        cards.forEach((card, index) => {
             card.querySelector('strong').textContent = 'Шаг ' + (index + 1);
         });
+        addButton.disabled = cards.length >= maxSteps;
+        addButton.title = cards.length >= maxSteps
+            ? 'Максимум ' + maxSteps + ' шагов'
+            : '';
     }
+
+    // Prevent accidental double-clicks while the first save request is in flight.
+    saveForm.addEventListener('submit', function () {
+        if (saveForm.dataset.submitting === 'true') return;
+        saveForm.dataset.submitting = 'true';
+        saveButton.disabled = true;
+        saveButton.textContent = 'Сохранение…';
+    });
 
     container.addEventListener('click', function (event) {
         const button = event.target.closest('.remove-ai-step');
@@ -141,6 +157,10 @@
     });
 
     addButton.addEventListener('click', function () {
+        if (container.querySelectorAll('.ai-draft-step').length >= maxSteps) {
+            renumber();
+            return;
+        }
         const card = document.createElement('div');
         card.className = 'card mb-3 ai-draft-step';
         card.innerHTML = '<div class="card-body">' +
