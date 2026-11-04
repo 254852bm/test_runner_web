@@ -44,7 +44,8 @@ def settings():
             abort(400)
 
         provider = request.form.get("provider", "")
-        api_key = request.form.get("api_key", "")\n        folder_id = request.form.get("folder_id", "")
+        api_key = request.form.get("api_key", "")
+        folder_id = request.form.get("folder_id", "")
         if request.form.get("consent_version") != CONSENT_VERSION:
             flash("Перед сохранением ключа необходимо подтвердить условия использования.", "warning")
             return redirect(url_for("ai_credentials.settings"))
