@@ -275,3 +275,60 @@ def test_provider_uses_only_current_users_encrypted_credential(client, app, monk
         "folder_id": "user-folder",
         "model_uri": "gpt://test-model",
     }
+
+
+def test_reviewed_draft_save_rejects_mismatched_step_arrays(client, app, monkeypatch):
+    _login(client, app)
+    import app.ai.routes as ai_routes
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
+    response = client.post(
+        f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft/save",
+        data={
+            "csrf_token": "test-token",
+            "title": "Несогласованные шаги",
+            "step_action[]": ["Первое действие", "Второе действие"],
+            "step_expected[]": ["Только один результат"],
+        },
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert TestCase.query.count() == 0
+        assert TestCaseVersion.query.count() == 0
+
+
+def test_reviewed_draft_save_rejects_blank_action(client, app, monkeypatch):
+    _login(client, app)
+    import app.ai.routes as ai_routes
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
+    response = client.post(
+        f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft/save",
+        data={
+            "csrf_token": "test-token",
+            "title": "Пустое действие",
+            "step_action[]": ["   "],
+            "step_expected[]": ["Ожидаемый результат"],
+        },
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert TestCase.query.count() == 0
+        assert TestCaseVersion.query.count() == 0
+
+
+def test_reviewed_draft_save_rejects_more_than_30_steps(client, app, monkeypatch):
+    _login(client, app)
+    import app.ai.routes as ai_routes
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
+    response = client.post(
+        f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft/save",
+        data={
+            "csrf_token": "test-token",
+            "title": "Слишком много шагов",
+            "step_action[]": [f"Действие {i}" for i in range(31)],
+            "step_expected[]": [f"Результат {i}" for i in range(31)],
+        },
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert TestCase.query.count() == 0
+        assert TestCaseVersion.query.count() == 0
