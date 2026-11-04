@@ -154,3 +154,21 @@ def test_prepare_test_data_does_not_evaluate_template_expressions(app):
         assert result["steps"][0]["action"] == (
             "Enter <script>alert(1)</script> and not-secret-in-this-test"
         )
+
+
+def test_prepare_test_data_rejects_malformed_placeholder(app):
+    with app.app_context():
+        case, dataset, row, columns = _objects()
+        case.precondition = "Open {{base url}}"
+        with pytest.raises(ValueError, match="Некорректный формат переменной"):
+            prepare_test_data(case, dataset, row)
+
+
+def test_deleting_test_case_cascades_its_data_sets_and_rows(app):
+    with app.app_context():
+        case, dataset, row, columns = _objects()
+        case_id, dataset_id, row_id = case.id, dataset.id, row.id
+        db.session.delete(case)
+        db.session.commit()
+        assert db.session.get(TestDataSet, dataset_id) is None
+        assert db.session.get(TestDataRow, row_id) is None

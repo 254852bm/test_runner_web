@@ -55,6 +55,11 @@ class TestCase(db.Model):
         cascade='all, delete-orphan'
     )
 
+    data_sets = db.relationship(
+        'TestDataSet', backref='test_case', lazy=True,
+        cascade='all, delete-orphan'
+    )
+
 
 class TestCaseVersion(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -235,6 +240,9 @@ class TestDataSet(db.Model):
         'TestDataRow', backref='dataset', lazy=True,
         cascade='all, delete-orphan', order_by='TestDataRow.position'
     )
+    run_snapshots = db.relationship(
+        'TestRunDataSnapshot', backref='dataset', lazy=True
+    )
 
 
 class TestDataColumn(db.Model):
@@ -270,6 +278,9 @@ class TestDataRow(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+    run_snapshots = db.relationship(
+        'TestRunDataSnapshot', backref='data_row', lazy=True
     )
 
 

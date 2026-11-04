@@ -7,6 +7,8 @@ import re
 
 
 _PLACEHOLDER_RE = re.compile(r"{{([A-Za-z_][A-Za-z0-9_]*)}}")
+_ANY_PLACEHOLDER_RE = re.compile(r"{{(.*?)}}")
+_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 
 def _text(value):
@@ -41,6 +43,8 @@ def prepare_test_data(test_case, dataset, row):
 
     columns = list(dataset.columns)
     keys = [column.key for column in columns]
+    if any(not isinstance(key, str) or not _KEY_RE.fullmatch(key) for key in keys):
+        raise ValueError("Некорректное имя переменной в наборе данных.")
     if len(keys) != len(set(keys)):
         raise ValueError("В наборе есть повторяющиеся имена переменных.")
 
@@ -70,6 +74,9 @@ def prepare_test_data(test_case, dataset, row):
 
     used_keys = set()
     for source in source_texts:
+        for match in _ANY_PLACEHOLDER_RE.finditer(source or ""):
+            if not _KEY_RE.fullmatch(match.group(1)):
+                raise ValueError("Некорректный формат переменной. Используйте {{variable_name}}.")
         used_keys.update(_placeholders(source))
 
     unknown_placeholders = used_keys - allowed_keys
