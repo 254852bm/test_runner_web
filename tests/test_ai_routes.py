@@ -86,7 +86,7 @@ def test_disabled_generation_does_not_call_provider_or_write_to_database(client,
     monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
     response = client.post(
         f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft",
-        data={"csrf_token": "test-token", "requirement": "Проверить авторизацию"},
+        data={"csrf_token": "test-token", "requirement": "Проверить авторизацию", "paid_request_confirm": "accepted"},
     )
 
     assert response.status_code == 200
