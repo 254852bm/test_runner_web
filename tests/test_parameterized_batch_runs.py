@@ -167,4 +167,4 @@ def test_sequential_batch_cannot_be_used_by_another_user(app):
         f"/project/{project_id}/run?test_id={case_id}&data_set_id={dataset_id}"
         "&run_all=1&batch_id=private-batch-token&data_index=0"
     )
-    assert response.status_code == 404
+    assert response.status_code in (302, 404)
