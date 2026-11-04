@@ -47,7 +47,7 @@ The models are additive, but the existing application database is not modified a
 python scripts/add_ai_credential_table.py --database /absolute/path/to/test_runner.db
 ```
 
-The script refuses to create a missing database, verifies the existing `user` table, and creates only `ai_credential` and `ai_generation_attempt`. The latter stores only user ID and timestamp, not requirement text, response text, keys, or other content. Do not run this against production as part of this change.
+The script refuses to create a missing database, verifies the existing `user` table, and creates only `ai_credential`, `ai_generation_attempt`, and `ai_draft_save`. The generation-attempt table stores only user ID and timestamp, not requirement text, response text, keys, or other content. The draft-save table stores a random one-time token, owner/project IDs, the resulting test-case ID, and a timestamp; it stores no draft text and prevents duplicate creation if the save form is submitted twice. Old idempotency records are pruned after 30 days. Do not run this against production as part of this change.
 
 
 ## Request limits and cost estimate
