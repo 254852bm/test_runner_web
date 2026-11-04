@@ -1354,6 +1354,37 @@ def run_tests(project_id):
         elif any(status not in STATUS_LABELS for status in statuses):
             flash('Некорректный статус шага', 'danger')
         else:
+            if data_batch:
+                # Claim this iteration atomically. Two tabs may submit the same form;
+                # only the request that advances the expected index may create a run.
+                claimed = TestDataBatch.query.filter_by(
+                    id=data_batch.id,
+                    user_id=current_user.id,
+                    next_index=data_index,
+                ).update(
+                    {TestDataBatch.next_index: data_index + 1},
+                    synchronize_session=False,
+                )
+                if claimed != 1:
+                    db.session.rollback()
+                    current_batch = TestDataBatch.query.filter_by(
+                        token=batch_token, user_id=current_user.id,
+                        test_case_id=test.id,
+                    ).first()
+                    if current_batch:
+                        flash(
+                            'Эта итерация уже была сохранена. Продолжите со следующей.',
+                            'warning'
+                        )
+                        return redirect(url_for(
+                            'main.run_tests', project_id=project.id,
+                            test_id=test.id, data_set_id=current_batch.dataset_id,
+                            run_all=1, batch_id=current_batch.token,
+                            data_index=current_batch.next_index,
+                        ))
+                    flash('Последовательный запуск уже завершён.', 'warning')
+                    return redirect(url_for('main.run_stats', project_id=project.id))
+
             # Pin each run to the exact test-case snapshot that was current when it started.
             version = ensure_test_version(test)
             overall_status = step_status_summary([
@@ -1441,8 +1472,6 @@ def run_tests(project_id):
                             size_bytes=len(data)
                         ))
 
-                if data_batch:
-                    data_batch.next_index += 1
                 db.session.commit()
             except ValueError as error:
                 db.session.rollback()
