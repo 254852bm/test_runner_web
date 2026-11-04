@@ -120,7 +120,13 @@ def test_manual_run_never_persists_decrypted_secret_in_history(app):
         secret_column_id = TestDataColumn.query.filter_by(
             dataset_id=dataset_id, key="password"
         ).one().id
-    reveal_response = client.post(reveal_url + str(secret_column_id))
+    import re
+    csrf_match = re.search(r'data-csrf-token="([^"]+)"', page)
+    assert csrf_match, "CSRF token must be present for the explicit reveal action"
+    reveal_response = client.post(
+        reveal_url + str(secret_column_id),
+        headers={"X-CSRFToken": csrf_match.group(1)},
+    )
     assert reveal_response.status_code == 200
     assert reveal_response.get_json()["value"] == "secret-phrase-123"
     assert reveal_response.headers["Cache-Control"].startswith("no-store")
