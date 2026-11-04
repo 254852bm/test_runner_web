@@ -176,3 +176,18 @@ def test_provider_config_hides_api_key_from_repr():
     )
 
     assert "do-not-display-this" not in repr(config)
+
+
+
+@pytest.mark.parametrize("field,value", [
+    ("test_type", []),
+    ("test_type", {}),
+    ("priority", []),
+    ("priority", {}),
+])
+def test_validator_rejects_unhashable_enum_values_as_validation_errors(field, value):
+    payload = valid_draft()
+    payload[field] = value
+
+    with pytest.raises(ValueError):
+        validate_test_case_draft(payload)
