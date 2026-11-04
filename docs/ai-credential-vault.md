@@ -1,8 +1,14 @@
 # BYOK credential vault — implementation notes
 
+## Product and billing model
+
+AI assistance is an optional add-on. The standard TestRun subscription does not include an AI allowance and is not increased to cover AI usage. A customer who wants generation connects their own provider account and pays that provider directly under the provider's tariff. Customers who do not need AI can use TestRun without connecting a key.
+
+TestRun must not make automatic payments to an AI provider on behalf of a customer, pool customer usage under a shared provider account, or trigger a billable request merely because a key is saved. Before each generation request, the user must explicitly confirm that the provider may charge their own account. A future TestRun-managed AI package would require a separate product and cost decision.
+
 ## Scope
 
-This change adds a user-owned credential record and a settings page for the first supported provider, Yandex AI Studio. It does not call Yandex, validate a key against the provider, or enable AI generation. Saving a credential is not a billable provider request.
+This change adds a user-owned credential record and a settings page for the first supported provider, Yandex AI Studio. Saving a credential does not call Yandex, validate a key against the provider, generate content, or incur provider usage. The generation route can use the current user's enabled credential only when the AI feature flag is enabled and the user confirms the possible provider charge for that individual request.
 
 ## Storage and isolation
 
@@ -14,6 +20,8 @@ This change adds a user-owned credential record and a settings page for the firs
 - The browser receives neither the stored ciphertext nor the decrypted credential. The key field is never repopulated after save.
 - The key is never included in a URL or application log by these routes.
 - Saving requires explicit acknowledgement of potential provider charges and consent to encrypted storage. It does not run a connection test.
+- Disabling a credential prevents generation while retaining the encrypted value; deleting removes the user's credential record.
+- Every generation request requires a separate explicit payment confirmation. Without it, the provider must not be called.
 
 ## Server configuration
 
@@ -29,6 +37,8 @@ Set the resulting value as `AI_CREDENTIAL_ENCRYPTION_KEY` in the server's secret
 
 When the encryption key is missing or invalid, credential saving fails closed. This is intentional.
 
+The first adapter currently targets Yandex AI Studio. Its model URI is server configuration; the customer's API key and folder ID are taken from that customer's encrypted credential. The service layer accepts a provider object, so provider-specific transport can be extended behind the same generation/validation interface. A local model or a separately hosted inference service is not yet implemented and must not be pointed at the production VPS with its current 2 GB RAM.
+
 ## Database setup
 
 The model is additive, but the existing application database is not modified automatically by this feature branch. First back up an isolated TEST database, then run:
@@ -41,19 +51,18 @@ The script refuses to create a missing database, verifies the existing `user` ta
 
 ## Not implemented yet
 
-- No provider request, key validation, or billable operation.
-- No per-request confirmation UI; this must be implemented before any provider call is connected.
-- No usage/token/cost reporting.
-- No second provider or multi-key support.
-- No automatic credential migration or key rotation.
-- No deletion/retention policy beyond the user's explicit delete action.
+- A local Ollama adapter and a separately hosted model endpoint.
+- A second customer-selectable provider or multi-key support.
+- Reliable per-user token/cost reporting; this should be shown only when the provider returns trustworthy usage data.
+- Automatic credential migration or key rotation.
+- A TestRun-billed AI package. That is a separate future commercial decision.
 
-## Required checks before enabling requests
+## Required checks before enabling production requests
 
 1. Verify the provider contract, data processing terms, model, and current tariff.
 2. Configure and back up the dedicated encryption key.
 3. Apply the additive table creation to an isolated test database.
-4. Add provider resolution that decrypts only the current user's credential.
-5. Add an explicit per-request cost/consent confirmation before any outbound call.
-6. Test missing/wrong encryption key, wrong owner, deleted/disabled credential, provider timeout, and no-consent paths.
-7. Keep AI generation disabled until all checks and manual acceptance are complete.
+4. Test provider resolution using only the current user's credential.
+5. Confirm that the per-request payment acknowledgement is present and blocks the outbound call when absent.
+6. Test missing/wrong encryption key, wrong owner, deleted/disabled credential, provider timeout, malformed provider output, and no-consent paths.
+7. Keep AI generation disabled in production until all checks, provider/account review, isolated database migration, and manual acceptance are complete.
