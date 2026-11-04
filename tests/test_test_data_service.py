@@ -133,13 +133,28 @@ def test_prepare_test_data_rejects_row_from_another_dataset(app):
             prepare_test_data(case, dataset, other_row)
 
 
-def test_prepare_test_data_refuses_secret_columns_until_encryption_is_available(app):
+def test_prepare_test_data_decrypts_secret_columns_and_keeps_snapshot_encrypted(app):
+    from cryptography.fernet import Fernet
+    from app.test_data_crypto import encrypt_secret_values
+
     with app.app_context():
+        from flask import current_app
+        current_app.config["TEST_DATA_ENCRYPTION_KEY"] = Fernet.generate_key().decode("ascii")
         case, dataset, row, columns = _objects()
         columns[2].is_secret = True
+        values = dict(row.values_json)
+        values.pop("pin_code")
+        row.values_json = values
+        row.encrypted_values_json = encrypt_secret_values({"pin_code": "sensitive-pin"})
         db.session.commit()
-        with pytest.raises(ValueError, match="секретные поля"):
-            prepare_test_data(case, dataset, row)
+
+        result = prepare_test_data(case, dataset, row)
+        assert "sensitive-pin" in result["steps"][0]["action"]
+        assert "pin_code" not in result["values_snapshot"]
+        assert "sensitive-pin" not in str(result["values_snapshot"])
+        assert result["encrypted_values_snapshot"]
+        assert "sensitive-pin" not in result["encrypted_values_snapshot"]
+        assert "sensitive-pin" not in result["redacted_steps"][0]["action"]
 
 
 def test_prepare_test_data_does_not_evaluate_template_expressions(app):
@@ -183,5 +198,5 @@ def test_prepare_test_data_rejects_password_like_column_name(app):
         values["password"] = "plain-text-password"
         row.values_json = values
         db.session.commit()
-        with pytest.raises(ValueError, match="секретные поля"):
+        with pytest.raises(ValueError, match="отмечены как секретные"):
             prepare_test_data(case, dataset, row)

@@ -77,7 +77,11 @@ Example response:
 }
 ```
 
-Only active rows are returned. Values for secret columns and columns with names that look like passwords, tokens or API keys are never returned. The API currently rejects secret columns during parameterized run creation until encrypted secret storage is implemented.
+Only active rows are returned. By default, secret columns and columns with names that look like passwords, tokens or API keys are omitted.
+
+If an automation job is explicitly authorized to receive credentials, it may send the additional header `X-Test-Runner-Include-Secrets: true`. The server then decrypts secret values and returns them to the API-token owner. Use this only over HTTPS, keep the response in memory, never print it to test logs or CI artifacts, and use a dedicated token for automation. This header is an explicit opt-in, not a separate token scope; anyone holding that API token can request the secret values. Without this header, secrets are omitted. If the encryption key is missing or invalid, the server returns HTTP 503 rather than exposing plaintext or falling back to unencrypted storage.
+
+Secret values are encrypted at rest with the dedicated `TEST_DATA_ENCRYPTION_KEY`; ordinary columns remain separate. See `docs/encrypted-test-data-secrets.md` for key management and migration instructions.
 
 The API checks that the API-token owner owns the project containing the test case. A token cannot read another user's test data.
 
@@ -235,7 +239,7 @@ Environment variables to configure in the local run configuration or CI secret s
 - `TEST_RUNNER_TEST_CASE_ID` — ID of the test case in Test Runner;
 - `TEST_RUNNER_DATA_SET_ID` — ID of the data set attached to that test case.
 
-The sample intentionally uses non-secret values. Do not put real passwords or tokens into ordinary columns. Secret-value retrieval for automation will require a separate scoped permission and encrypted storage.
+The sample intentionally uses non-secret values. If you add a secret column, mark it as secret in the Test Runner UI and retrieve it only when the automation job genuinely requires it, using the explicit header described above. Never put secrets into ordinary columns.
 
 ## Compatibility notes
 

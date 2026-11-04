@@ -6,11 +6,17 @@ The application now has an authenticated-encryption storage layer based on Ferne
 (AES-128-CBC + HMAC-SHA256), a dedicated configuration key, and additive SQLite
 columns for encrypted row values and encrypted historical snapshots.
 
-**Secret columns are still intentionally unavailable in the user interface and
-parameterized run service in this stage.** They must remain blocked until the
-complete read/write, masking, snapshot, PDF/history, and automation authorization
-paths have been implemented and tested. Do not remove the current secret-column
-rejection as a standalone change.
+Secret columns can now be marked in the data-set editor. Their values are written
+only to the encrypted payload column, decrypted only while rendering an authorized
+manual run or when an API caller explicitly opts in, and copied to a separate
+encrypted historical snapshot. Ordinary JSON snapshots do not contain secrets.
+
+The run history stores redacted step text, expected results and comments. PDF
+reports use the run history and do not include decrypted secret values. The normal
+automation data endpoint omits secrets; a caller must explicitly send
+`X-Test-Runner-Include-Secrets: true` to receive them. This is restricted to the
+API-token owner and should only be used over HTTPS. Never print returned values
+to test logs, CI artifacts, or exception messages.
 
 ## Key configuration
 
@@ -57,7 +63,15 @@ columns. Do not run this against production until separately approved.
 - Secret payload helpers encrypt/decrypt dictionaries and fail closed if the
   key is missing, malformed, or wrong.
 - Empty secret maps do not need ciphertext.
-- Current UI and run service continue to reject secret columns. This is
-  deliberate until secrets can be masked in the UI and excluded from step-run
-  text, comments, PDFs, logs, and ordinary JSON snapshots.
+- The editor uses password inputs and never pre-fills decrypted values. A blank
+  edit field preserves the stored value; a separate checkbox clears it.
+- Manual run pages render the decrypted value for the authenticated project
+  owner, but persistent StepRun text, expected results and comments are redacted.
+- Secret values are stored only in encrypted run snapshots, not ordinary JSON
+  snapshots. PDF/history output uses redacted records.
+- The automation API omits secrets by default. Explicit opt-in uses
+  `X-Test-Runner-Include-Secrets: true`; this should be used only over HTTPS.
+  This is not a separate token scope: any caller holding that user's API token
+  can opt in. Protect API tokens as credentials and prefer a dedicated token
+  for CI automation.
 - The existing API continues not to return secret-like columns.

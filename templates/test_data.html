@@ -9,7 +9,7 @@
 </div>
 <div class="alert alert-info">
     Используйте переменные в тексте тест-кейса в формате <code>{{ '{{login}}' }}</code>.
-    Не вводите реальные пароли, токены, API-ключи и другие секреты. Такие имена колонок временно запрещены до подключения безопасного шифрования.
+Секретные колонки шифруются на сервере. Введите секрет один раз; в форме редактирования оставьте поле пустым, чтобы сохранить прежнее значение.
 </div>
 <div class="card mb-4">
  <div class="card-body">
@@ -20,11 +20,12 @@
    <div id="columns-container">
     <div class="row g-2 mb-2 data-column-row">
      <div class="col-md-5"><input class="form-control" name="column_key[]" required pattern="[A-Za-z_][A-Za-z0-9_]*" placeholder="login" aria-label="Имя переменной"></div>
-     <div class="col-md-5"><input class="form-control" name="column_label[]" required maxlength="120" placeholder="Логин" aria-label="Название колонки"></div>
-     <div class="col-md-2"><button type="button" class="btn btn-outline-danger w-100" onclick="removeColumn(this)" disabled>Удалить</button></div>
+     <div class="col-md-4"><input class="form-control" name="column_label[]" required maxlength="120" placeholder="Логин" aria-label="Название колонки"></div>
+     <div class="col-md-2"><label class="form-check small mt-2"><input class="form-check-input" type="checkbox" name="column_is_secret_0" value="1"> Секрет</label></div>
+     <div class="col-md-1"><button type="button" class="btn btn-outline-danger w-100" onclick="removeColumn(this)" disabled>×</button></div>
     </div>
    </div>
-   <div class="form-text mb-3">Имя переменной — латиница, цифры и _, например login или expected_message. До 30 колонок.</div>
+   <div class="form-text mb-3">Имя переменной — латиница, цифры и _, например login или expected_message. До 30 колонок. Отметьте «Секрет» для паролей, токенов и ключей.</div>
    <button type="submit" class="btn btn-primary">Создать набор</button>
   </form>
  </div>
@@ -38,13 +39,13 @@
  </div>
  <div class="card-body">
   <div class="mb-3"><strong>Переменные:</strong>
-   {% for column in dataset.columns %}<span class="badge bg-secondary me-1"><code>{{ '{{' ~ column.key ~ '}}' }}</code> — {{ column.label }}</span>{% endfor %}
+   {% for column in dataset.columns %}<span class="badge bg-secondary me-1"><code>{{ '{{' ~ column.key ~ '}}' }}</code> — {{ column.label }}{% if column.is_secret %} · секрет{% endif %}</span>{% endfor %}
   </div>
   <h6>Добавить строку</h6>
   <form method="POST" action="{{ url_for('main.create_test_data_row', project_id=project.id, test_id=test.id, dataset_id=dataset.id) }}" class="border rounded p-3 mb-4">
    <div class="mb-2"><label class="form-label">Название строки</label><input class="form-control" name="row_name" maxlength="120" required placeholder="Например, Успешный вход"></div>
    <div class="row g-2">{% for column in dataset.columns %}
-    <div class="col-md-6"><label class="form-label">{{ column.label }} <code>{{ '{{' ~ column.key ~ '}}' }}</code></label><textarea class="form-control" name="value_{{ column.id }}" rows="2" maxlength="10000"></textarea></div>
+    <div class="col-md-6"><label class="form-label">{{ column.label }} <code>{{ '{{' ~ column.key ~ '}}' }}</code></label>{% if column.is_secret %}<input class="form-control" type="password" name="secret_value_{{ column.id }}" maxlength="10000" autocomplete="new-password"><div class="form-text">Значение будет зашифровано.</div>{% else %}<textarea class="form-control" name="value_{{ column.id }}" rows="2" maxlength="10000"></textarea>{% endif %}</div>
    {% endfor %}</div>
    <button class="btn btn-success mt-3" type="submit">Добавить строку</button>
   </form>
@@ -63,7 +64,7 @@
    <form method="POST" action="{{ url_for('main.edit_test_data_row', project_id=project.id, test_id=test.id, dataset_id=dataset.id, row_id=row.id) }}">
     <div class="mb-2"><label class="form-label small">Название</label><input class="form-control" name="row_name" maxlength="120" required value="{{ row.name }}"></div>
     <div class="row g-2">{% for column in dataset.columns %}
-     <div class="col-md-6"><label class="form-label small">{{ column.label }} <code>{{ '{{' ~ column.key ~ '}}' }}</code></label><textarea class="form-control" name="value_{{ column.id }}" rows="2" maxlength="10000">{{ row.values_json.get(column.key, '') }}</textarea></div>
+     <div class="col-md-6"><label class="form-label small">{{ column.label }} <code>{{ '{{' ~ column.key ~ '}}' }}</code></label>{% if column.is_secret %}<input class="form-control" type="password" name="secret_value_{{ column.id }}" maxlength="10000" autocomplete="new-password" placeholder="••••••••"><div class="form-text">Оставьте пустым, чтобы не менять секрет.</div><label class="form-check small mt-1"><input class="form-check-input" type="checkbox" name="clear_secret_{{ column.id }}" value="1"> Очистить сохранённый секрет</label>{% else %}<textarea class="form-control" name="value_{{ column.id }}" rows="2" maxlength="10000">{{ row.values_json.get(column.key, '') }}</textarea>{% endif %}</div>
     {% endfor %}</div>
     <button class="btn btn-sm btn-primary mt-3" type="submit">Сохранить строку</button>
    </form>
@@ -79,8 +80,9 @@ function addColumn() {
  const row = document.createElement('div');
  row.className = 'row g-2 mb-2 data-column-row';
  row.innerHTML = '<div class="col-md-5"><input class="form-control" name="column_key[]" required pattern="[A-Za-z_][A-Za-z0-9_]*" placeholder="variable_name"></div>' +
-  '<div class="col-md-5"><input class="form-control" name="column_label[]" required maxlength="120" placeholder="Название"></div>' +
-  '<div class="col-md-2"><button type="button" class="btn btn-outline-danger w-100" onclick="removeColumn(this)">Удалить</button></div>';
+  '<div class="col-md-4"><input class="form-control" name="column_label[]" required maxlength="120" placeholder="Название"></div>' +
+  '<div class="col-md-2"><label class="form-check small mt-2"><input class="form-check-input" type="checkbox" value="1"> Секрет</label></div>' +
+  '<div class="col-md-1"><button type="button" class="btn btn-outline-danger w-100" onclick="removeColumn(this)">×</button></div>';
  container.appendChild(row); updateColumnButtons();
 }
 function removeColumn(button) {
@@ -90,7 +92,10 @@ function removeColumn(button) {
 }
 function updateColumnButtons() {
  const rows = document.querySelectorAll('.data-column-row');
- rows.forEach(row => { row.querySelector('button').disabled = rows.length <= 1; });
+ rows.forEach((row, index) => {
+  row.querySelector('button').disabled = rows.length <= 1;
+  row.querySelector('input[type="checkbox"]').name = 'column_is_secret_' + index;
+ });
 }
 </script>
 {% endblock %}

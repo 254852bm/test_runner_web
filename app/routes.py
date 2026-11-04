@@ -5,7 +5,8 @@ from markdown import markdown
 from markdown.extensions.toc import slugify_unicode
 from app import db
 from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User, TestDataSet, TestDataColumn, TestDataRow, TestRunDataSnapshot, TestDataBatch
-from app.test_data import prepare_test_data
+from app.test_data import prepare_test_data, redact_secrets
+from app.test_data_crypto import encrypt_secret_values, decrypt_secret_values
 from datetime import datetime
 import secrets
 import os
@@ -481,7 +482,14 @@ def create_test_data_set(project_id, test_id):
     name = request.form.get('dataset_name', '').strip()
     keys = [value.strip() for value in request.form.getlist('column_key[]')]
     labels = [value.strip() for value in request.form.getlist('column_label[]')]
+    secret_flags = [
+        request.form.get(f'column_is_secret_{index}') == '1'
+        for index in range(len(keys))
+    ]
     target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
+        flash('Секретные колонки доступны после настройки TEST_DATA_ENCRYPTION_KEY на сервере.', 'danger')
+        return redirect(target)
 
     if not name or len(name) > 120:
         flash('Укажите название набора данных (до 120 символов).', 'danger')
@@ -492,8 +500,12 @@ def create_test_data_set(project_id, test_id):
     if any(not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key) for key in keys):
         flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
         return redirect(target)
-    if any(re.search(r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)', key, re.IGNORECASE) for key in keys):
-        flash('Поля с паролями, токенами и ключами пока нельзя добавлять: безопасное шифрование ещё не подключено.', 'danger')
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
+    if any(
+        re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
+        for index, key in enumerate(keys)
+    ):
+        flash('Колонки с паролями, токенами и ключами необходимо отметить как секретные.', 'danger')
         return redirect(target)
     if len(keys) != len(set(keys)):
         flash('Имена переменных в одном наборе должны быть уникальными.', 'danger')
@@ -508,7 +520,7 @@ def create_test_data_set(project_id, test_id):
     for position, (key, label) in enumerate(zip(keys, labels)):
         db.session.add(TestDataColumn(
             dataset_id=dataset.id, key=key, label=label,
-            position=position, is_secret=False
+            position=position, is_secret=secret_flags[position]
         ))
     db.session.commit()
     flash('Набор тестовых данных создан.', 'success')
@@ -532,14 +544,27 @@ def create_test_data_row(project_id, test_id, dataset_id):
         flash('В одном наборе можно создать не более 500 строк.', 'danger')
         return redirect(target)
     values = {}
+    secret_values = {}
     for column in dataset.columns:
-        value = request.form.get(f'value_{column.id}', '')
+        field_name = f'secret_value_{column.id}' if column.is_secret else f'value_{column.id}'
+        value = request.form.get(field_name, '')
         if len(value) > 10000:
             flash(f'Значение «{column.label}» превышает 10 000 символов.', 'danger')
             return redirect(target)
-        values[column.key] = value
+        if column.is_secret:
+            if value:
+                secret_values[column.key] = value
+        else:
+            values[column.key] = value
+    try:
+        encrypted_values = encrypt_secret_values(secret_values)
+    except Exception:
+        current_app.logger.exception('Could not encrypt test-data secrets')
+        flash('Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.', 'danger')
+        return redirect(target)
     db.session.add(TestDataRow(
         dataset_id=dataset.id, name=name, values_json=values,
+        encrypted_values_json=encrypted_values,
         is_enabled=True, position=len(dataset.rows)
     ))
     db.session.commit()
@@ -562,14 +587,36 @@ def edit_test_data_row(project_id, test_id, dataset_id, row_id):
         flash('Укажите название строки данных (до 120 символов).', 'danger')
         return redirect(target)
     values = {}
+    try:
+        secret_values = decrypt_secret_values(row.encrypted_values_json)
+    except ValueError as error:
+        flash(str(error), 'danger')
+        return redirect(target)
     for column in dataset.columns:
-        value = request.form.get(f'value_{column.id}', '')
-        if len(value) > 10000:
-            flash(f'Значение «{column.label}» превышает 10 000 символов.', 'danger')
-            return redirect(target)
-        values[column.key] = value
+        if column.is_secret:
+            value = request.form.get(f'secret_value_{column.id}', '')
+            if len(value) > 10000:
+                flash(f'Значение «{column.label}» превышает 10 000 символов.', 'danger')
+                return redirect(target)
+            if request.form.get(f'clear_secret_{column.id}') == '1':
+                secret_values.pop(column.key, None)
+            elif value:
+                secret_values[column.key] = value
+        else:
+            value = request.form.get(f'value_{column.id}', '')
+            if len(value) > 10000:
+                flash(f'Значение «{column.label}» превышает 10 000 символов.', 'danger')
+                return redirect(target)
+            values[column.key] = value
+    try:
+        encrypted_values = encrypt_secret_values(secret_values)
+    except Exception:
+        current_app.logger.exception('Could not encrypt edited test-data secrets')
+        flash('Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.', 'danger')
+        return redirect(target)
     row.name = name
     row.values_json = values
+    row.encrypted_values_json = encrypted_values
     db.session.commit()
     flash('Строка тестовых данных обновлена.', 'success')
     return redirect(target)
@@ -1137,6 +1184,7 @@ def run_tests(project_id):
                     dataset_name_snapshot=prepared_data['dataset_name_snapshot'],
                     row_name_snapshot=prepared_data['row_name_snapshot'],
                     values_snapshot_json=prepared_data['values_snapshot'],
+                    encrypted_values_snapshot=prepared_data['encrypted_values_snapshot'],
                     snapshot_version=1,
                 ))
             uploaded_paths = []
@@ -1147,9 +1195,9 @@ def run_tests(project_id):
                         test_run_id=run.id,
                         test_step_id=step.id,
                         status=status,
-                        comment=comment.strip(),
-                        step_text=rendered_step['action'],
-                        expected_result=rendered_step['expected_result'] or ''
+                        comment=(redact_secrets(comment.strip(), prepared_data) if prepared_data else comment.strip()),
+                        step_text=(prepared_data['redacted_steps'][index]['action'] if prepared_data else rendered_step['action']),
+                        expected_result=(prepared_data['redacted_steps'][index]['expected_result'] if prepared_data else (rendered_step['expected_result'] or ''))
                     )
                     db.session.add(step_run)
                     db.session.flush()

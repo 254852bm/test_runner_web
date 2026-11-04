@@ -111,34 +111,55 @@ def api_data_set_rows(dataset_id):
     if not _owns_test_case(user, test_case):
         return _error('Доступ запрещён', 403)
 
-    safe_columns = [
-        column for column in dataset.columns
-        if not column.is_secret and not _SENSITIVE_KEY_RE.search(column.key or '')
-    ]
+    include_secrets = (
+        request.headers.get('X-Test-Runner-Include-Secrets', '').strip().lower() == 'true'
+    )
+    selected_columns = (
+        list(dataset.columns) if include_secrets else [
+            column for column in dataset.columns
+            if not column.is_secret and not _SENSITIVE_KEY_RE.search(column.key or '')
+        ]
+    )
     rows = TestDataRow.query.filter_by(
         dataset_id=dataset.id, is_enabled=True
     ).order_by(TestDataRow.position.asc(), TestDataRow.id.asc()).all()
+
+    response_rows = []
+    for row in rows:
+        row_values = {
+            column.key: (row.values_json or {}).get(column.key, '')
+            for column in selected_columns if not column.is_secret
+            and not _SENSITIVE_KEY_RE.search(column.key or '')
+        }
+        if include_secrets:
+            try:
+                secret_values = decrypt_secret_values(row.encrypted_values_json)
+            except ValueError:
+                return _error('Секретные данные временно недоступны: проверьте ключ шифрования', 503)
+            for column in selected_columns:
+                if column.is_secret or _SENSITIVE_KEY_RE.search(column.key or ''):
+                    row_values[column.key] = secret_values.get(column.key, '')
+        response_rows.append({
+            "id": row.id,
+            "name": row.name,
+            "values": row_values,
+        })
 
     return jsonify({
         "ok": True,
         "data_set_id": dataset.id,
         "test_case_id": test_case.id,
         "data_set_name": dataset.name,
+        "secrets_included": include_secrets,
         "columns": [
-            {"key": column.key, "label": column.label}
-            for column in safe_columns
-        ],
-        "rows": [
             {
-                "id": row.id,
-                "name": row.name,
-                "values": {
-                    column.key: (row.values_json or {}).get(column.key, "")
-                    for column in safe_columns
-                },
+                "key": column.key,
+                "label": column.label,
+                "is_secret": bool(column.is_secret or _SENSITIVE_KEY_RE.search(column.key or '')),
             }
-            for row in rows
+            for column in selected_columns
         ],
+        "rows": response_rows,
     })
 
 
@@ -216,6 +237,8 @@ def api_run():
         return _error('status должен быть PASS, FAIL или SKIP')
 
     comment = (data.get('comment') or '').strip()
+    if prepared_data:
+        comment = redact_secrets(comment, prepared_data)
     duration_ms = data.get('duration_ms')
 
     # Определяем версию тест-кейса (последнюю)
@@ -244,6 +267,7 @@ def api_run():
             dataset_name_snapshot=prepared_data['dataset_name_snapshot'],
             row_name_snapshot=prepared_data['row_name_snapshot'],
             values_snapshot_json=prepared_data['values_snapshot'],
+            encrypted_values_snapshot=prepared_data['encrypted_values_snapshot'],
             snapshot_version=1,
         ))
 
@@ -262,14 +286,30 @@ def api_run():
             continue
 
         rendered_step = rendered_steps_by_id.get(step.id)
+        redacted_step = next(
+            (
+                item for item in (prepared_data['redacted_steps'] if prepared_data else [])
+                if item['step_id'] == step.id
+            ),
+            None,
+        )
         sr = StepRun(
             test_run_id=run.id,
             test_step_id=step.id,
             status=step_status,
             comment='',
-            step_text=(rendered_step['action'] if rendered_step else step.action),
-            expected_result=(rendered_step['expected_result'] if rendered_step else (step.expected_result or '')),
-            actual_result=str(actual_result or '')
+            step_text=(
+                redacted_step['action'] if redacted_step else
+                (rendered_step['action'] if rendered_step else step.action)
+            ),
+            expected_result=(
+                redacted_step['expected_result'] if redacted_step else
+                (rendered_step['expected_result'] if rendered_step else (step.expected_result or ''))
+            ),
+            actual_result=(
+                redact_secrets(str(actual_result or ''), prepared_data)
+                if prepared_data else str(actual_result or '')
+            )
         )
         db.session.add(sr)
 

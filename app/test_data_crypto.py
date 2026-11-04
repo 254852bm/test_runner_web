@@ -10,7 +10,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from flask import current_app, has_app_context
 
 
-class SecretEncryptionUnavailable(RuntimeError):
+class SecretEncryptionUnavailable(ValueError):
     """Raised when encrypted test-data storage is not configured safely."""
 
 
