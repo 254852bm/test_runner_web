@@ -62,7 +62,7 @@ def create_app(test_config=None):
     from .admin_routes import admin_bp
     app.register_blueprint(admin_bp)
     from .ai.routes import ai_bp
-    app.register_blueprint(ai_bp)\n    from .ai.credential_routes import ai_credentials_bp\n    app.register_blueprint(ai_credentials_bp)\n    app.config['AI_CREDENTIAL_ENCRYPTION_KEY'] = os.getenv('AI_CREDENTIAL_ENCRYPTION_KEY', '')
+    app.register_blueprint(ai_bp)\n    from .ai.credential_routes import ai_credentials_bp\n    app.register_blueprint(ai_credentials_bp)\n    app.config.setdefault('AI_CREDENTIAL_ENCRYPTION_KEY', os.getenv('AI_CREDENTIAL_ENCRYPTION_KEY', ''))
 
     @app.context_processor
     def inject_csrf_token():
