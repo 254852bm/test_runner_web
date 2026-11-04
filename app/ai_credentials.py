@@ -1,8 +1,4 @@
-"""Authenticated encryption for user-supplied AI provider credentials.
-
-The encryption key is separate from Flask sessions and test-data encryption.
-Credential plaintext is returned only to the server-side provider resolver.
-"""
+"""Authenticated encryption for user-supplied AI provider credentials."""
 import json
 import os
 
@@ -33,7 +29,7 @@ def _cipher():
 
 
 def encrypt_ai_credential(*, user_id, provider, api_key, folder_id):
-    """Encrypt and bind a credential to one user and one provider."""
+    """Encrypt a key and folder ID, cryptographically bound to user/provider."""
     if not isinstance(user_id, int) or user_id <= 0:
         raise ValueError("Некорректный пользователь.")
     if provider != "yandex_ai_studio":
@@ -43,8 +39,15 @@ def encrypt_ai_credential(*, user_id, provider, api_key, folder_id):
     api_key = api_key.strip()
     if not api_key or len(api_key) > 4096 or any(ord(char) < 32 for char in api_key):
         raise ValueError("Проверьте API-ключ: он пустой или имеет недопустимый формат.")
+    if not isinstance(folder_id, str) or not folder_id.strip() or len(folder_id.strip()) > 256:
+        raise ValueError("Укажите корректный Folder ID проекта Yandex Cloud.")
     payload = json.dumps(
-        {"user_id": user_id, "provider": provider, "api_key": api_key},
+        {
+            "user_id": user_id,
+            "provider": provider,
+            "api_key": api_key,
+            "folder_id": folder_id.strip(),
+        },
         ensure_ascii=False,
         separators=(",", ":"),
     ).encode("utf-8")
@@ -52,7 +55,7 @@ def encrypt_ai_credential(*, user_id, provider, api_key, folder_id):
 
 
 def decrypt_ai_credential(*, user_id, provider, encrypted_payload):
-    """Decrypt only for the owning user and the expected provider."""
+    """Decrypt only for the owning user and expected provider."""
     if not encrypted_payload or not isinstance(encrypted_payload, str):
         raise AICredentialEncryptionError("Зашифрованный ключ не найден.")
     try:
@@ -70,6 +73,8 @@ def decrypt_ai_credential(*, user_id, provider, encrypted_payload):
         or payload.get("provider") != provider
         or not isinstance(payload.get("api_key"), str)
         or not payload["api_key"]
+        or not isinstance(payload.get("folder_id"), str)
+        or not payload["folder_id"]
     ):
         raise AICredentialEncryptionError(
             "AI-ключ не принадлежит этому пользователю или провайдеру."
