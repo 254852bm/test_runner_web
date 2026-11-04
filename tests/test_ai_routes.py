@@ -5,7 +5,7 @@ import pytest
 from werkzeug.security import generate_password_hash
 
 from app import create_app, db
-from app.models import AICredential, Project, TestCase, TestCaseVersion, User
+from app.models import AICredential, AIGenerationAttempt, Project, TestCase, TestCaseVersion, User
 
 
 @pytest.fixture()
@@ -332,3 +332,85 @@ def test_reviewed_draft_save_rejects_more_than_30_steps(client, app, monkeypatch
     with app.app_context():
         assert TestCase.query.count() == 0
         assert TestCaseVersion.query.count() == 0
+
+
+
+def test_local_ollama_mode_generates_without_customer_key_or_paid_confirmation(client, app, monkeypatch):
+    _login(client, app)
+    import app.ai.routes as ai_routes
+    app.config["AI_TEST_CASES_ENABLED"] = True
+    app.config["AI_PROVIDER_MODE"] = "ollama"
+    calls = []
+
+    class FakeProvider:
+        def generate(self, requirement):
+            calls.append(requirement)
+            return {
+                "title": "Локальный черновик",
+                "preconditions": [],
+                "steps": [{"action": "Открыть страницу", "expected_result": "Страница открыта"}],
+                "test_type": "positive",
+                "priority": "medium",
+                "assumptions": [],
+                "open_questions": [],
+            }
+
+    monkeypatch.setattr(ai_routes, "_provider", lambda: FakeProvider())
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
+    response = client.post(
+        f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft",
+        data={"csrf_token": "test-token", "requirement": "Локальная проверка"},
+    )
+
+    assert response.status_code == 200
+    assert "Локальный черновик" in response.get_data(as_text=True)
+    assert calls == ["Локальная проверка"]
+    with app.app_context():
+        assert AICredential.query.count() == 0
+        assert AIGenerationAttempt.query.count() == 1
+        assert TestCase.query.count() == 0
+
+
+def test_generation_rate_limit_blocks_provider_before_outbound_call(client, app, monkeypatch):
+    _login(client, app)
+    import app.ai.routes as ai_routes
+    app.config["AI_TEST_CASES_ENABLED"] = True
+    app.config["AI_PROVIDER_MODE"] = "yandex"
+    app.config["AI_GENERATIONS_PER_HOUR"] = 2
+    _add_ai_credential(app)
+
+    def unexpected_provider():
+        raise AssertionError("Provider must not be called after rate limit is reached")
+
+    monkeypatch.setattr(ai_routes, "_provider", unexpected_provider)
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
+    with app.app_context():
+        db.session.add_all([
+            AIGenerationAttempt(user_id=app.config["TEST_OWNER_ID"]),
+            AIGenerationAttempt(user_id=app.config["TEST_OWNER_ID"]),
+        ])
+        db.session.commit()
+
+    response = client.post(
+        f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft",
+        data={
+            "csrf_token": "test-token",
+            "requirement": "Проверить авторизацию",
+            "paid_request_confirm": "accepted",
+        },
+    )
+    assert response.status_code == 200
+    assert "Достигнут лимит" in response.get_data(as_text=True)
+    with app.app_context():
+        assert AIGenerationAttempt.query.count() == 2
+
+
+def test_configured_cost_upper_bound_is_shown_before_paid_request(client, app):
+    _login(client, app)
+    app.config["AI_PRICE_INPUT_RUB_PER_1K"] = 0.2
+    app.config["AI_PRICE_OUTPUT_RUB_PER_1K"] = 0.2
+    app.config["AI_MAX_COMPLETION_TOKENS"] = 3000
+    response = client.get(f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft")
+    assert response.status_code == 200
+    assert "Ориентировочная верхняя оценка" in response.get_data(as_text=True)
+    assert "₽" in response.get_data(as_text=True)
