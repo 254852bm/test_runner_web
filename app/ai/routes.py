@@ -88,7 +88,13 @@ def _maximum_estimated_cost_rub():
     try:
         input_rate = float(input_rate)
         output_rate = float(output_rate)
-        if input_rate < 0 or output_rate < 0:
+        from math import isfinite
+        if (
+            not isfinite(input_rate)
+            or not isfinite(output_rate)
+            or input_rate < 0
+            or output_rate < 0
+        ):
             return None
         input_tokens = ceil(
             (len(SYSTEM_PROMPT) + len(build_user_prompt("x" * MAX_REQUIREMENT_LENGTH))) / 4
