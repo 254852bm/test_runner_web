@@ -1,4 +1,6 @@
 import pytest
+from io import BytesIO
+from pypdf import PdfReader
 
 from app import create_app, db
 from app.models import (
@@ -131,6 +133,16 @@ def test_manual_run_substitutes_values_and_saves_immutable_snapshot(app):
     assert history_response.status_code == 200
     assert "Accounts" in history_response.get_data(as_text=True)
     assert "Valid user" in history_response.get_data(as_text=True)
+
+    pdf_response = history_client.get(f"/project/{project_id}/export_pdf")
+    assert pdf_response.status_code == 200
+    assert pdf_response.mimetype == "application/pdf"
+    pdf_text = "\\n".join(
+        page.extract_text() or ""
+        for page in PdfReader(BytesIO(pdf_response.data)).pages
+    )
+    assert "Accounts" in pdf_text
+    assert "Valid user" in pdf_text
 
 
 def test_manual_run_without_data_parameters_still_works(app):

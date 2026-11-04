@@ -1434,6 +1434,22 @@ def export_pdf(project_id):
             Paragraph(run.timestamp.strftime('%d.%m.%Y %H:%M'), cell_style)
         ])
 
+        # Parameter data labels are historical snapshots; never export raw values
+        # that might later be classified as sensitive.
+        if run.data_snapshot:
+            snapshot_label = (
+                run.data_snapshot.dataset_name_snapshot + ' / '
+                + run.data_snapshot.row_name_snapshot
+            )
+            data.append([
+                Paragraph('', cell_style),
+                Paragraph('<b>Тестовые данные:</b>', cell_style),
+                Paragraph(escape(snapshot_label), cell_style),
+                Paragraph('', cell_style),
+                Paragraph('', cell_style),
+                Paragraph('', cell_style),
+            ])
+
         if run.step_runs:
             data.append([Paragraph('', cell_style), Paragraph('<b>Шаги</b>', cell_style),
                          Paragraph('', cell_style), Paragraph('Статус', cell_style),
