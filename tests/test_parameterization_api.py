@@ -3,7 +3,7 @@ import pytest
 from app import create_app, db
 from app.models import (
     ApiToken, Project, TestCase, TestDataColumn, TestDataRow,
-    TestDataSet, TestRun, TestStep, StepRun, User,
+    TestDataSet, TestRun, TestRunDataSnapshot, TestStep, StepRun, User,
 )
 
 
@@ -165,3 +165,81 @@ def test_existing_api_run_contract_still_works(app):
         step_run = StepRun.query.filter_by(test_run_id=run.id).one()
         assert step_run.actual_result == "OK"
         assert step_run.step_text == "Open {{base_url}}"
+
+
+def test_api_run_can_attach_a_parameter_row_and_store_its_snapshot(app):
+    with app.app_context():
+        user, project, case, original_dataset, original_row, token = _api_objects()
+        dataset = TestDataSet(test_case_id=case.id, name="Automation data")
+        db.session.add(dataset)
+        db.session.flush()
+        db.session.add_all([
+            TestDataColumn(
+                dataset_id=dataset.id, key="base_url", label="Base URL", position=0
+            ),
+            TestDataColumn(
+                dataset_id=dataset.id, key="login", label="Login", position=1
+            ),
+        ])
+        row = TestDataRow(
+            dataset_id=dataset.id, name="Automation user",
+            values_json={
+                "base_url": "https://automation.example.test",
+                "login": "automation@example.test",
+            },
+            is_enabled=True,
+        )
+        db.session.add(row)
+        db.session.commit()
+        case_id, dataset_id, row_id = case.id, dataset.id, row.id
+        step_id = TestStep.query.filter_by(test_case_id=case.id).one().id
+
+    response = app.test_client().post(
+        "/api/run",
+        json={
+            "token": "api-test-token-123",
+            "test_case_id": case_id,
+            "data_set_id": dataset_id,
+            "data_row_id": row_id,
+            "status": "PASS",
+            "step_results": [
+                {"step_id": step_id, "status": "PASS", "actual_result": "OK"}
+            ],
+        },
+    )
+    assert response.status_code == 201
+    payload = response.get_json()
+    assert payload["data_set_id"] == dataset_id
+    assert payload["data_row_id"] == row_id
+
+    with app.app_context():
+        run = TestRun.query.filter_by(test_case_id=case_id, source="auto").one()
+        snapshot = TestRunDataSnapshot.query.filter_by(test_run_id=run.id).one()
+        step_run = StepRun.query.filter_by(test_run_id=run.id).one()
+        assert snapshot.row_name_snapshot == "Automation user"
+        assert snapshot.values_snapshot_json["login"] == "automation@example.test"
+        assert step_run.step_text == "Open https://automation.example.test"
+        assert step_run.actual_result == "OK"
+
+
+def test_api_run_rejects_data_row_from_a_different_data_set(app):
+    with app.app_context():
+        user, project, case, dataset, row, token = _api_objects()
+        other_dataset = TestDataSet(test_case_id=case.id, name="Other set")
+        db.session.add(other_dataset)
+        db.session.commit()
+        case_id, row_id, other_dataset_id = case.id, row.id, other_dataset.id
+
+    response = app.test_client().post(
+        "/api/run",
+        json={
+            "token": "api-test-token-123",
+            "test_case_id": case_id,
+            "data_set_id": other_dataset_id,
+            "data_row_id": row_id,
+            "status": "PASS",
+        },
+    )
+    assert response.status_code == 404
+    with app.app_context():
+        assert TestRun.query.filter_by(test_case_id=case_id, source="auto").count() == 0

@@ -2,7 +2,8 @@ from flask import Blueprint, request, jsonify
 import re
 from datetime import datetime
 from app import db
-from app.models import ApiToken, TestCase, TestRun, StepRun, TestStep, TestDataSet, TestDataRow
+from app.models import ApiToken, TestCase, TestRun, StepRun, TestStep, TestDataSet, TestDataRow, TestRunDataSnapshot
+from app.test_data import prepare_test_data
 
 
 api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -176,6 +177,36 @@ def api_run():
     if test_case.project.owner.id != user.id:
         return _error('Доступ запрещён', 403)
 
+    data_set_id = data.get('data_set_id')
+    data_row_id = data.get('data_row_id')
+    if bool(data_set_id) != bool(data_row_id):
+        return _error('data_set_id и data_row_id должны передаваться вместе')
+
+    dataset = None
+    data_row = None
+    prepared_data = None
+    rendered_steps_by_id = {}
+    if data_set_id and data_row_id:
+        dataset = TestDataSet.query.filter_by(
+            id=data_set_id, test_case_id=test_case.id
+        ).first()
+        if not dataset:
+            return _error('Набор данных не найден для указанного тест-кейса', 404)
+        data_row = TestDataRow.query.filter_by(
+            id=data_row_id, dataset_id=dataset.id
+        ).first()
+        if not data_row:
+            return _error('Строка данных не найдена в указанном наборе', 404)
+        if not data_row.is_enabled:
+            return _error('Нельзя запускать отключённую строку данных')
+        try:
+            prepared_data = prepare_test_data(test_case, dataset, data_row)
+        except ValueError as error:
+            return _error(str(error))
+        rendered_steps_by_id = {
+            item['step_id']: item for item in prepared_data['steps']
+        }
+
     status = (data.get('status') or '').upper()
     if status not in ['PASS', 'FAIL', 'SKIP']:
         return _error('status должен быть PASS, FAIL или SKIP')
@@ -201,6 +232,16 @@ def api_run():
     )
     db.session.add(run)
     db.session.flush()
+    if prepared_data:
+        db.session.add(TestRunDataSnapshot(
+            test_run_id=run.id,
+            dataset_id=dataset.id,
+            data_row_id=data_row.id,
+            dataset_name_snapshot=prepared_data['dataset_name_snapshot'],
+            row_name_snapshot=prepared_data['row_name_snapshot'],
+            values_snapshot_json=prepared_data['values_snapshot'],
+            snapshot_version=1,
+        ))
 
     # Сохраняем результаты шагов
     step_results = data.get('step_results') or []
@@ -216,13 +257,14 @@ def api_run():
         if not step or step.test_case_id != test_case.id:
             continue
 
+        rendered_step = rendered_steps_by_id.get(step.id)
         sr = StepRun(
             test_run_id=run.id,
             test_step_id=step.id,
             status=step_status,
             comment='',
-            step_text=step.action,
-            expected_result=step.expected_result or '',
+            step_text=(rendered_step['action'] if rendered_step else step.action),
+            expected_result=(rendered_step['expected_result'] if rendered_step else (step.expected_result or '')),
             actual_result=str(actual_result or '')
         )
         db.session.add(sr)
@@ -233,7 +275,9 @@ def api_run():
         "ok": True,
         "run_id": run.id,
         "status": status,
-        "test_case_id": test_case.id
+        "test_case_id": test_case.id,
+        "data_set_id": (dataset.id if dataset else None),
+        "data_row_id": (data_row.id if data_row else None)
     }), 201
 
 
