@@ -59,6 +59,10 @@ class TestCase(db.Model):
         'TestDataSet', backref='test_case', lazy=True,
         cascade='all, delete-orphan'
     )
+    data_batches = db.relationship(
+        'TestDataBatch', backref='test_case', lazy=True,
+        cascade='all, delete-orphan'
+    )
 
 
 class TestCaseVersion(db.Model):
@@ -243,6 +247,10 @@ class TestDataSet(db.Model):
     run_snapshots = db.relationship(
         'TestRunDataSnapshot', backref='dataset', lazy=True
     )
+    batches = db.relationship(
+        'TestDataBatch', backref='dataset', lazy=True,
+        cascade='all, delete-orphan'
+    )
 
 
 class TestDataColumn(db.Model):
@@ -310,3 +318,22 @@ class TestRunDataSnapshot(db.Model):
         'data_snapshot', uselist=False, cascade='all, delete-orphan'
     ))
 
+
+
+
+class TestDataBatch(db.Model):
+    """Server-side progress for a sequential run over a fixed list of rows."""
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    test_case_id = db.Column(
+        db.Integer, db.ForeignKey('test_case.id'), nullable=False, index=True
+    )
+    dataset_id = db.Column(
+        db.Integer, db.ForeignKey('test_data_set.id'), nullable=False, index=True
+    )
+    row_ids_json = db.Column(db.JSON, nullable=False, default=list)
+    next_index = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    user = db.relationship('User', backref='test_data_batches')

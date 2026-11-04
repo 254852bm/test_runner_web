@@ -4,7 +4,7 @@ import re
 from markdown import markdown
 from markdown.extensions.toc import slugify_unicode
 from app import db
-from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User, TestDataSet, TestDataColumn, TestDataRow, TestRunDataSnapshot
+from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User, TestDataSet, TestDataColumn, TestDataRow, TestRunDataSnapshot, TestDataBatch
 from app.test_data import prepare_test_data
 from datetime import datetime
 import secrets
@@ -996,6 +996,71 @@ def run_tests(project_id):
     selected_test_id = request.args.get('test_id', type=int)
     data_set_id = request.args.get('data_set_id', type=int)
     data_row_id = request.args.get('data_row_id', type=int)
+    batch_token = (request.args.get('batch_id') or '').strip()
+    data_index = request.args.get('data_index', type=int)
+    data_batch = None
+
+    # Start a sequential run by freezing the active row IDs in a server-side record.
+    if request.args.get('run_all') == '1' and not batch_token:
+        if not selected_test_id or not data_set_id:
+            flash('Выберите тест-кейс и набор данных для последовательного запуска.', 'danger')
+            return redirect(url_for('main.project_detail', project_id=project.id))
+        batch_test = TestCase.query.filter_by(
+            id=selected_test_id, project_id=project.id
+        ).first_or_404()
+        batch_dataset = TestDataSet.query.filter_by(
+            id=data_set_id, test_case_id=batch_test.id
+        ).first_or_404()
+        active_row_ids = [
+            row.id for row in TestDataRow.query.filter_by(
+                dataset_id=batch_dataset.id, is_enabled=True
+            ).order_by(TestDataRow.position, TestDataRow.id).all()
+        ]
+        if not active_row_ids:
+            flash('В наборе нет активных строк для запуска.', 'warning')
+            return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=batch_test.id))
+        data_batch = TestDataBatch(
+            token=secrets.token_urlsafe(24),
+            user_id=current_user.id,
+            test_case_id=batch_test.id,
+            dataset_id=batch_dataset.id,
+            row_ids_json=active_row_ids,
+            next_index=0,
+        )
+        db.session.add(data_batch)
+        db.session.commit()
+        return redirect(url_for(
+            'main.run_tests', project_id=project.id, test_id=batch_test.id,
+            data_set_id=batch_dataset.id, run_all=1,
+            batch_id=data_batch.token, data_index=0
+        ))
+
+    if batch_token:
+        if not selected_test_id:
+            abort(404)
+        data_batch = TestDataBatch.query.filter_by(
+            token=batch_token, user_id=current_user.id,
+            test_case_id=selected_test_id
+        ).first_or_404()
+        if data_set_id and data_set_id != data_batch.dataset_id:
+            abort(404)
+        data_set_id = data_batch.dataset_id
+        if data_index is None:
+            data_index = data_batch.next_index
+        if data_index != data_batch.next_index:
+            return redirect(url_for(
+                'main.run_tests', project_id=project.id, test_id=selected_test_id,
+                data_set_id=data_set_id, run_all=1,
+                batch_id=data_batch.token, data_index=data_batch.next_index
+            ))
+        batch_row_ids = data_batch.row_ids_json or []
+        if data_index < 0 or data_index >= len(batch_row_ids):
+            db.session.delete(data_batch)
+            db.session.commit()
+            flash('Последовательный запуск завершён.', 'success')
+            return redirect(url_for('main.run_stats', project_id=project.id))
+        data_row_id = batch_row_ids[data_index]
+
     if bool(data_set_id) != bool(data_row_id) or ((data_set_id or data_row_id) and not selected_test_id):
         flash('Для запуска с тестовыми данными выберите тест-кейс, набор и строку.', 'danger')
         return redirect(url_for('main.project_detail', project_id=project.id))
@@ -1030,7 +1095,7 @@ def run_tests(project_id):
         data_row = TestDataRow.query.filter_by(
             id=data_row_id, dataset_id=dataset.id
         ).first_or_404()
-        if not data_row.is_enabled:
+        if not data_row.is_enabled and not data_batch:
             flash('Эта строка тестовых данных отключена.', 'warning')
             return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
         try:
@@ -1136,6 +1201,8 @@ def run_tests(project_id):
                             size_bytes=len(data)
                         ))
 
+                if data_batch:
+                    data_batch.next_index += 1
                 db.session.commit()
             except ValueError as error:
                 db.session.rollback()
@@ -1147,7 +1214,10 @@ def run_tests(project_id):
                 flash(str(error), 'danger')
                 return redirect(url_for('main.run_tests', project_id=project.id,
                                         test_id=(test.id if single_test else None), index=current_index,
-                                        data_set_id=data_set_id, data_row_id=data_row_id))
+                                        data_set_id=data_set_id, data_row_id=data_row_id,
+                                        run_all=(1 if data_batch else None),
+                                        batch_id=(data_batch.token if data_batch else None),
+                                        data_index=(data_index if data_batch else None)))
             except Exception:
                 db.session.rollback()
                 for file_path in uploaded_paths:
@@ -1156,6 +1226,20 @@ def run_tests(project_id):
                     except OSError:
                         current_app.logger.exception('Could not remove a screenshot after a failed test-run save')
                 raise
+
+            if data_batch:
+                completed_iterations = data_batch.next_index
+                total_iterations = len(data_batch.row_ids_json or [])
+                if data_batch.next_index < total_iterations:
+                    return redirect(url_for(
+                        'main.run_tests', project_id=project.id, test_id=test.id,
+                        data_set_id=data_set_id, run_all=1,
+                        batch_id=data_batch.token, data_index=data_batch.next_index
+                    ))
+                db.session.delete(data_batch)
+                db.session.commit()
+                flash(f'Последовательный запуск завершён: {completed_iterations} итераций.', 'success')
+                return redirect(url_for('main.run_stats', project_id=project.id))
 
             next_index = current_index + 1
             if next_index < len(tests):
@@ -1168,7 +1252,7 @@ def run_tests(project_id):
     return render_template(
         'run.html', project=project, test=test, steps=steps,
         display_steps=display_steps, display_precondition=display_precondition,
-        dataset=dataset, data_row=data_row,
+        dataset=dataset, data_row=data_row, data_batch=data_batch, data_index=data_index,
         current_index=current_index, total=len(tests),
         single_test=single_test, status_labels=STATUS_LABELS
     )
