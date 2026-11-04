@@ -26,18 +26,21 @@ def test_credential_is_encrypted_and_round_trips(app):
     secret = "yandex-api-key-do-not-leak"
     with app.app_context():
         encrypted = encrypt_ai_credential(
-            user_id=42, provider="yandex_ai_studio", api_key=secret, folder_id="folder-123"
+            user_id=42, provider="yandex_ai_studio",
+            api_key=secret, folder_id="folder-123"
         )
         assert secret not in encrypted
+        assert "folder-123" not in encrypted
         assert decrypt_ai_credential(
             user_id=42, provider="yandex_ai_studio", encrypted_payload=encrypted
-        ) == secret
+        ) == {"api_key": secret, "folder_id": "folder-123"}
 
 
 def test_credential_cannot_be_decrypted_by_another_user(app):
     with app.app_context():
         encrypted = encrypt_ai_credential(
-            user_id=42, provider="yandex_ai_studio", api_key="secret", folder_id="folder-123"
+            user_id=42, provider="yandex_ai_studio",
+            api_key="secret", folder_id="folder-123"
         )
         with pytest.raises(AICredentialEncryptionError, match="не принадлежит"):
             decrypt_ai_credential(
@@ -48,7 +51,8 @@ def test_credential_cannot_be_decrypted_by_another_user(app):
 def test_credential_cannot_be_used_for_another_provider(app):
     with app.app_context():
         encrypted = encrypt_ai_credential(
-            user_id=42, provider="yandex_ai_studio", api_key="secret"
+            user_id=42, provider="yandex_ai_studio",
+            api_key="secret", folder_id="folder-123"
         )
         with pytest.raises(AICredentialEncryptionError, match="не принадлежит"):
             decrypt_ai_credential(
@@ -61,7 +65,8 @@ def test_missing_encryption_key_fails_closed(app):
     with app.app_context():
         with pytest.raises(AICredentialEncryptionError, match="не настроен"):
             encrypt_ai_credential(
-                user_id=42, provider="yandex_ai_studio", api_key="secret"
+                user_id=42, provider="yandex_ai_studio",
+                api_key="secret", folder_id="folder-123"
             )
 
 
@@ -69,5 +74,15 @@ def test_invalid_api_key_is_rejected(app):
     with app.app_context():
         with pytest.raises(ValueError):
             encrypt_ai_credential(
-                user_id=42, provider="yandex_ai_studio", api_key="\nsecret"
+                user_id=42, provider="yandex_ai_studio",
+                api_key="\nsecret", folder_id="folder-123"
+            )
+
+
+def test_missing_folder_id_is_rejected(app):
+    with app.app_context():
+        with pytest.raises(ValueError, match="Folder ID"):
+            encrypt_ai_credential(
+                user_id=42, provider="yandex_ai_studio",
+                api_key="secret", folder_id=""
             )
