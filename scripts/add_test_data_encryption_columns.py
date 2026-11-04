@@ -1,9 +1,10 @@
-"""Add encrypted payload columns for test-data secrets to an existing SQLite DB.
+"""Prepare test-data feature tables and encrypted payload columns in SQLite.
 
 Example (run only against a backed-up TEST database first):
     python scripts/add_test_data_encryption_columns.py --database /path/to/test_runner.db
 
-The script never creates a database and never calls db.create_all().
+The script never creates a database. It creates only the new test-data feature tables
+when they are missing, then adds the required columns to existing tables.
 """
 import argparse
 from pathlib import Path
@@ -15,11 +16,14 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from sqlalchemy.engine import URL
 
 from app import create_app, db
+from app.models import (
+    TestDataSet, TestDataColumn, TestDataRow, TestRunDataSnapshot, TestDataBatch,
+)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Add encrypted test-data payload columns to an existing SQLite database."
+        description="Prepare test-data tables, encrypted payload columns, and token permissions."
     )
     parser.add_argument(
         "--database", required=True,
@@ -58,6 +62,29 @@ def main():
         "SKIP_DB_CREATE_ALL": True,
     })
     with app.app_context():
+        # Refuse an unrelated or empty SQLite file before making any changes.
+        with db.engine.connect() as connection:
+            existing_tables = set(connection.execute(db.text(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )).scalars().all())
+        required_base_tables = {"user", "test_case", "test_run", "api_token"}
+        missing_base_tables = required_base_tables - existing_tables
+        if missing_base_tables:
+            names = ", ".join(sorted(missing_base_tables))
+            raise SystemExit(
+                f"Required application tables are missing: {names}. No changes were made."
+            )
+
+        # Create only these feature tables if they do not yet exist. This is
+        # targeted and does not attempt to alter or create unrelated app tables.
+        db.create_all(tables=[
+            TestDataSet.__table__,
+            TestDataColumn.__table__,
+            TestDataRow.__table__,
+            TestRunDataSnapshot.__table__,
+            TestDataBatch.__table__,
+        ])
+
         with db.engine.begin() as connection:
             add_column(connection, "test_data_row", "encrypted_values_json", "TEXT")
             add_column(
@@ -68,7 +95,7 @@ def main():
                 connection, "api_token", "allow_secret_data",
                 "BOOLEAN NOT NULL DEFAULT 0"
             )
-        print(f"Encrypted test-data columns are ready in {database_path}.")
+        print(f"Test-data tables and encryption columns are ready in {database_path}.")
 
 
 if __name__ == "__main__":

@@ -214,13 +214,10 @@ def test_secret_values_are_not_available_when_encryption_key_is_missing(app):
 def test_encryption_migration_adds_columns_without_creating_database(tmp_path):
     database_path = tmp_path / "existing.sqlite"
     with sqlite3.connect(database_path) as connection:
-        connection.execute("CREATE TABLE test_data_row (id INTEGER PRIMARY KEY)")
-        connection.execute(
-            "CREATE TABLE test_run_data_snapshot (id INTEGER PRIMARY KEY)"
-        )
-        connection.execute(
-            "CREATE TABLE api_token (id INTEGER PRIMARY KEY)"
-        )
+        connection.execute("CREATE TABLE user (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE test_case (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE test_run (id INTEGER PRIMARY KEY)")
+        connection.execute("CREATE TABLE api_token (id INTEGER PRIMARY KEY)")
     import subprocess
     import sys
     from pathlib import Path
@@ -238,6 +235,11 @@ def test_encryption_migration_adds_columns_without_creating_database(tmp_path):
     )
     assert result.returncode == 0, result.stderr
     with sqlite3.connect(database_path) as connection:
+        tables = {
+            row[0] for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
         row_columns = {row[1] for row in connection.execute("PRAGMA table_info(test_data_row)")}
         snapshot_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(test_run_data_snapshot)")
@@ -245,6 +247,7 @@ def test_encryption_migration_adds_columns_without_creating_database(tmp_path):
         token_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(api_token)")
         }
+    assert {"test_data_set", "test_data_column", "test_data_row", "test_run_data_snapshot", "test_data_batch"} <= tables
     assert "encrypted_values_json" in row_columns
     assert "encrypted_values_snapshot" in snapshot_columns
     assert "allow_secret_data" in token_columns

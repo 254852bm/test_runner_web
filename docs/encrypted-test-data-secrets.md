@@ -43,13 +43,17 @@ environment configuration. It is separate from Flask `SECRET_KEY`.
 
 ## Database change
 
-The migration script is additive and refuses to create a missing database:
+The migration script is additive and refuses to create a missing database. It creates
+only the five test-data feature tables if they are absent; it does not create or
+alter unrelated application tables. It also adds the per-token secret permission
+to the existing `api_token` table.
 
 ```bash
 python scripts/add_test_data_encryption_columns.py --database /path/to/test_runner.db
 ```
 
-It adds nullable columns:
+It creates the missing `test_data_set`, `test_data_column`, `test_data_row`,
+`test_run_data_snapshot`, and `test_data_batch` tables, and adds nullable columns:
 - `test_data_row.encrypted_values_json`
 - `test_run_data_snapshot.encrypted_values_snapshot`
 - `api_token.allow_secret_data` (defaults to false for existing tokens)
