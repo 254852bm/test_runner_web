@@ -128,7 +128,7 @@ def test_manual_run_never_persists_decrypted_secret_in_history(app):
         assert "••••••" in step_run.step_text
         assert "secret-phrase-123" not in str(snapshot.values_snapshot_json)
         assert "secret-phrase-123" not in snapshot.encrypted_values_snapshot
-        assert "qa@example.test" in snapshot.values_snapshot_json
+        assert "qa@example.test" in str(snapshot.values_snapshot_json)
 
 
 def test_api_hides_secret_by_default_and_requires_explicit_header_to_retrieve(app):
