@@ -77,7 +77,7 @@ def main():
 
         # Create only these feature tables if they do not yet exist. This is
         # targeted and does not attempt to alter or create unrelated app tables.
-        db.create_all(tables=[
+        db.metadata.create_all(bind=db.engine, tables=[
             TestDataSet.__table__,
             TestDataColumn.__table__,
             TestDataRow.__table__,
