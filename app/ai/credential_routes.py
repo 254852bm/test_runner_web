@@ -48,7 +48,7 @@ def settings():
         if request.form.get("consent_version") != CONSENT_VERSION:
             flash("Перед сохранением ключа необходимо подтвердить условия использования.", "warning")
             return redirect(url_for("ai_credentials.settings"))
-        if request.form.get("paid_request_notice") != "accepted":
+        if request.form.get("paid_request_notice") != "accepted" or request.form.get("consent_accepted") != "accepted":
             flash("Подтвердите, что запросы к провайдеру могут быть платными.", "warning")
             return redirect(url_for("ai_credentials.settings"))
         try:
