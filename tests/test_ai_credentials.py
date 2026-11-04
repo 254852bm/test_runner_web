@@ -75,7 +75,7 @@ def test_invalid_api_key_is_rejected(app):
         with pytest.raises(ValueError):
             encrypt_ai_credential(
                 user_id=42, provider="yandex_ai_studio",
-                api_key="\nsecret", folder_id="folder-123"
+                api_key="sec\nret", folder_id="folder-123"
             )
 
 
