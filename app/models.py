@@ -354,6 +354,14 @@ class TestDataBatch(db.Model):
 
 
 
+class AIGenerationAttempt(db.Model):
+    """Metadata-only record used for per-user generation rate limiting."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+
 class AICredential(db.Model):
     """One encrypted, user-owned BYOK credential; plaintext is never persisted."""
 
