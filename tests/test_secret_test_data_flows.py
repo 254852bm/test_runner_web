@@ -147,6 +147,12 @@ def test_api_hides_secret_by_default_and_requires_explicit_header_to_retrieve(ap
 
     headers["X-Test-Runner-Include-Secrets"] = "true"
     response = client.get(f"/api/data-sets/{dataset_id}/rows", headers=headers)
+    assert response.status_code == 403
+    with app.app_context():
+        token = ApiToken.query.filter_by(token="secret-api-token-123").one()
+        token.allow_secret_data = True
+        db.session.commit()
+    response = client.get(f"/api/data-sets/{dataset_id}/rows", headers=headers)
     assert response.status_code == 200
     assert response.get_json()["secrets_included"] is True
     assert response.get_json()["rows"][0]["values"]["password"] == "secret-phrase-123"
@@ -191,6 +197,8 @@ def test_secret_values_are_not_available_when_encryption_key_is_missing(app):
     with app.app_context():
         user, project, case, dataset, row, step, token = _secret_case()
         dataset_id = dataset.id
+        token.allow_secret_data = True
+        db.session.commit()
     app.config["TEST_DATA_ENCRYPTION_KEY"] = ""
     response = app.test_client().get(
         f"/api/data-sets/{dataset_id}/rows",
@@ -209,6 +217,9 @@ def test_encryption_migration_adds_columns_without_creating_database(tmp_path):
         connection.execute("CREATE TABLE test_data_row (id INTEGER PRIMARY KEY)")
         connection.execute(
             "CREATE TABLE test_run_data_snapshot (id INTEGER PRIMARY KEY)"
+        )
+        connection.execute(
+            "CREATE TABLE api_token (id INTEGER PRIMARY KEY)"
         )
     import subprocess
     import sys
@@ -231,8 +242,12 @@ def test_encryption_migration_adds_columns_without_creating_database(tmp_path):
         snapshot_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(test_run_data_snapshot)")
         }
+        token_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(api_token)")
+        }
     assert "encrypted_values_json" in row_columns
     assert "encrypted_values_snapshot" in snapshot_columns
+    assert "allow_secret_data" in token_columns
 
 
 def test_encryption_migration_refuses_missing_database(tmp_path):
@@ -337,3 +352,30 @@ def test_secret_row_crud_uses_encrypted_storage_and_never_prefills_secret(app):
     with app.app_context():
         edited_row = db.session.get(TestDataRow, row_id)
         assert decrypt_secret_values(edited_row.encrypted_values_json) == {}
+
+
+def test_api_token_secret_permission_is_opt_in_and_user_managed(app):
+    with app.app_context():
+        user, project, case, dataset, row, step, token = _secret_case()
+        user_id, token_id = user.id, token.id
+        assert token.allow_secret_data is False
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/settings/api/{token_id}/secret-access",
+        data={"allow_secret_data": "1"},
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        token = db.session.get(ApiToken, token_id)
+        assert token.allow_secret_data is True
+
+    response = client.post(
+        f"/settings/api/{token_id}/secret-access",
+        data={"allow_secret_data": "0"},
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        token = db.session.get(ApiToken, token_id)
+        assert token.allow_secret_data is False

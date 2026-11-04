@@ -52,6 +52,7 @@ python scripts/add_test_data_encryption_columns.py --database /path/to/test_runn
 It adds nullable columns:
 - `test_data_row.encrypted_values_json`
 - `test_run_data_snapshot.encrypted_values_snapshot`
+- `api_token.allow_secret_data` (defaults to false for existing tokens)
 
 It does not move or rewrite any existing ordinary values. Existing databases
 must be backed up and migrated explicitly before a future release uses these
@@ -69,9 +70,8 @@ columns. Do not run this against production until separately approved.
   owner, but persistent StepRun text, expected results and comments are redacted.
 - Secret values are stored only in encrypted run snapshots, not ordinary JSON
   snapshots. PDF/history output uses redacted records.
-- The automation API omits secrets by default. Explicit opt-in uses
-  `X-Test-Runner-Include-Secrets: true`; this should be used only over HTTPS.
-  This is not a separate token scope: any caller holding that user's API token
-  can opt in. Protect API tokens as credentials and prefer a dedicated token
-  for CI automation.
+- The automation API omits secrets by default. Retrieval requires both the
+  per-token **Allow secret test data** permission in Settings → API tokens and
+  the explicit `X-Test-Runner-Include-Secrets: true` header. Use this only over
+  HTTPS. Protect API tokens as credentials and prefer a dedicated token for CI.
 - The existing API continues not to return secret-like columns.

@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
 import re
 from datetime import datetime
 from app import db
@@ -26,6 +26,7 @@ def _get_user_by_token(token):
     if not user or user.is_deleted or user.is_blocked_now:
         return None
     api_token.last_used_at = datetime.utcnow()
+    g.api_token = api_token
     db.session.commit()
     return user
 
@@ -124,6 +125,13 @@ def api_data_set_rows(dataset_id):
     rows = TestDataRow.query.filter_by(
         dataset_id=dataset.id, is_enabled=True
     ).order_by(TestDataRow.position.asc(), TestDataRow.id.asc()).all()
+
+    if include_secrets and not getattr(getattr(g, 'api_token', None), 'allow_secret_data', False):
+        return _error(
+            'Этот API-токен не имеет разрешения на получение секретных данных. '
+            'Измените разрешения токена в настройках API.',
+            403,
+        )
 
     response_rows = []
     for row in rows:

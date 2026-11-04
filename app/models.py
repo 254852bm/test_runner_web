@@ -161,6 +161,10 @@ class ApiToken(db.Model):
     name = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_used_at = db.Column(db.DateTime)
+    # Explicit per-token permission; legacy tokens remain unable to retrieve secrets.
+    allow_secret_data = db.Column(
+        db.Boolean, nullable=False, default=False, server_default='0'
+    )
 
     user = db.relationship('User', backref='api_tokens')
 

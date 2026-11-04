@@ -64,6 +64,10 @@ def main():
                 connection, "test_run_data_snapshot",
                 "encrypted_values_snapshot", "TEXT"
             )
+            add_column(
+                connection, "api_token", "allow_secret_data",
+                "BOOLEAN NOT NULL DEFAULT 0"
+            )
         print(f"Encrypted test-data columns are ready in {database_path}.")
 
 

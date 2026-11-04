@@ -1576,11 +1576,25 @@ def api_token_create():
     token = ApiToken(
         user_id=current_user.id,
         token=token_value,
-        name=name
+        name=name,
+        allow_secret_data=(request.form.get('allow_secret_data') == '1')
     )
     db.session.add(token)
     db.session.commit()
     flash(f'Токен «{name}» создан. Скопируйте его — он больше не будет показан.', 'success')
+    return redirect(url_for('main.api_tokens'))
+
+
+@main_bp.route('/settings/api/<int:token_id>/secret-access', methods=['POST'])
+@login_required
+def api_token_secret_access(token_id):
+    token = ApiToken.query.get_or_404(token_id)
+    if token.user_id != current_user.id:
+        flash('Доступ запрещён', 'danger')
+        return redirect(url_for('main.api_tokens'))
+    token.allow_secret_data = request.form.get('allow_secret_data') == '1'
+    db.session.commit()
+    flash('Разрешение на получение секретных данных обновлено.', 'success')
     return redirect(url_for('main.api_tokens'))
 
 

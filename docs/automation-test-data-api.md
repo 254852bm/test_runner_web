@@ -79,7 +79,7 @@ Example response:
 
 Only active rows are returned. By default, secret columns and columns with names that look like passwords, tokens or API keys are omitted.
 
-If an automation job is explicitly authorized to receive credentials, it may send the additional header `X-Test-Runner-Include-Secrets: true`. The server then decrypts secret values and returns them to the API-token owner. Use this only over HTTPS, keep the response in memory, never print it to test logs or CI artifacts, and use a dedicated token for automation. This header is an explicit opt-in, not a separate token scope; anyone holding that API token can request the secret values. Without this header, secrets are omitted. If the encryption key is missing or invalid, the server returns HTTP 503 rather than exposing plaintext or falling back to unencrypted storage.
+If an automation job is explicitly authorized to receive credentials, it may send the additional header `X-Test-Runner-Include-Secrets: true`. The server then decrypts secret values and returns them only if that API token also has the separate **Allow secret test data** permission enabled in Settings → API tokens. Both the per-token permission and this explicit header are required. Use this only over HTTPS, keep the response in memory, never print it to test logs or CI artifacts, and use a dedicated token for automation. Without this header, secrets are omitted. If the encryption key is missing or invalid, the server returns HTTP 503 rather than exposing plaintext or falling back to unencrypted storage.
 
 Secret values are encrypted at rest with the dedicated `TEST_DATA_ENCRYPTION_KEY`; ordinary columns remain separate. See `docs/encrypted-test-data-secrets.md` for key management and migration instructions.
 
@@ -239,7 +239,7 @@ Environment variables to configure in the local run configuration or CI secret s
 - `TEST_RUNNER_TEST_CASE_ID` — ID of the test case in Test Runner;
 - `TEST_RUNNER_DATA_SET_ID` — ID of the data set attached to that test case.
 
-The sample intentionally uses non-secret values. If you add a secret column, mark it as secret in the Test Runner UI and retrieve it only when the automation job genuinely requires it, using the explicit header described above. Never put secrets into ordinary columns.
+The sample intentionally uses non-secret values. If you add a secret column, mark it as secret in the Test Runner UI, enable **Allow secret test data** only for the dedicated automation token, and retrieve it only when the job genuinely requires it using the explicit header described above. Never put secrets into ordinary columns.
 
 ## Compatibility notes
 
