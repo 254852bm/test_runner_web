@@ -35,15 +35,19 @@ _SENSITIVE_KEY_RE = re.compile(
 )
 
 
-def _get_user_from_request():
-    """Authenticate GET API requests without putting tokens in URLs."""
+def _get_request_token():
+    """Read a token from headers; never accept credentials in query strings."""
     authorization = (request.headers.get('Authorization') or '').strip()
-    token = ''
     if authorization.lower().startswith('bearer '):
         token = authorization[7:].strip()
-    if not token:
-        token = (request.headers.get('X-API-Token') or '').strip()
-    return _get_user_by_token(token)
+        if token:
+            return token
+    return (request.headers.get('X-API-Token') or '').strip()
+
+
+def _get_user_from_request():
+    """Authenticate GET API requests without putting tokens in URLs."""
+    return _get_user_by_token(_get_request_token())
 
 
 def _owns_test_case(user, test_case):
@@ -160,7 +164,7 @@ def api_run():
     if not data:
         return _error('Тело запроса должно быть в формате JSON')
 
-    token = data.get('token', '').strip()
+    token = (data.get('token') or '').strip() or _get_request_token()
     user = _get_user_by_token(token)
     if not user:
         return _error('Неверный или отсутствующий API-токен', 401)

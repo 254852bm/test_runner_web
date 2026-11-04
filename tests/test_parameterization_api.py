@@ -196,8 +196,8 @@ def test_api_run_can_attach_a_parameter_row_and_store_its_snapshot(app):
 
     response = app.test_client().post(
         "/api/run",
+        headers={"Authorization": "Bearer api-test-token-123"},
         json={
-            "token": "api-test-token-123",
             "test_case_id": case_id,
             "data_set_id": dataset_id,
             "data_row_id": row_id,
