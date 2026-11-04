@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file, abort, current_app, jsonify
 from flask_login import login_required, current_user
+from flask_wtf.csrf import validate_csrf, ValidationError
 import re
 from markdown import markdown
 from markdown.extensions.toc import slugify_unicode
@@ -1206,6 +1207,10 @@ def delete_test(project_id, test_id):
 @login_required
 def reveal_run_secret(project_id, test_id, dataset_id, row_id, column_id):
     """Reveal one secret only after an explicit, authenticated user action."""
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', ''))
+    except ValidationError:
+        abort(400, description='Недействительный CSRF-токен')
     project = Project.query.filter_by(id=project_id, user_id=current_user.id).first_or_404()
     test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
     dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
