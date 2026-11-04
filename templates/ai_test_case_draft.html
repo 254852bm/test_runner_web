@@ -33,9 +33,9 @@
                     {% if can_generate and ai_provider_mode != 'ollama' %}
                         {% if estimated_max_cost_rub is not none %}
                             <div class="alert alert-secondary small" role="status">
-                                Ориентировочная верхняя оценка для максимального размера запроса и лимита ответа:
+                                Примерная стоимость для максимального размера запроса и лимита ответа:
                                 <strong>до {{ '%.4f'|format(estimated_max_cost_rub) }} ₽</strong>.
-                                Фактическая сумма зависит от токенизации и тарифа выбранной модели.
+                                Это не гарантированный предел списания: фактическая сумма зависит от токенизации и действующего тарифа модели.
                             </div>
                         {% else %}
                             <div class="alert alert-warning small" role="status">
