@@ -407,6 +407,8 @@ def test_generation_rate_limit_blocks_provider_before_outbound_call(client, app,
 
 def test_configured_cost_upper_bound_is_shown_before_paid_request(client, app):
     _login(client, app)
+    app.config["AI_TEST_CASES_ENABLED"] = True
+    _add_ai_credential(app)
     app.config["AI_PRICE_INPUT_RUB_PER_1K"] = 0.2
     app.config["AI_PRICE_OUTPUT_RUB_PER_1K"] = 0.2
     app.config["AI_MAX_COMPLETION_TOKENS"] = 3000
