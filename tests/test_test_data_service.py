@@ -82,7 +82,7 @@ def test_prepare_test_data_substitutes_precondition_action_and_expected_result(a
 
         assert result["precondition"] == "Open https://example.test"
         assert result["steps"][0]["action"] == (
-            "Enter qa@example.test and not-secret-in-this-test"
+            "Enter qa@example.test and sample-pin-code"
         )
         assert result["steps"][0]["expected_result"] == "See Welcome"
         assert result["values_snapshot"]["login"] == "qa@example.test"
@@ -152,7 +152,7 @@ def test_prepare_test_data_does_not_evaluate_template_expressions(app):
         db.session.commit()
         result = prepare_test_data(case, dataset, row)
         assert result["steps"][0]["action"] == (
-            "Enter <script>alert(1)</script> and not-secret-in-this-test"
+            "Enter <script>alert(1)</script> and sample-pin-code"
         )
 
 
@@ -178,7 +178,10 @@ def test_prepare_test_data_rejects_password_like_column_name(app):
     with app.app_context():
         case, dataset, row, columns = _objects()
         columns[2].key = "pin_code"
-        row.values_json = dict(row.values_json, password="plain-text-password")
+        values = dict(row.values_json)
+        values.pop("pin_code", None)
+        values["password"] = "plain-text-password"
+        row.values_json = values
         db.session.commit()
         with pytest.raises(ValueError, match="секретные поля"):
             prepare_test_data(case, dataset, row)
