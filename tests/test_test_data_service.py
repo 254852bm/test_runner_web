@@ -44,7 +44,7 @@ def _objects():
     db.session.flush()
     step = TestStep(
         test_case_id=case.id, position=1,
-        action="Enter {{login}} and {{password}}",
+        action="Enter {{login}} and {{pin_code}}",
         expected_result="See {{expected_message}}",
     )
     db.session.add(step)
@@ -55,7 +55,7 @@ def _objects():
     columns = [
         TestDataColumn(dataset_id=dataset.id, key=key, label=key, position=index)
         for index, key in enumerate(
-            ["base_url", "login", "password", "expected_message"]
+            ["base_url", "login", "pin_code", "expected_message"]
         )
     ]
     db.session.add_all(columns)
@@ -66,7 +66,7 @@ def _objects():
         values_json={
             "base_url": "https://example.test",
             "login": "qa@example.test",
-            "password": "not-secret-in-this-test",
+            "pin_code": "sample-pin-code",
             "expected_message": "Welcome",
         },
     )
@@ -177,7 +177,7 @@ def test_deleting_test_case_cascades_its_data_sets_and_rows(app):
 def test_prepare_test_data_rejects_password_like_column_name(app):
     with app.app_context():
         case, dataset, row, columns = _objects()
-        columns[2].key = "password"
+        columns[2].key = "pin_code"
         row.values_json = dict(row.values_json, password="plain-text-password")
         db.session.commit()
         with pytest.raises(ValueError, match="секретные поля"):

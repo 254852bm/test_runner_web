@@ -105,7 +105,7 @@ def test_manual_run_substitutes_values_and_saves_immutable_snapshot(app):
         data={"step_status[]": ["PASS"], "step_comment[]": ["Looks good"]},
         follow_redirects=False,
     )
-    assert response.status_code == 302
+    assert response.status_code == 302, response.get_data(as_text=True)
 
     with app.app_context():
         run = TestRun.query.filter_by(test_case_id=case_id).one()
