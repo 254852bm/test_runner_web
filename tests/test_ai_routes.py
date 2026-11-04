@@ -5,7 +5,7 @@ import pytest
 from werkzeug.security import generate_password_hash
 
 from app import create_app, db
-from app.models import AICredential, AIGenerationAttempt, Project, TestCase, TestCaseVersion, User
+from app.models import AICredential, AIGenerationAttempt, AIDraftSave, Project, TestCase, TestCaseVersion, User
 
 
 @pytest.fixture()
@@ -416,3 +416,31 @@ def test_configured_cost_upper_bound_is_shown_before_paid_request(client, app):
     assert response.status_code == 200
     assert "Примерная стоимость" in response.get_data(as_text=True)
     assert "₽" in response.get_data(as_text=True)
+
+
+
+def test_reviewed_draft_save_is_idempotent_when_form_is_submitted_twice(client, app, monkeypatch):
+    _login(client, app)
+    import app.ai.routes as ai_routes
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
+    payload = {
+        "csrf_token": "test-token",
+        "draft_save_token": "a" * 32,
+        "title": "Проверка повторного сохранения",
+        "precondition": "Пользователь создан",
+        "step_action[]": ["Открыть страницу входа"],
+        "step_expected[]": ["Форма входа отображается"],
+    }
+    url = f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft/save"
+
+    first = client.post(url, data=payload, follow_redirects=False)
+    second = client.post(url, data=payload, follow_redirects=False)
+
+    assert first.status_code == 302
+    assert second.status_code == 302
+    assert first.headers["Location"] == second.headers["Location"]
+    with app.app_context():
+        assert TestCase.query.count() == 1
+        assert TestCaseVersion.query.count() == 1
+        assert AIDraftSave.query.count() == 1
+        assert AIDraftSave.query.first().test_case_id == TestCase.query.first().id
