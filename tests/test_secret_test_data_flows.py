@@ -404,7 +404,7 @@ def test_column_structure_edits_move_current_values_but_preserve_run_snapshots(a
             ),
         )
         db.session.add(snapshot)
-        db.session.flush()
+        db.session.commit()
         user_id, project_id, case_id = user.id, project.id, case.id
         dataset_id, row_id = dataset.id, row.id
         login_column = next(column for column in dataset.columns if column.key == "login")
