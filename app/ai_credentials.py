@@ -32,7 +32,7 @@ def _cipher():
         ) from None
 
 
-def encrypt_ai_credential(*, user_id, provider, api_key):
+def encrypt_ai_credential(*, user_id, provider, api_key, folder_id):
     """Encrypt and bind a credential to one user and one provider."""
     if not isinstance(user_id, int) or user_id <= 0:
         raise ValueError("Некорректный пользователь.")
@@ -74,4 +74,4 @@ def decrypt_ai_credential(*, user_id, provider, encrypted_payload):
         raise AICredentialEncryptionError(
             "AI-ключ не принадлежит этому пользователю или провайдеру."
         )
-    return payload["api_key"]
+    return {"api_key": payload["api_key"], "folder_id": payload["folder_id"]}
