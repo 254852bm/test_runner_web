@@ -41,7 +41,7 @@ The script refuses to create a missing database, verifies the existing `user` ta
 
 ## Not implemented yet
 
-- No provider request, key validation, or billable operation.
+- No provider request, key validation, or billable operation. CI verification uses mocked provider responses.
 - No per-request confirmation UI; this must be implemented before any provider call is connected.
 - No usage/token/cost reporting.
 - No second provider or multi-key support.
