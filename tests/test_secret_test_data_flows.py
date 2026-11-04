@@ -488,3 +488,43 @@ def test_column_structure_edits_move_current_values_but_preserve_run_snapshots(a
         assert decrypt_secret_values(edited_row.encrypted_values_json) == {}
         snapshot = db.session.get(TestRunDataSnapshot, snapshot_id)
         assert snapshot.encrypted_values_snapshot == old_encrypted_snapshot
+
+
+
+def test_manual_secret_reveal_requires_csrf_and_project_ownership(app):
+    with app.app_context():
+        user, project, case, dataset, row, step, token = _secret_case()
+        owner_id, project_id, case_id = user.id, project.id, case.id
+        dataset_id, row_id = dataset.id, row.id
+        column_id = TestDataColumn.query.filter_by(
+            dataset_id=dataset_id, key="password"
+        ).one().id
+        stranger = User(
+            email="stranger@example.test",
+            password="not-a-real-password",
+        )
+        db.session.add(stranger)
+        db.session.commit()
+        stranger_id = stranger.id
+
+    endpoint = (
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}"
+        f"/rows/{row_id}/secrets/{column_id}"
+    )
+    owner_client = app.test_client()
+    _login(owner_client, owner_id)
+
+    missing_csrf = owner_client.post(endpoint)
+    assert missing_csrf.status_code == 400
+
+    stranger_client = app.test_client()
+    _login(stranger_client, stranger_id)
+    with stranger_client.session_transaction() as session:
+        from flask_wtf.csrf import generate_csrf
+        # Generate a valid token in this user's session for the ownership check.
+        csrf_token = generate_csrf()
+    forbidden = stranger_client.post(
+        endpoint, headers={"X-CSRFToken": csrf_token}
+    )
+    assert forbidden.status_code == 404
+    assert "secret-phrase-123" not in forbidden.get_data(as_text=True)
