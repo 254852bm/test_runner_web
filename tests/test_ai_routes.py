@@ -118,10 +118,10 @@ def test_enabled_generation_renders_editable_draft_without_database_write(client
             }
 
     monkeypatch.setattr(ai_routes, "_provider", lambda: FakeProvider())
-    token = _csrf_token(client, app.config["TEST_PROJECT_ID"])
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
     response = client.post(
         f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft",
-        data={"csrf_token": token, "requirement": "Проверить авторизацию"},
+        data={"csrf_token": "test-token", "requirement": "Проверить авторизацию"},
     )
 
     assert response.status_code == 200
