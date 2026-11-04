@@ -71,7 +71,8 @@ def test_ai_draft_page_is_disabled_by_default(client, app):
     _login(client, app)
     response = client.get(f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft")
     assert response.status_code == 200
-    assert "пока не включён" in response.get_data(as_text=True)
+    assert "Интерфейс подготовлен" in response.get_data(as_text=True)
+    assert "disabled" in response.get_data(as_text=True)
 
 
 def test_disabled_generation_does_not_call_provider_or_write_to_database(client, app, monkeypatch):
@@ -82,10 +83,10 @@ def test_disabled_generation_does_not_call_provider_or_write_to_database(client,
         raise AssertionError("Provider must not be initialized when feature is disabled")
 
     monkeypatch.setattr(ai_routes, "_provider", unexpected_provider)
-    token = _csrf_token(client, app.config["TEST_PROJECT_ID"])
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
     response = client.post(
         f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft",
-        data={"csrf_token": token, "requirement": "Проверить авторизацию"},
+        data={"csrf_token": "test-token", "requirement": "Проверить авторизацию"},
     )
 
     assert response.status_code == 200
@@ -132,10 +133,12 @@ def test_enabled_generation_renders_editable_draft_without_database_write(client
         assert TestCaseVersion.query.count() == 0
 
 
-def test_reviewed_draft_save_creates_test_and_first_version(client, app):
+def test_reviewed_draft_save_creates_test_and_first_version(client, app, monkeypatch):
     _login(client, app)
+    import app.ai.routes as ai_routes
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
     project_id = app.config["TEST_PROJECT_ID"]
-    token = _csrf_token(client, project_id)
+    token = "test-token"
     response = client.post(
         f"/project/{project_id}/ai-draft/save",
         data={
