@@ -41,7 +41,7 @@ The paid adapter targets Yandex AI Studio. Its model URI is server configuration
 
 ## Database setup
 
-The models are additive, but the existing application database is not modified automatically by this feature branch. First back up an isolated TEST database, then run:
+The models are additive. The application currently calls `db.create_all()` during startup, so deploying this branch with the AI feature flag disabled will still create the three new empty AI tables; it does not alter existing user, project, or test-case columns. For an isolated TEST database, the following script can create the tables explicitly (for example, when `SKIP_DB_CREATE_ALL=1`):
 
 ```bash
 python scripts/add_ai_credential_table.py --database /absolute/path/to/test_runner.db
@@ -54,11 +54,11 @@ The script refuses to create a missing database, verifies the existing `user` ta
 
 Generation attempts are rate-limited per user with a rolling one-hour window. The default is five attempts per hour; the server setting `AI_GENERATIONS_PER_HOUR` may adjust this from 1 to 100. A metadata-only attempt record is committed before provider I/O, so provider failures and retries also consume an attempt. This intentionally discourages repeated paid requests. No requirement or response content is stored in this table.
 
-For Yandex, an optional upper-bound estimate is shown before generation when the administrator configures `AI_PRICE_INPUT_RUB_PER_1K` and `AI_PRICE_OUTPUT_RUB_PER_1K` for the selected model's current tariff. The estimate assumes the maximum allowed requirement length and configured maximum completion tokens; it is not a guaranteed invoice amount. If rates are absent, the UI explicitly says the estimate is not configured and asks the user to check the provider tariff. The rates must be reviewed whenever the model or tariff changes. The local Ollama mode shows no provider charge estimate.
+For Yandex, an optional approximate cost estimate is shown before generation when the administrator configures `AI_PRICE_INPUT_RUB_PER_1K` and `AI_PRICE_OUTPUT_RUB_PER_1K` for the selected model's current tariff. The estimate approximates token count from character length using a rough heuristic, assumes the maximum allowed requirement length and configured maximum completion tokens, and is not a guaranteed upper bound or invoice amount. If rates are absent, the UI explicitly says the estimate is not configured and asks the user to check the provider tariff. The rates must be reviewed whenever the model or tariff changes. The local Ollama mode shows no provider charge estimate.
 
 ## Not implemented yet
 
-- A local Ollama adapter and a separately hosted model endpoint.
+- A separately hosted model endpoint.
 - A second customer-selectable provider or multi-key support.
 - Reliable per-user token/cost reporting; this should be shown only when the provider returns trustworthy usage data.
 - Automatic credential migration or key rotation.
