@@ -106,10 +106,24 @@ def test_manual_run_never_persists_decrypted_secret_in_history(app):
     response = client.get(url)
     assert response.status_code == 200
     page = response.get_data(as_text=True)
-    # Secret is present only in the dedicated password input, never in step text.
-    assert page.count("secret-phrase-123") == 1
-    assert 'type="password" value="secret-phrase-123"' in page
+    # The decrypted secret must not be present anywhere in the initial HTML.
+    assert "secret-phrase-123" not in page
+    assert 'type="password" value=""' in page
+    assert "Показать" in page
     assert "qa@example.test" in page
+
+    reveal_url = (
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}"
+        f"/rows/{row_id}/secrets/"
+    )
+    with app.app_context():
+        secret_column_id = TestDataColumn.query.filter_by(
+            dataset_id=dataset_id, key="password"
+        ).one().id
+    reveal_response = client.post(reveal_url + str(secret_column_id))
+    assert reveal_response.status_code == 200
+    assert reveal_response.get_json()["value"] == "secret-phrase-123"
+    assert reveal_response.headers["Cache-Control"].startswith("no-store")
 
     response = client.post(
         url,
