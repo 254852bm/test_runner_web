@@ -37,17 +37,24 @@ Set the resulting value as `AI_CREDENTIAL_ENCRYPTION_KEY` in the server's secret
 
 When the encryption key is missing or invalid, credential saving fails closed. This is intentional.
 
-The first adapter currently targets Yandex AI Studio. Its model URI is server configuration; the customer's API key and folder ID are taken from that customer's encrypted credential. The service layer accepts a provider object, so provider-specific transport can be extended behind the same generation/validation interface. A local model or a separately hosted inference service is not yet implemented and must not be pointed at the production VPS with its current 2 GB RAM.
+The paid adapter targets Yandex AI Studio. Its model URI is server configuration; the customer's API key and folder ID are taken from that customer's encrypted credential. For local development only, `AI_PROVIDER_MODE=ollama` selects the Ollama adapter at `http://127.0.0.1:11434`; it accepts only loopback HTTP addresses and requires `AI_LOCAL_MODEL`. Local generation does not require a customer key or paid-request confirmation. Do not install a model on the production VPS with its current 2 GB RAM; run Ollama on a developer workstation. A separately hosted inference service is not implemented.
 
 ## Database setup
 
-The model is additive, but the existing application database is not modified automatically by this feature branch. First back up an isolated TEST database, then run:
+The models are additive, but the existing application database is not modified automatically by this feature branch. First back up an isolated TEST database, then run:
 
 ```bash
 python scripts/add_ai_credential_table.py --database /absolute/path/to/test_runner.db
 ```
 
-The script refuses to create a missing database, verifies the existing `user` table, and creates only `ai_credential`. Do not run this against production as part of this change.
+The script refuses to create a missing database, verifies the existing `user` table, and creates only `ai_credential` and `ai_generation_attempt`. The latter stores only user ID and timestamp, not requirement text, response text, keys, or other content. Do not run this against production as part of this change.
+
+
+## Request limits and cost estimate
+
+Generation attempts are rate-limited per user with a rolling one-hour window. The default is five attempts per hour; the server setting `AI_GENERATIONS_PER_HOUR` may adjust this from 1 to 100. A metadata-only attempt record is committed before provider I/O, so provider failures and retries also consume an attempt. This intentionally discourages repeated paid requests. No requirement or response content is stored in this table.
+
+For Yandex, an optional upper-bound estimate is shown before generation when the administrator configures `AI_PRICE_INPUT_RUB_PER_1K` and `AI_PRICE_OUTPUT_RUB_PER_1K` for the selected model's current tariff. The estimate assumes the maximum allowed requirement length and configured maximum completion tokens; it is not a guaranteed invoice amount. If rates are absent, the UI explicitly says the estimate is not configured and asks the user to check the provider tariff. The rates must be reviewed whenever the model or tariff changes. The local Ollama mode shows no provider charge estimate.
 
 ## Not implemented yet
 
