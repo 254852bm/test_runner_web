@@ -26,7 +26,7 @@ def test_credential_is_encrypted_and_round_trips(app):
     secret = "yandex-api-key-do-not-leak"
     with app.app_context():
         encrypted = encrypt_ai_credential(
-            user_id=42, provider="yandex_ai_studio", api_key=secret
+            user_id=42, provider="yandex_ai_studio", api_key=secret, folder_id="folder-123"
         )
         assert secret not in encrypted
         assert decrypt_ai_credential(
@@ -37,7 +37,7 @@ def test_credential_is_encrypted_and_round_trips(app):
 def test_credential_cannot_be_decrypted_by_another_user(app):
     with app.app_context():
         encrypted = encrypt_ai_credential(
-            user_id=42, provider="yandex_ai_studio", api_key="secret"
+            user_id=42, provider="yandex_ai_studio", api_key="secret", folder_id="folder-123"
         )
         with pytest.raises(AICredentialEncryptionError, match="не принадлежит"):
             decrypt_ai_credential(
