@@ -414,5 +414,5 @@ def test_configured_cost_upper_bound_is_shown_before_paid_request(client, app):
     app.config["AI_MAX_COMPLETION_TOKENS"] = 3000
     response = client.get(f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft")
     assert response.status_code == 200
-    assert "Ориентировочная верхняя оценка" in response.get_data(as_text=True)
+    assert "Примерная стоимость" in response.get_data(as_text=True)
     assert "₽" in response.get_data(as_text=True)
