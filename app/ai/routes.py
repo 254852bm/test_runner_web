@@ -78,7 +78,7 @@ def _reserve_generation_slot():
 
 
 def _maximum_estimated_cost_rub():
-    """Return a configured upper-bound estimate, never a fabricated price."""
+    """Return a rough configured estimate; provider tokenization may differ."""
     input_rate = current_app.config.get(
         "AI_PRICE_INPUT_RUB_PER_1K", os.getenv("AI_PRICE_INPUT_RUB_PER_1K")
     )
