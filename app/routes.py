@@ -12,6 +12,7 @@ import secrets
 import os
 from pathlib import Path
 from werkzeug.utils import secure_filename
+from sqlalchemy.exc import OperationalError
 
 main_bp = Blueprint('main', __name__)
 
@@ -386,6 +387,24 @@ def delete_project(project_id):
             run_id for (run_id,) in db.session.query(TestRun.id)
             .filter(TestRun.test_case_id.in_(test_ids)).all()
         ]
+        dataset_ids = [
+            dataset_id for (dataset_id,) in db.session.query(TestDataSet.id)
+            .filter(TestDataSet.test_case_id.in_(test_ids)).all()
+        ]
+        # Bulk deletes bypass ORM cascades: remove parameterization records explicitly.
+        TestDataBatch.query.filter(
+            TestDataBatch.test_case_id.in_(test_ids)
+        ).delete(synchronize_session=False)
+        if dataset_ids:
+            TestDataRow.query.filter(
+                TestDataRow.dataset_id.in_(dataset_ids)
+            ).delete(synchronize_session=False)
+            TestDataColumn.query.filter(
+                TestDataColumn.dataset_id.in_(dataset_ids)
+            ).delete(synchronize_session=False)
+            TestDataSet.query.filter(
+                TestDataSet.id.in_(dataset_ids)
+            ).delete(synchronize_session=False)
         step_run_ids = []
         if run_ids:
             step_run_ids = [
@@ -413,6 +432,10 @@ def delete_project(project_id):
             StepRun.query.filter(StepRun.id.in_(step_run_ids)).delete(synchronize_session=False)
 
         if run_ids:
+            # Snapshot FK is non-nullable and has no ON DELETE CASCADE.
+            TestRunDataSnapshot.query.filter(
+                TestRunDataSnapshot.test_run_id.in_(run_ids)
+            ).delete(synchronize_session=False)
             TestRun.query.filter(TestRun.id.in_(run_ids)).delete(synchronize_session=False)
         if step_ids:
             TestStep.query.filter(TestStep.id.in_(step_ids)).delete(synchronize_session=False)
@@ -1148,6 +1171,10 @@ def delete_test(project_id, test_id):
         StepRun.query.filter(StepRun.id.in_(step_run_ids)).delete(synchronize_session=False)
 
     if run_ids:
+        # Bulk deletion skips the TestRun.data_snapshot ORM cascade.
+        TestRunDataSnapshot.query.filter(
+            TestRunDataSnapshot.test_run_id.in_(run_ids)
+        ).delete(synchronize_session=False)
         TestRun.query.filter(TestRun.id.in_(run_ids)).delete(synchronize_session=False)
     if step_ids:
         TestStep.query.filter(TestStep.id.in_(step_ids)).delete(synchronize_session=False)
@@ -1281,7 +1308,21 @@ def run_tests(project_id):
         ).first_or_404()
         data_row = TestDataRow.query.filter_by(
             id=data_row_id, dataset_id=dataset.id
-        ).first_or_404()
+        ).first()
+        if data_row is None and data_batch:
+            # A row can be deleted in another tab after the batch was created.
+            # Stop cleanly instead of returning a 404 and leaving a stale batch.
+            db.session.delete(data_batch)
+            db.session.commit()
+            flash(
+                'Последовательный запуск остановлен: одна из строк тестовых данных была удалена.',
+                'warning'
+            )
+            return redirect(url_for(
+                'main.test_data_sets', project_id=project.id, test_id=test.id
+            ))
+        if data_row is None:
+            abort(404)
         if not data_row.is_enabled and not data_batch:
             flash('Эта строка тестовых данных отключена.', 'warning')
             return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
@@ -1314,6 +1355,63 @@ def run_tests(project_id):
         elif any(status not in STATUS_LABELS for status in statuses):
             flash('Некорректный статус шага', 'danger')
         else:
+            if data_batch:
+                # Claim this iteration atomically. Replayed requests cannot create duplicate runs.
+                try:
+                    claimed = TestDataBatch.query.filter_by(
+                        id=data_batch.id,
+                        user_id=current_user.id,
+                        next_index=data_index,
+                    ).update(
+                        {TestDataBatch.next_index: data_index + 1},
+                        synchronize_session=False,
+                    )
+                except OperationalError as error:
+                    db.session.rollback()
+                    message = str(getattr(error, 'orig', error)).lower()
+                    if 'database is locked' not in message and 'database is busy' not in message:
+                        raise
+                    current_batch = TestDataBatch.query.filter_by(
+                        token=batch_token, user_id=current_user.id,
+                        test_case_id=test.id,
+                    ).first()
+                    if current_batch:
+                        flash(
+                            'База данных занята другим запросом. Повторите сохранение: '
+                            'текущая итерация ещё не подтверждена.',
+                            'warning'
+                        )
+                        return redirect(url_for(
+                            'main.run_tests', project_id=project.id,
+                            test_id=test.id, data_set_id=current_batch.dataset_id,
+                            run_all=1, batch_id=current_batch.token,
+                            data_index=current_batch.next_index,
+                        ))
+                    flash('Последовательный запуск уже завершён.', 'warning')
+                    return redirect(url_for('main.run_stats', project_id=project.id))
+                if claimed != 1:
+                    db.session.rollback()
+                    current_batch = TestDataBatch.query.filter_by(
+                        token=batch_token, user_id=current_user.id,
+                        test_case_id=test.id,
+                    ).first()
+                    if current_batch:
+                        flash(
+                            'Эта итерация уже была сохранена. Продолжите со следующей.',
+                            'warning'
+                        )
+                        return redirect(url_for(
+                            'main.run_tests', project_id=project.id,
+                            test_id=test.id, data_set_id=current_batch.dataset_id,
+                            run_all=1, batch_id=current_batch.token,
+                            data_index=current_batch.next_index,
+                        ))
+                    flash('Последовательный запуск уже завершён.', 'warning')
+                    return redirect(url_for('main.run_stats', project_id=project.id))
+
+                # Keep the ORM object in sync with the atomic SQL update.
+                data_batch.next_index = data_index + 1
+
             # Pin each run to the exact test-case snapshot that was current when it started.
             version = ensure_test_version(test)
             overall_status = step_status_summary([
@@ -1401,8 +1499,6 @@ def run_tests(project_id):
                             size_bytes=len(data)
                         ))
 
-                if data_batch:
-                    data_batch.next_index += 1
                 db.session.commit()
             except ValueError as error:
                 db.session.rollback()
