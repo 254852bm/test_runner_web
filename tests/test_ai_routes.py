@@ -159,6 +159,7 @@ def test_reviewed_draft_save_creates_test_and_first_version(client, app, monkeyp
         f"/project/{project_id}/ai-draft/save",
         data={
             "csrf_token": token,
+            "draft_save_token": "b" * 32,
             "title": "Проверка сохранения черновика",
             "precondition": "Пользователь зарегистрирован",
             "step_action[]": ["Открыть форму входа"],
