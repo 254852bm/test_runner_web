@@ -20,6 +20,10 @@ class User(UserMixin, db.Model):
         return bool(self.is_blocked and (self.blocked_until is None or self.blocked_until > datetime.utcnow()))
 
     projects = db.relationship('Project', backref='owner', lazy=True)
+    ai_credential = db.relationship(
+        'AICredential', back_populates='user', uselist=False,
+        cascade='all, delete-orphan'
+    )
 
 
 class Project(db.Model):
@@ -347,3 +351,24 @@ class TestDataBatch(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     user = db.relationship('User', backref='test_data_batches')
+
+
+
+class AICredential(db.Model):
+    """One encrypted, user-owned BYOK credential; plaintext is never persisted."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True, index=True
+    )
+    provider = db.Column(db.String(40), nullable=False)
+    encrypted_payload = db.Column(db.Text, nullable=False)
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default='1')
+    consent_version = db.Column(db.String(40), nullable=False)
+    consented_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    user = db.relationship('User', back_populates='ai_credential')
