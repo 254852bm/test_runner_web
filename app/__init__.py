@@ -61,6 +61,8 @@ def create_app(test_config=None):
     app.register_blueprint(api_bp)
     from .admin_routes import admin_bp
     app.register_blueprint(admin_bp)
+    from .ai.routes import ai_bp
+    app.register_blueprint(ai_bp)
 
     @app.context_processor
     def inject_csrf_token():

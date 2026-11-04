@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xl-10">
+        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
+            <div>
+                <div class="text-muted small mb-1">Проект: {{ project.name }}</div>
+                <h2 class="mb-1">Черновик тест-кейса с ИИ</h2>
+                <p class="text-muted mb-0">ИИ предложит основу. Перед сохранением вы сможете проверить и изменить каждый пункт.</p>
+            </div>
+            <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-outline-secondary">← Назад к проекту</a>
+        </div>
+
+        {% if not ai_enabled %}
+            <div class="alert alert-info" role="status">
+                Интерфейс подготовлен, но генерация пока отключена. Она станет доступна после настройки провайдера и отдельного включения функции.
+            </div>
+        {% endif %}
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('ai.test_case_draft', project_id=project.id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label for="requirement" class="form-label fw-semibold">Требование</label>
+                        <textarea class="form-control" id="requirement" name="requirement" rows="7"
+                                  maxlength="{{ max_requirement_length }}" required
+                                  placeholder="Например: Пользователь должен иметь возможность восстановить пароль по ссылке из письма.">{{ requirement }}</textarea>
+                        <div class="form-text">До {{ max_requirement_length }} символов. Не вставляйте реальные пароли, токены и персональные данные.</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary" {% if not ai_enabled %}disabled{% endif %}>
+                        ✨ Сгенерировать черновик
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        {% if draft %}
+            <div class="d-flex align-items-center gap-2 flex-wrap mb-3">
+                <h3 class="h5 mb-0">Проверьте и отредактируйте результат</h3>
+                <span class="badge bg-warning text-dark">Черновик — не сохранён</span>
+            </div>
+
+            <div class="alert alert-secondary small">
+                Тип: <strong>{{ {'positive': 'Позитивный', 'negative': 'Негативный', 'boundary': 'Граничный'}[draft.test_type] }}</strong>
+                · Приоритет: <strong>{{ {'low': 'Низкий', 'medium': 'Средний', 'high': 'Высокий'}[draft.priority] }}</strong>
+                {% if draft.assumptions or draft.open_questions %}
+                    <div class="mt-2">Обязательно проверьте допущения и открытые вопросы ниже.</div>
+                {% endif %}
+            </div>
+
+            <form method="POST" action="{{ url_for('ai.save_ai_test_case_draft', project_id=project.id) }}" id="aiDraftSaveForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label for="draft-title" class="form-label fw-semibold">Название тест-кейса</label>
+                            <input class="form-control" id="draft-title" name="title" maxlength="200" required value="{{ draft.title }}">
+                        </div>
+                        <div class="mb-3">
+                            <label for="draft-precondition" class="form-label fw-semibold">Предусловия</label>
+                            <textarea class="form-control" id="draft-precondition" name="precondition" rows="3">{{ draft.preconditions|join('\n') }}</textarea>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="ai-draft-steps">
+                    {% for step in draft.steps %}
+                        <div class="card mb-3 ai-draft-step">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <strong>Шаг {{ loop.index }}</strong>
+                                    <button type="button" class="btn btn-sm btn-outline-danger remove-ai-step">Удалить шаг</button>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label">Действие</label>
+                                    <textarea class="form-control" name="step_action[]" rows="2" required>{{ step.action }}</textarea>
+                                </div>
+                                <div>
+                                    <label class="form-label">Ожидаемый результат</label>
+                                    <textarea class="form-control" name="step_expected[]" rows="2">{{ step.expected_result }}</textarea>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+                <div class="mb-3">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="add-ai-step">+ Добавить шаг</button>
+                </div>
+
+                {% if draft.assumptions %}
+                    <div class="card border-warning mb-3">
+                        <div class="card-body">
+                            <h4 class="h6">Допущения ИИ — проверьте</h4>
+                            <ul class="mb-0">{% for item in draft.assumptions %}<li>{{ item }}</li>{% endfor %}</ul>
+                        </div>
+                    </div>
+                {% endif %}
+                {% if draft.open_questions %}
+                    <div class="card border-warning mb-3">
+                        <div class="card-body">
+                            <h4 class="h6">Открытые вопросы — уточните требования</h4>
+                            <ul class="mb-0">{% for item in draft.open_questions %}<li>{{ item }}</li>{% endfor %}</ul>
+                        </div>
+                    </div>
+                {% endif %}
+
+                <div class="alert alert-info small">
+                    Сохранение создаст обычный тест-кейс в проекте и его первую версию. До нажатия кнопки ниже ничего не записывается.
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="submit" class="btn btn-success">Сохранить тест-кейс</button>
+                    <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-outline-secondary">Отменить</a>
+                </div>
+            </form>
+        {% endif %}
+    </div>
+</div>
+
+{% if draft %}
+<script>
+(function () {
+    const container = document.getElementById('ai-draft-steps');
+    const addButton = document.getElementById('add-ai-step');
+
+    function renumber() {
+        container.querySelectorAll('.ai-draft-step').forEach((card, index) => {
+            card.querySelector('strong').textContent = 'Шаг ' + (index + 1);
+        });
+    }
+
+    container.addEventListener('click', function (event) {
+        const button = event.target.closest('.remove-ai-step');
+        if (!button) return;
+        if (container.querySelectorAll('.ai-draft-step').length <= 1) {
+            alert('В тест-кейсе должен остаться хотя бы один шаг.');
+            return;
+        }
+        button.closest('.ai-draft-step').remove();
+        renumber();
+    });
+
+    addButton.addEventListener('click', function () {
+        const card = document.createElement('div');
+        card.className = 'card mb-3 ai-draft-step';
+        card.innerHTML = '<div class="card-body">' +
+            '<div class="d-flex justify-content-between align-items-center mb-2"><strong></strong>' +
+            '<button type="button" class="btn btn-sm btn-outline-danger remove-ai-step">Удалить шаг</button></div>' +
+            '<div class="mb-2"><label class="form-label">Действие</label>' +
+            '<textarea class="form-control" name="step_action[]" rows="2" required></textarea></div>' +
+            '<div><label class="form-label">Ожидаемый результат</label>' +
+            '<textarea class="form-control" name="step_expected[]" rows="2"></textarea></div></div>';
+        container.appendChild(card);
+        renumber();
+    });
+
+    renumber();
+})();
+</script>
+{% endif %}
+{% endblock %}
