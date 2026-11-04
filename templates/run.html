@@ -49,8 +49,11 @@
                             <div class="mb-2">
                                 <label class="form-label small">{{ field.label }} <code>{{ '{{' ~ field.key ~ '}}' }}</code></label>
                                 <div class="input-group">
-                                    <input class="form-control secret-run-value" type="password" value="{{ field.value }}" readonly autocomplete="off">
-                                    <button class="btn btn-outline-secondary" type="button" onclick="toggleSecretRunValue(this)">Показать</button>
+                                    <input class="form-control secret-run-value" type="password" value="" placeholder="Не загружен" readonly autocomplete="off">
+                                    <button class="btn btn-outline-secondary secret-reveal-button" type="button"
+                                            data-reveal-url="{{ field.reveal_url }}"
+                                            data-csrf-token="{{ csrf_token() }}"
+                                            onclick="toggleSecretRunValue(this)">Показать</button>
                                 </div>
                             </div>
                         {% endfor %}
@@ -108,11 +111,46 @@
     </div>
 </div>
 <script>
-function toggleSecretRunValue(button) {
+async function toggleSecretRunValue(button) {
     const input = button.parentElement.querySelector('.secret-run-value');
-    const reveal = input.type === 'password';
-    input.type = reveal ? 'text' : 'password';
-    button.textContent = reveal ? 'Скрыть' : 'Показать';
+    if (button.dataset.loading === '1') return;
+
+    if (input.type === 'text') {
+        input.value = '';
+        input.type = 'password';
+        button.textContent = 'Показать';
+        return;
+    }
+
+    button.dataset.loading = '1';
+    button.disabled = true;
+    button.textContent = 'Загрузка…';
+    try {
+        const response = await fetch(button.dataset.revealUrl, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'X-CSRFToken': button.dataset.csrfToken,
+                'Accept': 'application/json'
+            },
+            cache: 'no-store'
+        });
+        const payload = await response.json();
+        if (!response.ok) {
+            throw new Error(payload.error || 'Не удалось получить секретное значение.');
+        }
+        input.value = payload.value;
+        input.type = 'text';
+        button.textContent = 'Скрыть';
+    } catch (error) {
+        input.value = '';
+        input.type = 'password';
+        button.textContent = 'Повторить';
+        window.alert(error.message || 'Не удалось получить секретное значение.');
+    } finally {
+        button.dataset.loading = '0';
+        button.disabled = false;
+    }
 }
 </script>
 {% endblock %}
