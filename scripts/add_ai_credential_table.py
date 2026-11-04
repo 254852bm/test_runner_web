@@ -3,7 +3,7 @@
 Run only against a backed-up TEST database first:
     python scripts/add_ai_credential_table.py --database /path/to/test_runner.db
 
-This script never creates a database and creates only the AI credential and generation-attempt tables.
+This script never creates a database and creates only the AI credential, generation-attempt, and draft-save idempotency tables.
 """
 import argparse
 from pathlib import Path
@@ -14,7 +14,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from sqlalchemy.engine import URL
 from app import create_app, db
-from app.models import AICredential, AIGenerationAttempt
+from app.models import AICredential, AIGenerationAttempt, AIDraftSave
 
 
 def main():
@@ -35,8 +35,8 @@ def main():
             )).scalars().all())
         if "user" not in tables:
             raise SystemExit("Required user table is missing; no changes made.")
-        db.metadata.create_all(bind=db.engine, tables=[AICredential.__table__, AIGenerationAttempt.__table__])
-        print(f"AI credential and generation-attempt tables are ready in {path}")
+        db.metadata.create_all(bind=db.engine, tables=[AICredential.__table__, AIGenerationAttempt.__table__, AIDraftSave.__table__])
+        print(f"AI credential, generation-attempt, and draft-save tables are ready in {path}")
 
 
 if __name__ == "__main__":
