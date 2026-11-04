@@ -5,15 +5,19 @@ set in the server environment. Draft generation never writes to the database.
 """
 
 import os
+from datetime import datetime, timedelta
+from math import ceil
 
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 from flask_wtf.csrf import ValidationError, validate_csrf
+from sqlalchemy import text
 
-from app.models import AICredential, Project
+from app.models import AICredential, AIGenerationAttempt, Project
 from app.ai_credentials import AICredentialEncryptionError, decrypt_ai_credential
 from .provider import AIProviderError, YandexAIStudioConfig, YandexAIStudioProvider
 from .schemas import MAX_REQUIREMENT_LENGTH, MAX_STEPS, MAX_STEP_TEXT_LENGTH
+from .prompts import SYSTEM_PROMPT, build_user_prompt
 from .service import generate_test_case_draft
 
 
@@ -34,6 +38,64 @@ def _owned_project(project_id):
     if project is None:
         abort(404)
     return project
+
+
+
+def _generation_limit():
+    try:
+        return max(1, min(int(current_app.config.get(
+            "AI_GENERATIONS_PER_HOUR", os.getenv("AI_GENERATIONS_PER_HOUR", 5)
+        )), 100))
+    except (TypeError, ValueError):
+        return 5
+
+
+def _reserve_generation_slot():
+    """Atomically reserve and commit one metadata-only attempt before provider I/O."""
+    now = datetime.utcnow()
+    cutoff = now - timedelta(hours=1)
+    result = db.session.execute(text("""
+        INSERT INTO ai_generation_attempt (user_id, created_at)
+        SELECT :user_id, :created_at
+        WHERE (
+            SELECT COUNT(*) FROM ai_generation_attempt
+            WHERE user_id = :user_id AND created_at >= :cutoff
+        ) < :limit
+    """), {
+        "user_id": current_user.id,
+        "created_at": now,
+        "cutoff": cutoff,
+        "limit": _generation_limit(),
+    })
+    reserved = result.rowcount == 1
+    db.session.commit()
+    return reserved
+
+
+def _maximum_estimated_cost_rub():
+    """Return a configured upper-bound estimate, never a fabricated price."""
+    input_rate = current_app.config.get(
+        "AI_PRICE_INPUT_RUB_PER_1K", os.getenv("AI_PRICE_INPUT_RUB_PER_1K")
+    )
+    output_rate = current_app.config.get(
+        "AI_PRICE_OUTPUT_RUB_PER_1K", os.getenv("AI_PRICE_OUTPUT_RUB_PER_1K")
+    )
+    try:
+        input_rate = float(input_rate)
+        output_rate = float(output_rate)
+        if input_rate < 0 or output_rate < 0:
+            return None
+        input_tokens = ceil(
+            (len(SYSTEM_PROMPT) + len(build_user_prompt("x" * MAX_REQUIREMENT_LENGTH))) / 4
+        )
+        output_tokens = int(current_app.config.get(
+            "AI_MAX_COMPLETION_TOKENS", os.getenv("AI_MAX_COMPLETION_TOKENS", 3000)
+        ))
+        if output_tokens < 0:
+            return None
+        return round(input_tokens * input_rate / 1000 + output_tokens * output_rate / 1000, 4)
+    except (TypeError, ValueError):
+        return None
 
 
 def _provider_mode():
@@ -115,6 +177,13 @@ def test_case_draft(project_id):
             flash("Сначала подключите собственный AI-ключ в настройках.", "info")
         elif provider_mode != "ollama" and request.form.get("paid_request_confirm") != "accepted":
             flash("Перед каждым запросом подтвердите возможную оплату у AI-провайдера.", "warning")
+        elif not requirement or len(requirement) > MAX_REQUIREMENT_LENGTH:
+            flash(f"Требование должно содержать от 1 до {MAX_REQUIREMENT_LENGTH} символов.", "warning")
+        elif not _reserve_generation_slot():
+            flash(
+                f"Достигнут лимит: не более {_generation_limit()} запросов за час. Попробуйте позже.",
+                "warning",
+            )
         else:
             try:
                 draft = generate_test_case_draft(_provider(), requirement)
@@ -131,6 +200,9 @@ def test_case_draft(project_id):
         ai_enabled=_generation_enabled(),
         ai_credential_available=ai_credential_available,
         ai_provider_mode=provider_mode,
+        estimated_max_cost_rub=(
+            0 if provider_mode == "ollama" else _maximum_estimated_cost_rub()
+        ),
         can_generate=_generation_enabled() and ai_credential_available,
         max_requirement_length=MAX_REQUIREMENT_LENGTH,
     )
