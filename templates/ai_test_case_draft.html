@@ -30,11 +30,13 @@
                                   placeholder="Например: Пользователь должен иметь возможность восстановить пароль по ссылке из письма.">{{ requirement }}</textarea>
                         <div class="form-text">До {{ max_requirement_length }} символов. Не вставляйте реальные пароли, токены и персональные данные.</div>
                     </div>
-                    {% if can_generate %}
+                    {% if can_generate and ai_provider_mode != 'ollama' %}
                         <div class="form-check mb-3">
                             <input class="form-check-input" type="checkbox" id="paid_request_confirm" name="paid_request_confirm" value="accepted" required>
                             <label class="form-check-label" for="paid_request_confirm">Подтверждаю этот запрос. Он может быть платным и будет оплачен на моём аккаунте Yandex Cloud.</label>
                         </div>
+                    {% elif can_generate %}
+                        <div class="alert alert-info small">Используется локальная модель Ollama. Запрос обрабатывается на этом компьютере и не тарифицируется Yandex Cloud.</div>
                     {% endif %}
                     <button type="submit" class="btn btn-primary" {% if not can_generate %}disabled{% endif %}>
                         ✨ Сгенерировать черновик
