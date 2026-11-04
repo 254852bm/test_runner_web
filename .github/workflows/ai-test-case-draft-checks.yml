@@ -5,6 +5,7 @@ on:
     branches:
       - feature/test-data-parameterization
       - feature/stage4-test-management
+      - feature/ai-test-case-drafts-ci
 
 jobs:
   ai-draft-checks:
