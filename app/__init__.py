@@ -26,6 +26,9 @@ def create_app(test_config=None):
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key')
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///../instance/test_runner.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    # A dedicated Fernet key is required for any future secret test data.
+    # It must be configured separately from Flask's session SECRET_KEY.
+    app.config['TEST_DATA_ENCRYPTION_KEY'] = os.getenv('TEST_DATA_ENCRYPTION_KEY', '')
     # Ограничиваем общий размер запроса с изображениями, чтобы избежать чрезмерной загрузки памяти.
     app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
     app.config.update(test_config)

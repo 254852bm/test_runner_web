@@ -4,6 +4,7 @@
     <h2 class="test-case-title mb-0 flex-grow-1">{{ test.title }}</h2>
     <div class="action-buttons justify-content-end">
         <a href="{{ url_for('main.run_tests', project_id=project.id, test_id=test.id) }}" class="btn btn-success">▶ Запустить этот тест</a>
+        <a href="{{ url_for('main.test_data_sets', project_id=project.id, test_id=test.id) }}" class="btn btn-outline-info">▦ Тестовые данные</a>
         <a href="{{ url_for('main.edit_test', project_id=project.id, test_id=test.id) }}" class="btn btn-outline-primary">✏ Редактировать</a>
         <a href="{{ url_for('main.project_detail', project_id=project.id) }}" class="btn btn-secondary">← К проекту</a>
     </div>
