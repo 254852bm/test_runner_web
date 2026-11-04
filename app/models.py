@@ -362,6 +362,16 @@ class AIGenerationAttempt(db.Model):
 
 
 
+class AIDraftSave(db.Model):
+    """Idempotency record preventing the same reviewed AI draft being saved twice."""
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    user_id = db.Column(db.Integer, nullable=False, index=True)
+    project_id = db.Column(db.Integer, nullable=False, index=True)
+    test_case_id = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
 class AICredential(db.Model):
     """One encrypted, user-owned BYOK credential; plaintext is never persisted."""
 
