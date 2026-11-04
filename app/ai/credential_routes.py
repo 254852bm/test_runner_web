@@ -44,7 +44,7 @@ def settings():
             abort(400)
 
         provider = request.form.get("provider", "")
-        api_key = request.form.get("api_key", "")
+        api_key = request.form.get("api_key", "")\n        folder_id = request.form.get("folder_id", "")
         if request.form.get("consent_version") != CONSENT_VERSION:
             flash("Перед сохранением ключа необходимо подтвердить условия использования.", "warning")
             return redirect(url_for("ai_credentials.settings"))
@@ -53,7 +53,7 @@ def settings():
             return redirect(url_for("ai_credentials.settings"))
         try:
             encrypted = encrypt_ai_credential(
-                user_id=current_user.id, provider=provider, api_key=api_key
+                user_id=current_user.id, provider=provider, api_key=api_key, folder_id=folder_id
             )
         except ValueError as error:
             flash(str(error), "warning")
