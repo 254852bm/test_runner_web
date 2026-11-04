@@ -386,6 +386,24 @@ def delete_project(project_id):
             run_id for (run_id,) in db.session.query(TestRun.id)
             .filter(TestRun.test_case_id.in_(test_ids)).all()
         ]
+        dataset_ids = [
+            dataset_id for (dataset_id,) in db.session.query(TestDataSet.id)
+            .filter(TestDataSet.test_case_id.in_(test_ids)).all()
+        ]
+        # Bulk deletes bypass ORM cascades: remove parameterization records explicitly.
+        TestDataBatch.query.filter(
+            TestDataBatch.test_case_id.in_(test_ids)
+        ).delete(synchronize_session=False)
+        if dataset_ids:
+            TestDataRow.query.filter(
+                TestDataRow.dataset_id.in_(dataset_ids)
+            ).delete(synchronize_session=False)
+            TestDataColumn.query.filter(
+                TestDataColumn.dataset_id.in_(dataset_ids)
+            ).delete(synchronize_session=False)
+            TestDataSet.query.filter(
+                TestDataSet.id.in_(dataset_ids)
+            ).delete(synchronize_session=False)
         step_run_ids = []
         if run_ids:
             step_run_ids = [
@@ -413,6 +431,10 @@ def delete_project(project_id):
             StepRun.query.filter(StepRun.id.in_(step_run_ids)).delete(synchronize_session=False)
 
         if run_ids:
+            # Snapshot FK is non-nullable and has no ON DELETE CASCADE.
+            TestRunDataSnapshot.query.filter(
+                TestRunDataSnapshot.test_run_id.in_(run_ids)
+            ).delete(synchronize_session=False)
             TestRun.query.filter(TestRun.id.in_(run_ids)).delete(synchronize_session=False)
         if step_ids:
             TestStep.query.filter(TestStep.id.in_(step_ids)).delete(synchronize_session=False)
@@ -1148,6 +1170,10 @@ def delete_test(project_id, test_id):
         StepRun.query.filter(StepRun.id.in_(step_run_ids)).delete(synchronize_session=False)
 
     if run_ids:
+        # Bulk deletion skips the TestRun.data_snapshot ORM cascade.
+        TestRunDataSnapshot.query.filter(
+            TestRunDataSnapshot.test_run_id.in_(run_ids)
+        ).delete(synchronize_session=False)
         TestRun.query.filter(TestRun.id.in_(run_ids)).delete(synchronize_session=False)
     if step_ids:
         TestStep.query.filter(TestStep.id.in_(step_ids)).delete(synchronize_session=False)
