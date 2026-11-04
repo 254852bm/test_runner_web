@@ -122,8 +122,8 @@ def save_ai_test_case_draft(project_id):
     test = TestCase(
         title=title,
         precondition=precondition,
-        steps="\\n".join(action for action, _ in pairs),
-        expected_result="\\n".join(expected for _, expected in pairs),
+        steps="\n".join(action for action, _ in pairs),
+        expected_result="\n".join(expected for _, expected in pairs),
         project_id=project.id,
     )
     try:
