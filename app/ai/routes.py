@@ -36,7 +36,29 @@ def _owned_project(project_id):
     return project
 
 
+def _provider_mode():
+    return (
+        current_app.config.get("AI_PROVIDER_MODE")
+        or os.getenv("AI_PROVIDER_MODE", "yandex")
+    ).strip().lower()
+
+
 def _provider():
+    mode = _provider_mode()
+    if mode == "ollama":
+        from .local_provider import OllamaLocalProvider
+        model = current_app.config.get("AI_LOCAL_MODEL") or os.getenv("AI_LOCAL_MODEL", "")
+        base_url = current_app.config.get("AI_LOCAL_BASE_URL") or os.getenv(
+            "AI_LOCAL_BASE_URL", "http://127.0.0.1:11434"
+        )
+        return OllamaLocalProvider(
+            model=model,
+            base_url=base_url,
+            timeout_seconds=current_app.config.get("AI_PROVIDER_TIMEOUT_SECONDS", 60),
+        )
+    if mode != "yandex":
+        raise AIProviderError("Выбран неизвестный режим AI-провайдера.")
+
     credential = AICredential.query.filter_by(
         user_id=current_user.id, is_enabled=True
     ).first()
@@ -74,8 +96,11 @@ def test_case_draft(project_id):
     project = _owned_project(project_id)
     draft = None
     requirement = ""
+    provider_mode = _provider_mode()
     credential = AICredential.query.filter_by(user_id=current_user.id).first()
-    ai_credential_available = bool(credential and credential.is_enabled)
+    ai_credential_available = (
+        provider_mode == "ollama" or bool(credential and credential.is_enabled)
+    )
 
     if request.method == "POST":
         try:
@@ -88,7 +113,7 @@ def test_case_draft(project_id):
             flash("ИИ-помощник пока не включён администратором сервиса.", "info")
         elif not ai_credential_available:
             flash("Сначала подключите собственный AI-ключ в настройках.", "info")
-        elif request.form.get("paid_request_confirm") != "accepted":
+        elif provider_mode != "ollama" and request.form.get("paid_request_confirm") != "accepted":
             flash("Перед каждым запросом подтвердите возможную оплату у AI-провайдера.", "warning")
         else:
             try:
@@ -105,6 +130,7 @@ def test_case_draft(project_id):
         requirement=requirement,
         ai_enabled=_generation_enabled(),
         ai_credential_available=ai_credential_available,
+        ai_provider_mode=provider_mode,
         can_generate=_generation_enabled() and ai_credential_available,
         max_requirement_length=MAX_REQUIREMENT_LENGTH,
     )
