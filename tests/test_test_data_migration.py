@@ -230,7 +230,6 @@ def test_test_data_migration_preserves_existing_application_records(tmp_path, mo
         ).fetchone() == ("legacy-step.png", "Open the page")
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
-        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         assert connection.execute(
             "SELECT allow_secret_data FROM api_token WHERE id=1"
         ).fetchone()[0] == 0
