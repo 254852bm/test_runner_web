@@ -4,7 +4,10 @@ import sys
 import pytest
 
 from app import create_app, db
-from app.models import ApiToken, Project, TestCase, TestRun, User
+from app.models import (
+    ApiToken, Project, StepRun, StepRunScreenshot, TestCase,
+    TestRun, TestStep, TestStepScreenshot, User,
+)
 from scripts.add_test_data_encryption_columns import main
 
 
@@ -103,6 +106,23 @@ def test_test_data_migration_preserves_existing_application_records(tmp_path, mo
         )
         db.session.add(case)
         db.session.flush()
+        step = TestStep(
+            test_case_id=case.id,
+            position=1,
+            action="Open the page",
+            expected_result="Page is visible",
+        )
+        db.session.add(step)
+        db.session.flush()
+        step_screenshot = TestStepScreenshot(
+            test_step_id=step.id,
+            user_id=user.id,
+            stored_name="legacy-step.png",
+            original_name="step.png",
+            mime_type="image/png",
+            size_bytes=128,
+        )
+        db.session.add(step_screenshot)
         run = TestRun(
             status="PASS",
             comment="Existing run must survive",
@@ -117,6 +137,25 @@ def test_test_data_migration_preserves_existing_application_records(tmp_path, mo
             name="Legacy token",
         )
         db.session.add_all([run, token])
+        db.session.flush()
+        step_run = StepRun(
+            test_run_id=run.id,
+            test_step_id=step.id,
+            status="PASS",
+            step_text="Open the page",
+            expected_result="Page is visible",
+        )
+        db.session.add(step_run)
+        db.session.flush()
+        run_screenshot = StepRunScreenshot(
+            step_run_id=step_run.id,
+            user_id=user.id,
+            stored_name="legacy-run.png",
+            original_name="run.png",
+            mime_type="image/png",
+            size_bytes=256,
+        )
+        db.session.add_all([step_run, run_screenshot])
         db.session.commit()
 
     # Simulate the schema before the parameterization feature was installed.
@@ -158,6 +197,18 @@ def test_test_data_migration_preserves_existing_application_records(tmp_path, mo
         assert connection.execute(
             "SELECT token, name FROM api_token WHERE id=1"
         ).fetchone() == ("legacy-api-token", "Legacy token")
+        assert connection.execute(
+            "SELECT action, expected_result FROM test_step WHERE id=1"
+        ).fetchone() == ("Open the page", "Page is visible")
+        assert connection.execute(
+            "SELECT stored_name, size_bytes FROM test_step_screenshot WHERE id=1"
+        ).fetchone() == ("legacy-step.png", 128)
+        assert connection.execute(
+            "SELECT status, step_text FROM step_run WHERE id=1"
+        ).fetchone() == ("PASS", "Open the page")
+        assert connection.execute(
+            "SELECT stored_name, size_bytes FROM step_run_screenshot WHERE id=1"
+        ).fetchone() == ("legacy-run.png", 256)
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute(
             "SELECT allow_secret_data FROM api_token WHERE id=1"
