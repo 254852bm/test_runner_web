@@ -499,9 +499,11 @@ def test_manual_secret_reveal_requires_csrf_and_project_ownership(app):
         column_id = TestDataColumn.query.filter_by(
             dataset_id=dataset_id, key="password"
         ).one().id
+        from werkzeug.security import generate_password_hash
+        stranger_password = "stranger-test-password"
         stranger = User(
             email="stranger@example.test",
-            password="not-a-real-password",
+            password=generate_password_hash(stranger_password),
         )
         db.session.add(stranger)
         db.session.commit()
@@ -518,18 +520,20 @@ def test_manual_secret_reveal_requires_csrf_and_project_ownership(app):
     assert missing_csrf.status_code == 400
 
     stranger_client = app.test_client()
-    _login(stranger_client, stranger_id)
+    login_response = stranger_client.post(
+        "/auth/login",
+        data={"email": "stranger@example.test", "password": stranger_password},
+    )
+    assert login_response.status_code == 302
     from flask import session as flask_session
     from flask_wtf.csrf import generate_csrf
 
-    # Generate the signed token in a request context, then copy its backing
-    # session value into the stranger client's session before making the request.
+    # Generate a valid CSRF token and copy its backing session value while
+    # preserving the authenticated session established by the real login route.
     with app.test_request_context():
         csrf_token = generate_csrf()
         csrf_session_token = flask_session["csrf_token"]
     with stranger_client.session_transaction() as client_session:
-        client_session["_user_id"] = str(stranger_id)
-        client_session["_fresh"] = True
         client_session["csrf_token"] = csrf_session_token
     forbidden = stranger_client.post(
         endpoint, headers={"X-CSRFToken": csrf_token}
