@@ -5,8 +5,10 @@ import pytest
 
 from app import create_app, db
 from app.models import (
-    ApiToken, Project, StepRun, StepRunScreenshot, TestCase,
-    TestRun, TestStep, TestStepScreenshot, User,
+    ApiToken, Project, StepRun, StepRunScreenshot,
+    TestCase as TestCaseModel, TestRun as TestRunModel,
+    TestStep as TestStepModel, TestStepScreenshot as TestStepScreenshotModel,
+    User,
 )
 from scripts.add_test_data_encryption_columns import main
 
@@ -98,7 +100,7 @@ def test_test_data_migration_preserves_existing_application_records(tmp_path, mo
         project = Project(name="Legacy project", user_id=user.id)
         db.session.add(project)
         db.session.flush()
-        case = TestCase(
+        case = TestCaseModel(
             title="Legacy test case",
             steps="Open the page",
             expected_result="Page is visible",
@@ -106,7 +108,7 @@ def test_test_data_migration_preserves_existing_application_records(tmp_path, mo
         )
         db.session.add(case)
         db.session.flush()
-        step = TestStep(
+        step = TestStepModel(
             test_case_id=case.id,
             position=1,
             action="Open the page",
@@ -114,7 +116,7 @@ def test_test_data_migration_preserves_existing_application_records(tmp_path, mo
         )
         db.session.add(step)
         db.session.flush()
-        step_screenshot = TestStepScreenshot(
+        step_screenshot = TestStepScreenshotModel(
             test_step_id=step.id,
             user_id=user.id,
             stored_name="legacy-step.png",
@@ -123,7 +125,7 @@ def test_test_data_migration_preserves_existing_application_records(tmp_path, mo
             size_bytes=128,
         )
         db.session.add(step_screenshot)
-        run = TestRun(
+        run = TestRunModel(
             status="PASS",
             comment="Existing run must survive",
             test_case_id=case.id,
