@@ -5,7 +5,7 @@ Do not point any command in this document at the production database.
 
 ## 1. Before changing the test copy
 
-- Confirm the checkout is on `feature/test-data-parameterization`.
+- Confirm the checkout is on `integration/parameterization-integrity` (the integrated test branch containing the parameterization feature and its integrity fixes).
 - Confirm the configured SQLite path belongs to the test copy, not production.
 - Make a separate SQLite backup of the test database and verify it with `PRAGMA integrity_check`.
 - Keep the test copy's current branch/commit and backup path so it can be restored.
