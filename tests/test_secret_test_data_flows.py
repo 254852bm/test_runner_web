@@ -581,9 +581,9 @@ def test_manual_secret_reveal_rejects_another_users_session(app):
         db.session.commit()
         other_user_id = other_user.id
 
-    client = app.test_client()
-    _login(client, user_id)
-    page = client.get(
+    owner_client = app.test_client()
+    _login(owner_client, user_id)
+    page = owner_client.get(
         f"/project/{project_id}/run?test_id={case_id}"
         f"&data_set_id={dataset_id}&data_row_id={row_id}"
     )
@@ -593,13 +593,20 @@ def test_manual_secret_reveal_rejects_another_users_session(app):
         r'data-csrf-token="([^"]+)"', page.get_data(as_text=True)
     )
     assert csrf_match
+    with owner_client.session_transaction() as owner_session:
+        csrf_session_token = owner_session["csrf_token"]
 
-    _login(client, other_user_id)
+    # Use a separate client so the owner session cannot leak into the stranger request.
+    stranger_client = app.test_client()
+    _login(stranger_client, other_user_id)
+    with stranger_client.session_transaction() as stranger_session:
+        stranger_session["csrf_token"] = csrf_session_token
+
     endpoint = (
         f"/project/{project_id}/test/{case_id}/data/{dataset_id}"
         f"/rows/{row_id}/secrets/{secret_column_id}"
     )
-    response = client.post(
+    response = stranger_client.post(
         endpoint, headers={"X-CSRFToken": csrf_match.group(1)}
     )
     assert response.status_code == 404
