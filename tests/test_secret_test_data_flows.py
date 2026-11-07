@@ -519,10 +519,16 @@ def test_manual_secret_reveal_requires_csrf_and_project_ownership(app):
 
     stranger_client = app.test_client()
     _login(stranger_client, stranger_id)
-    with stranger_client.session_transaction() as session:
-        from flask_wtf.csrf import generate_csrf
-        # Generate a valid token in this user's session for the ownership check.
+    from flask import session as flask_session
+    from flask_wtf.csrf import generate_csrf
+
+    # Generate the signed token in a request context, then copy its backing
+    # session value into the stranger client's session before making the request.
+    with app.test_request_context():
         csrf_token = generate_csrf()
+        csrf_session_token = flask_session["csrf_token"]
+    with stranger_client.session_transaction() as client_session:
+        client_session["csrf_token"] = csrf_session_token
     forbidden = stranger_client.post(
         endpoint, headers={"X-CSRFToken": csrf_token}
     )
