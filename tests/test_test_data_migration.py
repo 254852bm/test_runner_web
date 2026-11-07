@@ -209,7 +209,25 @@ def test_test_data_migration_preserves_existing_application_records(tmp_path, mo
         assert connection.execute(
             "SELECT stored_name, size_bytes FROM step_run_screenshot WHERE id=1"
         ).fetchone() == ("legacy-run.png", 256)
+        assert connection.execute(
+            """
+            SELECT s.stored_name, r.status, t.action
+            FROM step_run_screenshot AS s
+            JOIN step_run AS r ON r.id = s.step_run_id
+            JOIN test_step AS t ON t.id = r.test_step_id
+            WHERE s.id = 1
+            """
+        ).fetchone() == ("legacy-run.png", "PASS", "Open the page")
+        assert connection.execute(
+            """
+            SELECT s.stored_name, t.action
+            FROM test_step_screenshot AS s
+            JOIN test_step AS t ON t.id = s.test_step_id
+            WHERE s.id = 1
+            """
+        ).fetchone() == ("legacy-step.png", "Open the page")
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         assert connection.execute(
             "SELECT allow_secret_data FROM api_token WHERE id=1"
         ).fetchone()[0] == 0
