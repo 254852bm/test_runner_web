@@ -3,6 +3,8 @@ import sys
 
 import pytest
 
+from app import create_app, db
+from app.models import ApiToken, Project, TestCase, TestRun, User
 from scripts.add_test_data_encryption_columns import main
 
 
@@ -74,6 +76,92 @@ def test_test_data_migration_is_idempotent(tmp_path, monkeypatch):
             "SELECT COUNT(*) FROM sqlite_master "
             "WHERE type='table' AND name='test_data_set'"
         ).fetchone()[0] == 1
+
+
+def test_test_data_migration_preserves_existing_application_records(tmp_path, monkeypatch):
+    database = tmp_path / "populated-legacy-test-runner.db"
+    instance_path = tmp_path / "instance"
+    instance_path.mkdir()
+    app = create_app({
+        "TESTING": True,
+        "INSTANCE_PATH": str(instance_path),
+        "SQLALCHEMY_DATABASE_URI": f"sqlite:///{database}",
+    })
+
+    with app.app_context():
+        user = User(email="legacy@example.test", password="hashed-password")
+        db.session.add(user)
+        db.session.flush()
+        project = Project(name="Legacy project", user_id=user.id)
+        db.session.add(project)
+        db.session.flush()
+        case = TestCase(
+            title="Legacy test case",
+            steps="Open the page",
+            expected_result="Page is visible",
+            project_id=project.id,
+        )
+        db.session.add(case)
+        db.session.flush()
+        run = TestRun(
+            status="PASS",
+            comment="Existing run must survive",
+            test_case_id=case.id,
+            user_id=user.id,
+            source="auto",
+            duration_ms=321,
+        )
+        token = ApiToken(
+            user_id=user.id,
+            token="legacy-api-token",
+            name="Legacy token",
+        )
+        db.session.add_all([run, token])
+        db.session.commit()
+
+    # Simulate the schema before the parameterization feature was installed.
+    with sqlite3.connect(database) as connection:
+        connection.execute("PRAGMA foreign_keys=OFF")
+        for table in (
+            "test_data_batch",
+            "test_run_data_snapshot",
+            "test_data_row",
+            "test_data_column",
+            "test_data_set",
+        ):
+            connection.execute(f'DROP TABLE IF EXISTS "{table}"')
+        connection.execute(
+            "ALTER TABLE api_token DROP COLUMN allow_secret_data"
+        )
+        connection.commit()
+
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["add_test_data_encryption_columns.py", "--database", str(database)],
+    )
+    main()
+
+    with sqlite3.connect(database) as connection:
+        assert connection.execute(
+            "SELECT email FROM user WHERE id=1"
+        ).fetchone() == ("legacy@example.test",)
+        assert connection.execute(
+            "SELECT name FROM project WHERE id=1"
+        ).fetchone() == ("Legacy project",)
+        assert connection.execute(
+            "SELECT title FROM test_case WHERE id=1"
+        ).fetchone() == ("Legacy test case",)
+        assert connection.execute(
+            "SELECT status, comment, duration_ms FROM test_run WHERE id=1"
+        ).fetchone() == ("PASS", "Existing run must survive", 321)
+        assert connection.execute(
+            "SELECT token, name FROM api_token WHERE id=1"
+        ).fetchone() == ("legacy-api-token", "Legacy token")
+        assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert connection.execute(
+            "SELECT allow_secret_data FROM api_token WHERE id=1"
+        ).fetchone()[0] == 0
 
 
 def test_test_data_migration_refuses_to_create_missing_database(tmp_path, monkeypatch):
