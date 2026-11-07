@@ -542,3 +542,65 @@ def test_manual_secret_reveal_requires_csrf_and_project_ownership(app):
     )
     assert forbidden.status_code == 404
     assert "secret-phrase-123" not in forbidden.get_data(as_text=True)
+
+
+def test_manual_secret_reveal_rejects_missing_or_invalid_csrf_token(app):
+    with app.app_context():
+        user, project, case, dataset, row, step, token = _secret_case()
+        user_id, project_id, case_id = user.id, project.id, case.id
+        dataset_id, row_id = dataset.id, row.id
+        secret_column_id = TestDataColumn.query.filter_by(
+            dataset_id=dataset_id, key="password"
+        ).one().id
+
+    client = app.test_client()
+    _login(client, user_id)
+    endpoint = (
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}"
+        f"/rows/{row_id}/secrets/{secret_column_id}"
+    )
+    assert client.post(endpoint).status_code == 400
+    assert client.post(
+        endpoint, headers={"X-CSRFToken": "invalid-token"}
+    ).status_code == 400
+
+
+def test_manual_secret_reveal_rejects_another_users_session(app):
+    with app.app_context():
+        user, project, case, dataset, row, step, token = _secret_case()
+        user_id, project_id, case_id = user.id, project.id, case.id
+        dataset_id, row_id = dataset.id, row.id
+        secret_column_id = TestDataColumn.query.filter_by(
+            dataset_id=dataset_id, key="password"
+        ).one().id
+        other_user = User(
+            email="another-user@example.test",
+            password="not-a-real-password",
+        )
+        db.session.add(other_user)
+        db.session.commit()
+        other_user_id = other_user.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    page = client.get(
+        f"/project/{project_id}/run?test_id={case_id}"
+        f"&data_set_id={dataset_id}&data_row_id={row_id}"
+    )
+    assert page.status_code == 200
+    import re
+    csrf_match = re.search(
+        r'data-csrf-token="([^"]+)"', page.get_data(as_text=True)
+    )
+    assert csrf_match
+
+    _login(client, other_user_id)
+    endpoint = (
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}"
+        f"/rows/{row_id}/secrets/{secret_column_id}"
+    )
+    response = client.post(
+        endpoint, headers={"X-CSRFToken": csrf_match.group(1)}
+    )
+    assert response.status_code == 404
+    assert "secret-phrase-123" not in response.get_data(as_text=True)
