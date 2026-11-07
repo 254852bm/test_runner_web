@@ -176,6 +176,8 @@ def test_api_hides_secret_by_default_and_requires_explicit_header_to_retrieve(ap
     assert response.status_code == 200
     assert response.get_json()["secrets_included"] is True
     assert response.get_json()["rows"][0]["values"]["password"] == "secret-phrase-123"
+    assert "no-store" in response.headers["Cache-Control"]
+    assert response.headers["Pragma"] == "no-cache"
 
 
 def test_api_run_encrypts_secret_snapshot_and_redacts_step_results(app):
