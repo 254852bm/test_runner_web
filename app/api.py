@@ -154,7 +154,7 @@ def api_data_set_rows(dataset_id):
             "values": row_values,
         })
 
-    return jsonify({
+    response = jsonify({
         "ok": True,
         "data_set_id": dataset.id,
         "test_case_id": test_case.id,
@@ -170,6 +170,10 @@ def api_data_set_rows(dataset_id):
         ],
         "rows": response_rows,
     })
+    if include_secrets:
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+    return response
 
 
 @api_bp.route('/run', methods=['POST'])

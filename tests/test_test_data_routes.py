@@ -3,7 +3,7 @@ import pytest
 from app import create_app, db
 from app.models import (
     Project, TestCase, TestDataColumn, TestDataRow, TestDataSet,
-    TestRun, TestRunDataSnapshot, TestStep, User,
+    TestRun, TestRunDataSnapshot, TestStep, TestDataBatch, User,
 )
 
 
@@ -226,3 +226,82 @@ def test_route_rejects_password_like_column_name_until_encryption_exists(app):
     assert response.status_code == 302
     with app.app_context():
         assert TestDataSet.query.filter_by(test_case_id=case_id).count() == 0
+
+
+
+def _attach_parameterized_history(user, case):
+    dataset = TestDataSet(test_case_id=case.id, name="Deletion data")
+    db.session.add(dataset)
+    db.session.flush()
+    column = TestDataColumn(
+        dataset_id=dataset.id, key="login", label="Login", position=0
+    )
+    row = TestDataRow(
+        dataset_id=dataset.id, name="Deletion row",
+        values_json={"login": "history@example.test"}
+    )
+    db.session.add_all([column, row])
+    db.session.flush()
+    run = TestRun(status="PASS", test_case_id=case.id, user_id=user.id)
+    db.session.add(run)
+    db.session.flush()
+    snapshot = TestRunDataSnapshot(
+        test_run_id=run.id, dataset_id=dataset.id, data_row_id=row.id,
+        dataset_name_snapshot=dataset.name, row_name_snapshot=row.name,
+        values_snapshot_json=dict(row.values_json),
+    )
+    batch = TestDataBatch(
+        token=f"delete-test-batch-{case.id}", user_id=user.id,
+        test_case_id=case.id, dataset_id=dataset.id,
+        row_ids_json=[row.id], next_index=0,
+    )
+    db.session.add_all([snapshot, batch])
+    db.session.commit()
+    return dataset.id, column.id, row.id, run.id, snapshot.id, batch.id
+
+
+def test_deleting_test_case_removes_its_parameterization_records_and_run_snapshots(app):
+    with app.app_context():
+        user, project, case = _case()
+        user_id, project_id, case_id = user.id, project.id, case.id
+        dataset_id, column_id, row_id, run_id, snapshot_id, batch_id = (
+            _attach_parameterized_history(user, case)
+        )
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(f"/project/{project_id}/test/{case_id}/delete")
+    assert response.status_code == 302
+
+    with app.app_context():
+        assert db.session.get(TestCase, case_id) is None
+        assert db.session.get(TestRun, run_id) is None
+        assert db.session.get(TestRunDataSnapshot, snapshot_id) is None
+        assert db.session.get(TestDataSet, dataset_id) is None
+        assert db.session.get(TestDataColumn, column_id) is None
+        assert db.session.get(TestDataRow, row_id) is None
+        assert db.session.get(TestDataBatch, batch_id) is None
+
+
+def test_deleting_project_removes_parameterization_records_and_run_snapshots(app):
+    with app.app_context():
+        user, project, case = _case()
+        user_id, project_id, case_id = user.id, project.id, case.id
+        dataset_id, column_id, row_id, run_id, snapshot_id, batch_id = (
+            _attach_parameterized_history(user, case)
+        )
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(f"/project/{project_id}/delete")
+    assert response.status_code == 302
+
+    with app.app_context():
+        assert db.session.get(Project, project_id) is None
+        assert db.session.get(TestCase, case_id) is None
+        assert db.session.get(TestRun, run_id) is None
+        assert db.session.get(TestRunDataSnapshot, snapshot_id) is None
+        assert db.session.get(TestDataSet, dataset_id) is None
+        assert db.session.get(TestDataColumn, column_id) is None
+        assert db.session.get(TestDataRow, row_id) is None
+        assert db.session.get(TestDataBatch, batch_id) is None
