@@ -528,6 +528,8 @@ def test_manual_secret_reveal_requires_csrf_and_project_ownership(app):
         csrf_token = generate_csrf()
         csrf_session_token = flask_session["csrf_token"]
     with stranger_client.session_transaction() as client_session:
+        client_session["_user_id"] = str(stranger_id)
+        client_session["_fresh"] = True
         client_session["csrf_token"] = csrf_session_token
     forbidden = stranger_client.post(
         endpoint, headers={"X-CSRFToken": csrf_token}
