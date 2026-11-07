@@ -2,6 +2,7 @@ import sqlite3
 
 import pytest
 from cryptography.fernet import Fernet
+from werkzeug.security import generate_password_hash
 
 from app import create_app, db
 from app.models import (
@@ -573,9 +574,10 @@ def test_manual_secret_reveal_rejects_another_users_session(app):
         secret_column_id = TestDataColumn.query.filter_by(
             dataset_id=dataset_id, key="password"
         ).one().id
+        other_user_password = "another-user-password"
         other_user = User(
             email="another-user@example.test",
-            password="not-a-real-password",
+            password=generate_password_hash(other_user_password),
         )
         db.session.add(other_user)
         db.session.commit()
@@ -598,7 +600,14 @@ def test_manual_secret_reveal_rejects_another_users_session(app):
 
     # Use a separate client so the owner session cannot leak into the stranger request.
     stranger_client = app.test_client()
-    _login(stranger_client, other_user_id)
+    login_response = stranger_client.post(
+        "/auth/login",
+        data={
+            "email": "another-user@example.test",
+            "password": other_user_password,
+        },
+    )
+    assert login_response.status_code == 302
     with stranger_client.session_transaction() as stranger_session:
         stranger_session["csrf_token"] = csrf_session_token
 
