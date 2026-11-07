@@ -75,7 +75,14 @@ Check the following:
 - [ ] Disabled rows cannot be started directly.
 - [ ] History and PDF show the data-set/row labels but do not expose secret values.
 - [ ] Step text, expected results and comments in history do not contain the secret.
-- [ ] The manual run page keeps secrets out of the instruction text and shows them only in the dedicated masked password field.
+- [ ] The initial manual-run HTML contains no decrypted secret values.
+- [ ] Clicking **Показать** retrieves only the selected secret through an authenticated,
+  same-origin POST request with a valid CSRF token and a no-store response.
+- [ ] The revealed value appears only in its dedicated field; clicking **Скрыть**
+  clears the field value again.
+- [ ] A request without a valid CSRF token is rejected, and another user's session
+  cannot reveal the secret.
+- [ ] Secret values never appear in the instruction text, comments or run history.
 
 ## 5. API checks
 
