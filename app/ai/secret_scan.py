@@ -42,3 +42,8 @@ def find_suspected_secret_fields(value, path=""):
             child_path = f"{path}[{index}]" if path else f"[{index}]"
             findings.extend(find_suspected_secret_fields(item, child_path))
     return findings
+
+
+# Additional high-confidence credential formats.
+_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")
+_URL_CREDENTIALS = re.compile(r"(?i)https?://[^/\s:@]+:[^/\s@]{4,}@")
