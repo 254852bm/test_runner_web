@@ -31,3 +31,12 @@ def test_scanner_reports_only_field_paths_for_nested_output():
     })
     assert findings == ["files[0].content"]
     assert "do-not-leak" not in str(findings)
+
+@pytest.mark.parametrize("text", [
+    "token = abcdefghijklmnopqrstuvwxyz123456",
+    "secret: very-long-secret-value",
+    "Open https://tester:supersecret@example.test/login",
+    "eyJabcdefghijk.abcdefghijk.abcdefghijk",
+])
+def test_scanner_detects_additional_credential_shapes(text):
+    assert find_suspected_secret_fields({"text": text}) == ["text"]
