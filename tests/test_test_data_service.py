@@ -200,3 +200,50 @@ def test_prepare_test_data_rejects_password_like_column_name(app):
         db.session.commit()
         with pytest.raises(ValueError, match="отмечены как секретные"):
             prepare_test_data(case, dataset, row)
+
+
+def test_prepare_test_data_supports_russian_parameter_names_with_spaces(app):
+    with app.app_context():
+        user = User(email="russian-keys@example.test", password="not-a-real-password")
+        db.session.add(user)
+        db.session.flush()
+        project = Project(name="Russian keys", user_id=user.id)
+        db.session.add(project)
+        db.session.flush()
+        case = TestCase(
+            title="Проверка русских параметров",
+            precondition="Открыть {{Адрес сайта}}",
+            steps="Назначить {{Исполнитель 1}}",
+            expected_result="",
+            project_id=project.id,
+        )
+        db.session.add(case)
+        db.session.flush()
+        step = TestStep(
+            test_case_id=case.id, position=1,
+            action="Назначить {{Исполнитель 1}}",
+            expected_result="Поручение {{Текст поручения}} создано",
+        )
+        dataset = TestDataSet(test_case_id=case.id, name="Основной набор")
+        db.session.add_all([step, dataset])
+        db.session.flush()
+        db.session.add_all([
+            TestDataColumn(dataset_id=dataset.id, key="Адрес сайта", label="Адрес сайта", position=0),
+            TestDataColumn(dataset_id=dataset.id, key="Исполнитель 1", label="Исполнитель 1", position=1),
+            TestDataColumn(dataset_id=dataset.id, key="Текст поручения", label="Текст поручения", position=2),
+        ])
+        row = TestDataRow(
+            dataset_id=dataset.id, name="Основной вариант",
+            values_json={
+                "Адрес сайта": "https://example.test",
+                "Исполнитель 1": "USER10002",
+                "Текст поручения": "исполнить",
+            },
+        )
+        db.session.add(row)
+        db.session.commit()
+
+        result = prepare_test_data(case, dataset, row)
+        assert result["precondition"] == "Открыть https://example.test"
+        assert result["steps"][0]["action"] == "Назначить USER10002"
+        assert result["steps"][0]["expected_result"] == "Поручение исполнить создано"
