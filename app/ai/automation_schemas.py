@@ -90,6 +90,8 @@ def _notes(value, field):
 
 
 def _safe_relative_path(value):
+    if not isinstance(value, str) or value != value.strip():
+        raise ValueError("Путь файла не должен содержать пробелы по краям.")
     path_text = _text(value, "files.path", 240)
     # Use POSIX separators in the interchange format on every platform.
     if (
