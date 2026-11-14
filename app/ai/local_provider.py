@@ -30,7 +30,6 @@ class OllamaLocalProvider:
             system_prompt=SYSTEM_PROMPT,
             user_prompt=build_user_prompt(requirement),
             response_format=json_schema_response_format()["json_schema"]["schema"],
-            local_schema=True,
         )
 
     def generate_structured(
@@ -45,7 +44,7 @@ class OllamaLocalProvider:
             "stream": False,
             "format": (
                 response_format["json_schema"]["schema"]
-                if local_schema else response_format["json_schema"]["schema"]
+                if "json_schema" in response_format else response_format
             ),
             "options": {"temperature": 0.2},
         }
