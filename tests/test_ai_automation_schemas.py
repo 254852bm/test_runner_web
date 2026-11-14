@@ -56,7 +56,6 @@ def test_schema_is_strict_and_requires_every_field():
     "src/test/run.sh",
     "src/CON.java",
     "src/nul.md",
-    "src/trailing.java ",
     "src/trailing./LoginTest.java",
     "src/" + chr(127) + "LoginTest.java",
 ])
@@ -65,6 +64,14 @@ def test_validator_rejects_unsafe_or_unsupported_paths(path):
     payload["files"][0]["path"] = path
 
     with pytest.raises(ValueError):
+        validate_automation_test_draft(payload)
+
+
+def test_validator_rejects_paths_with_surrounding_whitespace():
+    payload = valid_automation_draft()
+    payload["files"][0]["path"] = "src/test/LoginTest.java "
+
+    with pytest.raises(ValueError, match="пробелы по краям"):
         validate_automation_test_draft(payload)
 
 
