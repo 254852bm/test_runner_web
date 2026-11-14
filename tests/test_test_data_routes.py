@@ -613,3 +613,63 @@ def test_user_cannot_duplicate_another_users_data_row(app):
     assert response.status_code == 302
     with app.app_context():
         assert TestDataRow.query.filter_by(dataset_id=dataset_id).count() == 1
+
+
+def test_user_can_bulk_enable_and_disable_selected_data_rows(app):
+    with app.app_context():
+        user, project, case = _case()
+        dataset = TestDataSet(test_case_id=case.id, name="Набор")
+        db.session.add(dataset)
+        db.session.flush()
+        rows = [
+            TestDataRow(dataset_id=dataset.id, name="Вариант 1", values_json={}, is_enabled=False),
+            TestDataRow(dataset_id=dataset.id, name="Вариант 2", values_json={}, is_enabled=False),
+            TestDataRow(dataset_id=dataset.id, name="Вариант 3", values_json={}, is_enabled=False),
+        ]
+        db.session.add_all(rows)
+        db.session.commit()
+        user_id, project_id, case_id, dataset_id = user.id, project.id, case.id, dataset.id
+        selected_ids = [rows[0].id, rows[2].id]
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/rows/bulk-status",
+        data={"row_ids[]": [str(value) for value in selected_ids], "is_enabled": "1"},
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        saved = TestDataRow.query.filter_by(dataset_id=dataset_id).order_by(TestDataRow.id).all()
+        assert [row.is_enabled for row in saved] == [True, False, True]
+
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/rows/bulk-status",
+        data={"row_ids[]": [str(value) for value in selected_ids], "is_enabled": "0"},
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        saved = TestDataRow.query.filter_by(dataset_id=dataset_id).order_by(TestDataRow.id).all()
+        assert [row.is_enabled for row in saved] == [False, False, False]
+
+
+def test_bulk_status_rejects_row_ids_outside_selected_dataset(app):
+    with app.app_context():
+        user, project, case = _case()
+        first = TestDataSet(test_case_id=case.id, name="Первый набор")
+        second = TestDataSet(test_case_id=case.id, name="Второй набор")
+        db.session.add_all([first, second])
+        db.session.flush()
+        row = TestDataRow(dataset_id=second.id, name="Чужой вариант", values_json={}, is_enabled=False)
+        db.session.add(row)
+        db.session.commit()
+        user_id, project_id, case_id, dataset_id, row_id = user.id, project.id, case.id, first.id, row.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/rows/bulk-status",
+        data={"row_ids[]": [str(row_id)], "is_enabled": "1"},
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert db.session.get(TestDataRow, row_id).is_enabled is False
