@@ -118,6 +118,8 @@ def validate_automation_test_draft(payload):
         "language", "framework", "test_type"
     }:
         raise ValueError("ИИ вернул неверный профиль автотеста.")
+    if not all(isinstance(profile[key], str) for key in ("language", "framework", "test_type")):
+        raise ValueError("ИИ вернул неверный профиль автотеста.")
     if profile["language"] != "java" or profile["framework"] != "junit5":
         raise ValueError("Пока поддерживается только Java + JUnit 5.")
     if profile["test_type"] not in ALLOWED_TEST_TYPES:
