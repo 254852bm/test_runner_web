@@ -524,7 +524,7 @@ def create_test_data_set(project_id, test_id):
     if not keys or len(keys) > 30 or len(keys) != len(labels):
         flash('Добавьте от 1 до 30 корректных колонок.', 'danger')
         return redirect(target)
-    if any(not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key) for key in keys):
+    if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
         flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
         return redirect(target)
     sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
@@ -570,7 +570,7 @@ def add_test_data_column(project_id, test_id, dataset_id):
     if len(dataset.columns) >= 30:
         flash('В одном наборе можно создать не более 30 колонок.', 'danger')
         return redirect(target)
-    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key):
+    if not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key):
         flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
         return redirect(target)
     sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
@@ -612,7 +612,7 @@ def edit_test_data_column(project_id, test_id, dataset_id, column_id):
     new_key = request.form.get('column_key', '').strip()
     new_label = request.form.get('column_label', '').strip()
 
-    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', new_key):
+    if not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', new_key):
         flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
         return redirect(target)
     sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
