@@ -99,7 +99,7 @@ def _safe_relative_path(value):
         raise ValueError("Путь файла содержит недопустимый сегмент.")
     if path.suffix.lower() not in ALLOWED_AUTOMATION_EXTENSIONS:
         raise ValueError("Разрешены только файлы .java и .md.")
-    if path.name.startswith("."):
+    if any(part.startswith(".") for part in path.parts):
         raise ValueError("Скрытые файлы не разрешены.")
     return path.as_posix()
 
