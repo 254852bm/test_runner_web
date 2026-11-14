@@ -862,6 +862,52 @@ def toggle_test_data_row(project_id, test_id, dataset_id, row_id):
     return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
 
 
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/bulk-status', methods=['POST'])
+@login_required
+def bulk_update_test_data_rows(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+
+    row_ids = set()
+    for raw_id in request.form.getlist('row_ids[]'):
+        try:
+            row_ids.add(int(raw_id))
+        except (TypeError, ValueError):
+            flash('Некорректный список вариантов.', 'danger')
+            return redirect(target)
+
+    if not row_ids:
+        flash('Выберите хотя бы один вариант.', 'warning')
+        return redirect(target)
+    if len(row_ids) > 500:
+        flash('За один раз можно изменить не более 500 вариантов.', 'danger')
+        return redirect(target)
+
+    status = request.form.get('is_enabled')
+    if status not in {'0', '1'}:
+        flash('Неизвестная операция.', 'danger')
+        return redirect(target)
+
+    rows = TestDataRow.query.filter(
+        TestDataRow.dataset_id == dataset.id,
+        TestDataRow.id.in_(row_ids),
+    ).all()
+    if len(rows) != len(row_ids):
+        flash('Некоторые выбранные варианты не найдены в этом наборе.', 'danger')
+        return redirect(target)
+
+    enabled = status == '1'
+    for row in rows:
+        row.is_enabled = enabled
+    db.session.commit()
+    flash(f'Обновлён статус вариантов: {len(rows)}.', 'success')
+    return redirect(target)
+
+
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/delete', methods=['POST'])
 @login_required
 def delete_test_data_row(project_id, test_id, dataset_id, row_id):
