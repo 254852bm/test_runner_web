@@ -26,14 +26,27 @@ class OllamaLocalProvider:
         self._opener = opener or urllib.request.urlopen
 
     def generate(self, requirement):
+        return self.generate_structured(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=build_user_prompt(requirement),
+            response_format=json_schema_response_format()["json_schema"]["schema"],
+            local_schema=True,
+        )
+
+    def generate_structured(
+        self, *, system_prompt, user_prompt, response_format, local_schema=False
+    ):
         body = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_prompt(requirement)},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
             "stream": False,
-            "format": json_schema_response_format()["json_schema"]["schema"],
+            "format": (
+                response_format["json_schema"]["schema"]
+                if local_schema else response_format["json_schema"]["schema"]
+            ),
             "options": {"temperature": 0.2},
         }
         request = urllib.request.Request(
