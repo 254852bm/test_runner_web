@@ -3,9 +3,9 @@ import re
 
 from app.test_data_crypto import decrypt_secret_values, encrypt_secret_values
 
-_PLACEHOLDER_RE = re.compile(r"{{([A-Za-z_][A-Za-z0-9_]*)}}")
+_PLACEHOLDER_RE = re.compile(r"{{([^{}]+)}}")
 _ANY_PLACEHOLDER_RE = re.compile(r"{{(.*?)}}")
-_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_KEY_RE = re.compile(r"[^\W\d]\w*(?:[ -]\w+)*", re.UNICODE)
 _SENSITIVE_KEY_RE = re.compile(
     r"(password|passwd|secret|token|api[_-]?key|access[_-]?key)", re.IGNORECASE
 )
