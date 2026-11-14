@@ -92,15 +92,32 @@ def _notes(value, field):
 def _safe_relative_path(value):
     path_text = _text(value, "files.path", 240)
     # Use POSIX separators in the interchange format on every platform.
-    if "\\" in path_text or path_text.startswith("/") or ":" in path_text or any(ord(char) < 32 for char in path_text):
+    if (
+        "\\" in path_text
+        or path_text.startswith("/")
+        or ":" in path_text
+        or any(ord(char) < 32 or 127 <= ord(char) < 160 for char in path_text)
+    ):
         raise ValueError("Путь файла должен быть безопасным относительным путём.")
     path = PurePosixPath(path_text)
     if any(part in {"", ".", ".."} for part in path.parts):
         raise ValueError("Путь файла содержит недопустимый сегмент.")
     if path.suffix.lower() not in ALLOWED_AUTOMATION_EXTENSIONS:
         raise ValueError("Разрешены только файлы .java и .md.")
-    if any(part.startswith(".") for part in path.parts):
-        raise ValueError("Скрытые файлы не разрешены.")
+    if any(part.startswith(".") or part.endswith((".", " ")) for part in path.parts):
+        raise ValueError("Скрытые файлы и небезопасные имена не разрешены.")
+
+    # ZIP files may be extracted on Windows even when generated on Linux.
+    windows_reserved_names = {
+        "CON", "PRN", "AUX", "NUL",
+        *(f"COM{number}" for number in range(1, 10)),
+        *(f"LPT{number}" for number in range(1, 10)),
+    }
+    for part in path.parts:
+        device_name = part.split(".", 1)[0].upper()
+        if device_name in windows_reserved_names:
+            raise ValueError("Имя файла зарезервировано операционной системой.")
+
     return path.as_posix()
 
 
