@@ -1126,7 +1126,13 @@ def edit_test(project_id, test_id):
             flash('Тест-кейс обновлён! Создана новая версия.', 'success')
             return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
 
-    return render_template('edit_test.html', project=project, test=test, steps=steps)
+    data_sets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
+        TestDataSet.created_at.asc()
+    ).all()
+    return render_template(
+        'edit_test.html', project=project, test=test, steps=steps,
+        data_sets=data_sets
+    )
 
 
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/delete', methods=['POST'])
