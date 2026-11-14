@@ -8,11 +8,11 @@ _SECRET_ASSIGNMENT = re.compile(
     r"""(?ix)\b(?:password|passwd|pwd|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|token|credential|private[_-]?key)\b[\"']?\s*[:=]\s*(?:\"([^\"\r\n]{8,})\"|'([^'\r\n]{8,})'|([^\s\"'`,;)}\]]{8,}))"""
 )
 
-_BEARER = re.compile(r"(?i)\\bauthorization\\s*:\\s*bearer\\s+([A-Za-z0-9._~+/-]{12,})")
+_BEARER = re.compile(r"(?i)\bauthorization\s*:\s*bearer\s+([A-Za-z0-9._~+/-]{12,})")
 _PRIVATE_KEY = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")
-_TOKEN_PREFIX = re.compile(r"\\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|ya29\\.[A-Za-z0-9._-]{20,}|sk-[A-Za-z0-9_-]{20,})\\b")
-_JWT = re.compile(r"\\beyJ[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\.[A-Za-z0-9_-]{8,}\\b")
-_URL_CREDENTIALS = re.compile(r"(?i)https?://[^/\\s:@]+:[^/\\s@]{4,}@")
+_TOKEN_PREFIX = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|ya29\.[A-Za-z0-9._-]{20,}|sk-[A-Za-z0-9_-]{20,})\b")
+_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b")
+_URL_CREDENTIALS = re.compile(r"(?i)https?://[^/\s:@]+:[^/\s@]{4,}@")
 
 
 def _has_suspicious_secret(text):
