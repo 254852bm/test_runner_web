@@ -143,7 +143,7 @@
            <label class="form-label small">{{ column.label }} <code>{{ '{{' ~ column.key ~ '}}' }}</code></label>
            {% if column.is_secret %}
             <input class="form-control form-control-sm" type="password" name="secret_value_{{ column.id }}" maxlength="10000" autocomplete="new-password" placeholder="Оставьте пустым без изменений">
-            <div class="form-text">Секрет зашифрован. Пустое поле сохраняет прежнее значение.</div>
+            <div class="form-text">Секрет зашифрован. Оставьте пустым, чтобы не менять секрет.</div>
             <label class="form-check small mt-1"><input class="form-check-input" type="checkbox" name="clear_secret_{{ column.id }}" value="1"> Очистить секрет</label>
            {% else %}
             <textarea class="form-control form-control-sm" name="value_{{ column.id }}" rows="2" maxlength="10000">{{ (row.values_json or {}).get(column.key, '') }}</textarea>
