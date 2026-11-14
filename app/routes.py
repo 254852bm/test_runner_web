@@ -477,9 +477,12 @@ def test_detail(project_id, test_id):
     versions = TestCaseVersion.query.filter_by(test_case_id=test.id).order_by(
         TestCaseVersion.version_number.desc()
     ).all()
+    data_sets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
+        TestDataSet.created_at.asc()
+    ).all()
     return render_template('test_detail.html', project=project, test=test, steps=steps,
                            status_labels=STATUS_LABELS, current_version=current_version,
-                           versions=versions)
+                           versions=versions, data_sets=data_sets)
 
 
 
