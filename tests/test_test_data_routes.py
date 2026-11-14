@@ -335,3 +335,27 @@ def test_test_detail_shows_parameter_table_and_data_variants_in_russian(app):
     assert "Успешный вход" in html
     assert "qa@example.test" in html
     assert "Управлять параметрами" in html
+
+
+def test_user_can_create_dataset_with_russian_parameter_names(app):
+    with app.app_context():
+        user, project, case = _case()
+        user_id, project_id, case_id = user.id, project.id, case.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/create",
+        data={
+            "dataset_name": "Поручения",
+            "column_key[]": ["Исполнитель 1", "Текст поручения"],
+            "column_label[]": ["Исполнитель 1", "Текст поручения"],
+        },
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        dataset = TestDataSet.query.filter_by(test_case_id=case_id).one()
+        assert [column.key for column in dataset.columns] == [
+            "Исполнитель 1", "Текст поручения"
+        ]
