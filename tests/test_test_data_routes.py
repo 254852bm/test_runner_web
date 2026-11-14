@@ -359,3 +359,42 @@ def test_user_can_create_dataset_with_russian_parameter_names(app):
         assert [column.key for column in dataset.columns] == [
             "Исполнитель 1", "Текст поручения"
         ]
+
+
+def test_user_can_rename_own_dataset_without_changing_history(app):
+    with app.app_context():
+        user, project, case = _case()
+        dataset = TestDataSet(test_case_id=case.id, name="Старое название")
+        db.session.add(dataset)
+        db.session.flush()
+        row = TestDataRow(
+            dataset_id=dataset.id, name="Первый вариант",
+            values_json={"login": "qa@example.test"}
+        )
+        db.session.add(row)
+        db.session.flush()
+        run = TestRun(status="PASS", test_case_id=case.id, user_id=user.id)
+        db.session.add(run)
+        db.session.flush()
+        snapshot = TestRunDataSnapshot(
+            test_run_id=run.id, dataset_id=dataset.id, data_row_id=row.id,
+            dataset_name_snapshot="Старое название",
+            row_name_snapshot="Первый вариант",
+            values_snapshot_json={"login": "qa@example.test"},
+        )
+        db.session.add(snapshot)
+        db.session.commit()
+        user_id, project_id, case_id, dataset_id = user.id, project.id, case.id, dataset.id
+        snapshot_id = snapshot.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/rename",
+        data={"dataset_name": "Набор для регрессии"},
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert db.session.get(TestDataSet, dataset_id).name == "Набор для регрессии"
+        saved = db.session.get(TestRunDataSnapshot, snapshot_id)
+        assert saved.dataset_name_snapshot == "Старое название"
