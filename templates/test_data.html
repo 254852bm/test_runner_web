@@ -123,6 +123,10 @@
        <div class="d-flex justify-content-end gap-1 flex-wrap">
         {% if row.is_enabled %}<a class="btn btn-sm btn-success" href="{{ url_for('main.run_tests', project_id=project.id, test_id=test.id, data_set_id=dataset.id, data_row_id=row.id) }}" title="Запустить этот вариант">▶ Запуск</a>{% endif %}
         <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#edit-data-row-{{ row.id }}" aria-expanded="false" aria-controls="edit-data-row-{{ row.id }}">Изменить</button>
+        <form method="POST" action="{{ url_for('main.duplicate_test_data_row', project_id=project.id, test_id=test.id, dataset_id=dataset.id, row_id=row.id) }}">
+         <input type="hidden" name="row_name" value="{{ row.name }} — копия">
+         <button class="btn btn-sm btn-outline-info" type="submit" title="Создать копию варианта">Копировать</button>
+        </form>
         <form method="POST" action="{{ url_for('main.toggle_test_data_row', project_id=project.id, test_id=test.id, dataset_id=dataset.id, row_id=row.id) }}">
          <input type="hidden" name="is_enabled" value="{{ '0' if row.is_enabled else '1' }}">
          <button class="btn btn-sm btn-outline-secondary" type="submit">{{ 'Отключить' if row.is_enabled else 'Включить' }}</button>
