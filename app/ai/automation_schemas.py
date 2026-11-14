@@ -114,7 +114,7 @@ def _safe_relative_path(value):
         *(f"LPT{number}" for number in range(1, 10)),
     }
     for part in path.parts:
-        device_name = part.split(".", 1)[0].upper()
+        device_name = part.split(".", 1)[0].rstrip(" .").upper()
         if device_name in windows_reserved_names:
             raise ValueError("Имя файла зарезервировано операционной системой.")
 
