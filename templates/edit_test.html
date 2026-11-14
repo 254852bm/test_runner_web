@@ -91,7 +91,7 @@ document.addEventListener('focusin', function (event) {
 document.querySelectorAll('.parameter-insert').forEach(function (button) {
     button.addEventListener('click', function () {
         if (!lastParameterField) {
-            window.alert('Сначала выберите поле действия или ожидаемого результата.');
+            window.alert('Сначала выберите поле предусловия, действия или ожидаемого результата.');
             return;
         }
         const field = lastParameterField;
