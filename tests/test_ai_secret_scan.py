@@ -20,6 +20,8 @@ def test_scanner_detects_likely_credentials_without_returning_values(text):
     "Передать пароль в поле формы",
     "api_key={{API_KEY}}",
     "Проверить сообщение об ошибке авторизации",
+    "Password is required before submitting the form",
+    "Access token is refreshed after login",
 ])
 def test_scanner_allows_normal_text_and_explicit_placeholders(text):
     assert find_suspected_secret_fields({"text": text}) == []
