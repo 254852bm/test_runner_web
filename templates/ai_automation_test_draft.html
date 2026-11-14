@@ -30,11 +30,7 @@
         <form method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             {% if enabled and credential_available and provider_mode != 'ollama' %}
-                {% if estimated_max_cost_rub is not none %}
-                <div class="alert alert-secondary small">Ориентировочная стоимость запроса по настроенным тарифам: до <strong>{{ '%.4f'|format(estimated_max_cost_rub) }} ₽</strong>. Фактическая сумма зависит от тарифа и токенизации.</div>
-                {% else %}
-                <div class="alert alert-warning small">Оценка стоимости не настроена. Перед отправкой проверьте тариф в аккаунте AI-провайдера.</div>
-                {% endif %}
+                <div class="alert alert-warning small">Точная стоимость зависит от объёма тест-кейса, ответа модели и действующего тарифа. Перед подтверждением проверьте цены в своём аккаунте AI-провайдера.</div>
             <div class="form-check mb-3">
                 <input class="form-check-input" type="checkbox" id="paid_request_confirm" name="paid_request_confirm" value="accepted" required>
                 <label class="form-check-label" for="paid_request_confirm">Подтверждаю отправку запроса. Он может быть платным и будет оплачен на моём аккаунте AI-провайдера.</label>
