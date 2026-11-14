@@ -175,7 +175,7 @@ def test_prepare_test_data_rejects_malformed_placeholder(app):
     with app.app_context():
         case, dataset, row, columns = _objects()
         case.precondition = "Open {{base.url}}"
-        with pytest.raises(ValueError, match="Некорректный формат переменной"):
+        with pytest.raises(ValueError, match="Некорректный формат параметра"):
             prepare_test_data(case, dataset, row)
 
 
