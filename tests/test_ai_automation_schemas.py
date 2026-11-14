@@ -99,3 +99,12 @@ def test_validator_rejects_oversized_file_content():
 
     with pytest.raises(ValueError, match="длину"):
         validate_automation_test_draft(payload)
+
+
+@pytest.mark.parametrize("value", [[], {}, None])
+def test_validator_rejects_non_string_profile_fields(value):
+    payload = valid_automation_draft()
+    payload["target_profile"]["test_type"] = value
+
+    with pytest.raises(ValueError, match="профиль"):
+        validate_automation_test_draft(payload)
