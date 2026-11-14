@@ -499,3 +499,46 @@ def test_test_detail_never_renders_decrypted_secret_parameter_value(app):
     assert "Пароль пользователя" in html
     assert "Скрыто" in html
     assert "do-not-render-this-secret" not in html
+
+
+def test_test_data_page_renders_variants_as_editable_matrix_without_secrets(app):
+    from cryptography.fernet import Fernet
+    from flask import current_app
+    from app.test_data_crypto import encrypt_secret_values
+
+    with app.app_context():
+        current_app.config["TEST_DATA_ENCRYPTION_KEY"] = Fernet.generate_key().decode("ascii")
+        user, project, case = _case()
+        dataset = TestDataSet(test_case_id=case.id, name="Набор авторизации")
+        db.session.add(dataset)
+        db.session.flush()
+        login = TestDataColumn(
+            dataset_id=dataset.id, key="Логин", label="Логин", position=0
+        )
+        password = TestDataColumn(
+            dataset_id=dataset.id, key="Пароль", label="Пароль",
+            position=1, is_secret=True
+        )
+        row = TestDataRow(
+            dataset_id=dataset.id, name="Успешный вход",
+            values_json={"Логин": "qa@example.test"},
+            encrypted_values_json=encrypt_secret_values(
+                {"Пароль": "never-render-this-password"}
+            ),
+            is_enabled=True,
+        )
+        db.session.add_all([login, password, row])
+        db.session.commit()
+        user_id, project_id, case_id = user.id, project.id, case.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.get(f"/project/{project_id}/test/{case_id}/data")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Варианты данных" in html
+    assert "Успешный вход" in html
+    assert "qa@example.test" in html
+    assert "Изменить" in html
+    assert "Скрыто" in html
+    assert "never-render-this-password" not in html
