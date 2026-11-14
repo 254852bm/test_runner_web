@@ -104,9 +104,16 @@
    <span class="text-muted small">Каждая строка — отдельный набор значений для запуска</span>
   </div>
   {% if dataset.rows %}
+  <form id="bulk-data-row-form" method="POST" action="{{ url_for('main.bulk_update_test_data_rows', project_id=project.id, test_id=test.id, dataset_id=dataset.id) }}" class="d-flex flex-wrap align-items-center gap-2 mb-2">
+   <span class="small text-muted">Для выбранных вариантов:</span>
+   <button class="btn btn-sm btn-outline-success" type="submit" name="is_enabled" value="1">Включить</button>
+   <button class="btn btn-sm btn-outline-secondary" type="submit" name="is_enabled" value="0">Отключить</button>
+   <span class="small text-muted" id="selected-data-row-count">Выбрано: 0</span>
+  </form>
   <div class="table-responsive">
    <table class="table table-sm table-hover align-middle">
     <thead><tr>
+     <th><input class="form-check-input" type="checkbox" id="select-all-data-rows" aria-label="Выбрать все варианты"></th>
      <th>Вариант</th>
      {% for column in dataset.columns %}<th>{{ column.label }}{% if column.is_secret %} <span class="text-muted" title="Секретное значение">🔒</span>{% endif %}</th>{% endfor %}
      <th>Статус</th><th class="text-end">Действия</th>
@@ -114,6 +121,7 @@
     <tbody>
     {% for row in dataset.rows %}
      <tr>
+      <td><input class="form-check-input data-row-select" type="checkbox" name="row_ids[]" value="{{ row.id }}" form="bulk-data-row-form" aria-label="Выбрать вариант {{ row.name }}"></td>
       <td class="fw-semibold">{{ row.name }}</td>
       {% for column in dataset.columns %}
        <td>{% if column.is_secret %}<span class="text-muted">Скрыто</span>{% else %}{{ (row.values_json or {}).get(column.key, '') or '—' }}{% endif %}</td>
@@ -138,7 +146,7 @@
       </td>
      </tr>
      <tr class="collapse bg-body-tertiary" id="edit-data-row-{{ row.id }}">
-      <td colspan="{{ dataset.columns|length + 3 }}">
+      <td colspan="{{ dataset.columns|length + 4 }}">
        <form class="p-2" method="POST" action="{{ url_for('main.edit_test_data_row', project_id=project.id, test_id=test.id, dataset_id=dataset.id, row_id=row.id) }}">
         <div class="row g-2 align-items-end">
          <div class="col-md-4"><label class="form-label small">Название варианта</label><input class="form-control form-control-sm" name="row_name" maxlength="120" required value="{{ row.name }}"></div>
@@ -192,5 +200,26 @@ function updateColumnButtons() {
   row.querySelector('input[type="checkbox"]').name = 'column_is_secret_' + index;
  });
 }
+</script>
+
+<script>
+(() => {
+ const master = document.getElementById('select-all-data-rows');
+ const rows = Array.from(document.querySelectorAll('.data-row-select'));
+ const count = document.getElementById('selected-data-row-count');
+ if (!master || !count) return;
+ const update = () => {
+  const selected = rows.filter((item) => item.checked).length;
+  count.textContent = 'Выбрано: ' + selected;
+  master.checked = rows.length > 0 && selected === rows.length;
+  master.indeterminate = selected > 0 && selected < rows.length;
+ };
+ master.addEventListener('change', () => {
+  rows.forEach((item) => { item.checked = master.checked; });
+  update();
+ });
+ rows.forEach((item) => item.addEventListener('change', update));
+ update();
+})();
 </script>
 {% endblock %}
