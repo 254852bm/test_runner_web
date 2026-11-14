@@ -100,7 +100,7 @@ def prepare_test_data(test_case, dataset, row):
         for match in _ANY_PLACEHOLDER_RE.finditer(source or ""):
             if not _KEY_RE.fullmatch(match.group(1)):
                 raise ValueError(
-                    "Некорректный формат переменной. Используйте {{variable_name}}."
+                    "Некорректный формат параметра. Используйте {{Название параметра}}, например {{Исполнитель 1}}."
                 )
         used_keys.update(_placeholders(source))
 
