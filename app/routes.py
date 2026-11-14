@@ -538,14 +538,14 @@ def create_test_data_set(project_id, test_id):
     ]
     target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
     if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
-        flash('Секретные колонки доступны после настройки TEST_DATA_ENCRYPTION_KEY на сервере.', 'danger')
+        flash('Секретные параметры доступны после настройки TEST_DATA_ENCRYPTION_KEY на сервере.', 'danger')
         return redirect(target)
 
     if not name or len(name) > 120:
         flash('Укажите название набора данных (до 120 символов).', 'danger')
         return redirect(target)
     if not keys or len(keys) > 30 or len(keys) != len(labels):
-        flash('Добавьте от 1 до 30 корректных колонок.', 'danger')
+        flash('Добавьте от 1 до 30 корректных параметров.', 'danger')
         return redirect(target)
     if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
         flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
@@ -591,7 +591,7 @@ def add_test_data_column(project_id, test_id, dataset_id):
     is_secret = request.form.get('is_secret') == '1'
 
     if len(dataset.columns) >= 30:
-        flash('В одном наборе можно создать не более 30 колонок.', 'danger')
+        flash('В одном наборе можно создать не более 30 параметров.', 'danger')
         return redirect(target)
     if not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key):
         flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
@@ -618,7 +618,7 @@ def add_test_data_column(project_id, test_id, dataset_id):
         position=len(dataset.columns), is_secret=is_secret
     ))
     db.session.commit()
-    flash('Колонка добавлена. В существующих строках её значение пока пустое.', 'success')
+    flash('Параметр добавлен. В существующих строках её значение пока пустое.', 'success')
     return redirect(target)
 
 
@@ -677,7 +677,7 @@ def edit_test_data_column(project_id, test_id, dataset_id, column_id):
 
     column.label = new_label
     db.session.commit()
-    flash('Колонка обновлена. История ранее выполненных запусков не меняется.', 'success')
+    flash('Параметр обновлён. История ранее выполненных запусков не меняется.', 'success')
     return redirect(target)
 
 
@@ -712,7 +712,7 @@ def delete_test_data_column(project_id, test_id, dataset_id, column_id):
 
     db.session.delete(column)
     db.session.commit()
-    flash('Колонка удалена из текущего набора. Исторические снимки запусков не изменены.', 'success')
+    flash('Параметр удалён из текущего набора. Исторические снимки запусков не изменены.', 'success')
     return redirect(target)
 
 
