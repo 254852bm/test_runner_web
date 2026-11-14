@@ -305,3 +305,33 @@ def test_deleting_project_removes_parameterization_records_and_run_snapshots(app
         assert db.session.get(TestDataColumn, column_id) is None
         assert db.session.get(TestDataRow, row_id) is None
         assert db.session.get(TestDataBatch, batch_id) is None
+
+
+def test_test_detail_shows_parameter_table_and_data_variants_in_russian(app):
+    with app.app_context():
+        user, project, case = _case()
+        dataset = TestDataSet(test_case_id=case.id, name="Основной набор")
+        db.session.add(dataset)
+        db.session.flush()
+        column = TestDataColumn(
+            dataset_id=dataset.id, key="login", label="Логин", position=0
+        )
+        row = TestDataRow(
+            dataset_id=dataset.id, name="Успешный вход",
+            values_json={"login": "qa@example.test"}, is_enabled=True
+        )
+        db.session.add_all([column, row])
+        db.session.commit()
+        user_id, project_id, case_id = user.id, project.id, case.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.get(f"/project/{project_id}/test/{case_id}")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Параметры тест-кейса" in html
+    assert "Название параметра" in html
+    assert "Значение по умолчанию" in html
+    assert "Успешный вход" in html
+    assert "qa@example.test" in html
+    assert "Управлять параметрами" in html
