@@ -11,6 +11,7 @@ on:
   push:
     branches:
       - integration/ai-provider-mvp
+      - feature/ai-automation-test-design
 
 jobs:
   ai-draft-checks:
