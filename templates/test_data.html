@@ -82,9 +82,9 @@
   <form method="POST" action="{{ url_for('main.add_test_data_column', project_id=project.id, test_id=test.id, dataset_id=dataset.id) }}" class="border rounded p-3 mb-4">
    <strong class="d-block mb-2">Добавить параметр</strong>
    <div class="row g-2 align-items-end">
-    <div class="col-md-10"><label class="form-label small">Название параметра</label><input class="form-control" name="column_key" required placeholder="Например, Ожидаемое сообщение"></div>
+    <div class="col-md-9"><label class="form-label small">Название параметра</label><input class="form-control" name="column_key" required placeholder="Например, Ожидаемое сообщение"></div>
     <div class="col-md-1"><label class="form-check mb-2"><input class="form-check-input" type="checkbox" name="is_secret" value="1"> Секрет</label></div>
-    <div class="col-md-2"><button class="btn btn-outline-primary w-100" type="submit">Добавить</button></div>
+    <div class="col-md-2"><button class="btn btn-outline-primary w-100" type="submit">Добавить параметр</button></div>
    </div>
    <div class="form-text">При переименовании переменной значения текущих строк переносятся. Старые результаты запусков не меняются.</div>
   </form>
