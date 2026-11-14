@@ -51,6 +51,8 @@ def test_schema_is_strict_and_requires_every_field():
     "src/test/../../LoginTest.java",
     "build.gradle",
     ".env",
+    ".hidden/LoginTest.java",
+    "src/" + chr(1) + "LoginTest.java",
     "src/test/run.sh",
 ])
 def test_validator_rejects_unsafe_or_unsupported_paths(path):
