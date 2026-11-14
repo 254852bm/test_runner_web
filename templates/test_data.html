@@ -37,15 +37,13 @@
    <div><strong>{{ dataset.name }}</strong><span class="text-muted small ms-2">{{ dataset.rows|length }} вариантов · {{ dataset.columns|length }} параметров</span></div>
    <div class="d-flex gap-2 flex-wrap">
     {% if dataset.rows|selectattr("is_enabled")|list|length > 0 %}<a class="btn btn-sm btn-success" href="{{ url_for('main.run_tests', project_id=project.id, test_id=test.id, data_set_id=dataset.id, run_all=1) }}">▶ Запустить все активные варианты</a>{% endif %}
-    <form method="POST" action="{{ url_for('main.delete_test_data_set', project_id=project.id, test_id=test.id, dataset_id=dataset.id) }}" onsubmit="return confirm('Удалить набор и его строки? Исторические результаты останутся.');"><button class="btn btn-sm btn-outline-danger" type="submit">Удалить набор</button></form>
+    <form method="POST" action="{{ url_for('main.delete_test_data_set', project_id=project.id, test_id=test.id, dataset_id=dataset.id) }}" onsubmit="return confirm('Удалить набор и его варианты? Исторические результаты останутся.');"><button class="btn btn-sm btn-outline-danger" type="submit">Удалить набор</button></form>
    </div>
   </div>
   <form class="row g-2 align-items-end mt-2" method="POST" action="{{ url_for('main.rename_test_data_set', project_id=project.id, test_id=test.id, dataset_id=dataset.id) }}">
    <div class="col-md-8"><label class="form-label small mb-1">Название набора</label><input class="form-control form-control-sm" name="dataset_name" maxlength="120" required value="{{ dataset.name }}"></div>
    <div class="col-md-4"><button class="btn btn-sm btn-outline-primary w-100" type="submit">Сохранить название</button></div>
   </form>
-  {% if dataset.rows|selectattr("is_enabled")|list|length > 0 %}<a class="btn btn-sm btn-success" href="{{ url_for('main.run_tests', project_id=project.id, test_id=test.id, data_set_id=dataset.id, run_all=1) }}">▶ Запустить все активные строки</a>{% endif %}
-  <form method="POST" action="{{ url_for('main.delete_test_data_set', project_id=project.id, test_id=test.id, dataset_id=dataset.id) }}" onsubmit="return confirm('Удалить набор и его строки? Исторические результаты останутся.');"><button class="btn btn-sm btn-outline-danger" type="submit">Удалить набор</button></form>
  </div>
  <div class="card-body">
   <div class="mb-3"><strong>Переменные:</strong>
