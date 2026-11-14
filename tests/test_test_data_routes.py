@@ -464,3 +464,38 @@ def test_create_dataset_uses_parameter_name_as_display_label_when_label_is_omitt
             ("Исполнитель 1", "Исполнитель 1"),
             ("Текст поручения", "Текст поручения"),
         ]
+
+
+def test_test_detail_never_renders_decrypted_secret_parameter_value(app):
+    from cryptography.fernet import Fernet
+    from flask import current_app
+    from app.test_data_crypto import encrypt_secret_values
+
+    with app.app_context():
+        current_app.config["TEST_DATA_ENCRYPTION_KEY"] = Fernet.generate_key().decode("ascii")
+        user, project, case = _case()
+        dataset = TestDataSet(test_case_id=case.id, name="Секретный набор")
+        db.session.add(dataset)
+        db.session.flush()
+        column = TestDataColumn(
+            dataset_id=dataset.id, key="Пароль пользователя",
+            label="Пароль пользователя", position=0, is_secret=True
+        )
+        row = TestDataRow(
+            dataset_id=dataset.id, name="Тестовый аккаунт",
+            values_json={}, encrypted_values_json=encrypt_secret_values(
+                {"Пароль пользователя": "do-not-render-this-secret"}
+            ), is_enabled=True
+        )
+        db.session.add_all([column, row])
+        db.session.commit()
+        user_id, project_id, case_id = user.id, project.id, case.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.get(f"/project/{project_id}/test/{case_id}")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Пароль пользователя" in html
+    assert "Скрыто" in html
+    assert "do-not-render-this-secret" not in html
