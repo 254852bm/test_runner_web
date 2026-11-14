@@ -398,3 +398,46 @@ def test_user_can_rename_own_dataset_without_changing_history(app):
         assert db.session.get(TestDataSet, dataset_id).name == "Набор для регрессии"
         saved = db.session.get(TestRunDataSnapshot, snapshot_id)
         assert saved.dataset_name_snapshot == "Старое название"
+
+
+def test_user_cannot_rename_another_users_dataset(app):
+    with app.app_context():
+        owner, project, case = _case()
+        dataset = TestDataSet(test_case_id=case.id, name="Исходный набор")
+        db.session.add(dataset)
+        db.session.flush()
+        dataset_id = dataset.id
+        project_id, case_id = project.id, case.id
+        other = User(email="rename-other@example.test", password="not-a-real-password")
+        db.session.add(other)
+        db.session.commit()
+        other_id = other.id
+
+    client = app.test_client()
+    _login(client, other_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/rename",
+        data={"dataset_name": "Чужое название"},
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert db.session.get(TestDataSet, dataset_id).name == "Исходный набор"
+
+
+def test_renaming_dataset_rejects_empty_name(app):
+    with app.app_context():
+        user, project, case = _case()
+        dataset = TestDataSet(test_case_id=case.id, name="Исходный набор")
+        db.session.add(dataset)
+        db.session.commit()
+        user_id, project_id, case_id, dataset_id = user.id, project.id, case.id, dataset.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/rename",
+        data={"dataset_name": "   "},
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert db.session.get(TestDataSet, dataset_id).name == "Исходный набор"
