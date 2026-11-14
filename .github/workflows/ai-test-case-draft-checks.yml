@@ -7,6 +7,7 @@ on:
       - feature/stage4-test-management
       - feature/ai-test-case-drafts
       - integration/parameterization-integrity
+      - integration/ai-provider-mvp
 
   push:
     branches:
