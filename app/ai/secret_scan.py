@@ -5,7 +5,7 @@ This heuristic cannot guarantee detection of every possible secret.
 import re
 
 _SECRET_ASSIGNMENT = re.compile(
-    r"""(?ix)\b(?:password|passwd|pwd|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret[_-]?key|private[_-]?key)\b\s*(?:[:=]|\bis\b)\s*["']?([^\s"' ,;)}\]]{8,})"""
+    r"""(?ix)\b(?:password|passwd|pwd|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|token|credential|private[_-]?key)\b\s*(?:[:=]|\bis\b)\s*["']?([^\s"' ,;)}\]]{8,})"""
 )
 _BEARER = re.compile(r"(?i)\bauthorization\s*:\s*bearer\s+([A-Za-z0-9._~+/-]{12,})")
 _PRIVATE_KEY = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")
@@ -13,7 +13,7 @@ _TOKEN_PREFIX = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0
 
 
 def _has_suspicious_secret(text):
-    if _PRIVATE_KEY.search(text) or _TOKEN_PREFIX.search(text) or _BEARER.search(text):
+    if _PRIVATE_KEY.search(text) or _TOKEN_PREFIX.search(text) or _BEARER.search(text) or _JWT.search(text) or _URL_CREDENTIALS.search(text):
         return True
     # Remove explicit environment and template placeholders before assignment checks.
     text = re.sub(r"\x24\{[^}]+\}|\{\{[^}]+\}\}|<[^>]+>", "PLACEHOLDER", text)
