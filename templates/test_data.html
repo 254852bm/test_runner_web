@@ -113,13 +113,16 @@
      <form method="POST" action="{{ url_for('main.delete_test_data_row', project_id=project.id, test_id=test.id, dataset_id=dataset.id, row_id=row.id) }}" onsubmit="return confirm('Удалить эту строку?');"><button class="btn btn-sm btn-outline-danger" type="submit">Удалить</button></form>
     </div>
    </div>
-   <form method="POST" action="{{ url_for('main.edit_test_data_row', project_id=project.id, test_id=test.id, dataset_id=dataset.id, row_id=row.id) }}">
+   <details class="mt-2">
+    <summary class="small fw-semibold">Изменить значения варианта</summary>
+    <form class="mt-3" method="POST" action="{{ url_for('main.edit_test_data_row', project_id=project.id, test_id=test.id, dataset_id=dataset.id, row_id=row.id) }}">
     <div class="mb-2"><label class="form-label small">Название</label><input class="form-control" name="row_name" maxlength="120" required value="{{ row.name }}"></div>
     <div class="row g-2">{% for column in dataset.columns %}
      <div class="col-md-6"><label class="form-label small">{{ column.label }} <code>{{ '{{' ~ column.key ~ '}}' }}</code></label>{% if column.is_secret %}<input class="form-control" type="password" name="secret_value_{{ column.id }}" maxlength="10000" autocomplete="new-password" placeholder="••••••••"><div class="form-text">Оставьте пустым, чтобы не менять секрет.</div><label class="form-check small mt-1"><input class="form-check-input" type="checkbox" name="clear_secret_{{ column.id }}" value="1"> Очистить сохранённый секрет</label>{% else %}<textarea class="form-control" name="value_{{ column.id }}" rows="2" maxlength="10000">{{ row.values_json.get(column.key, '') }}</textarea>{% endif %}</div>
     {% endfor %}</div>
-    <button class="btn btn-sm btn-primary mt-3" type="submit">Сохранить строку</button>
-   </form>
+    <button class="btn btn-sm btn-primary mt-3" type="submit">Сохранить вариант</button>
+    </form>
+   </details>
   </div>
   {% else %}<p class="text-muted">Пока нет строк. Добавьте первую строку выше.</p>{% endfor %}
  </div>
