@@ -56,7 +56,7 @@ def test_schema_is_strict_and_requires_every_field():
     "src/test/run.sh",
     "src/CON.java",
     "src/nul.md",
-    "src/trailing .java",
+    "src/trailing.java ",
     "src/trailing./LoginTest.java",
     "src/" + chr(127) + "LoginTest.java",
 ])
@@ -66,6 +66,15 @@ def test_validator_rejects_unsafe_or_unsupported_paths(path):
 
     with pytest.raises(ValueError):
         validate_automation_test_draft(payload)
+
+
+def test_validator_accepts_spaces_before_extension():
+    payload = valid_automation_draft()
+    payload["files"][0]["path"] = "src/test/Login draft.java"
+
+    result = validate_automation_test_draft(payload)
+
+    assert result["files"][0]["path"] == "src/test/Login draft.java"
 
 
 def test_validator_rejects_duplicate_paths():
