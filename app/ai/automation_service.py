@@ -1,34 +1,37 @@
 """Provider-independent orchestration for AI automation-code drafts."""
-
-from .automation_schemas import (
-    automation_test_draft_response_format,
-    validate_automation_test_draft,
-)
+from .automation_schemas import automation_test_draft_response_format, validate_automation_test_draft
 from .provider import AIProviderError
 from .automation_prompts import AUTOMATION_SYSTEM_PROMPT, build_automation_user_prompt
-
+from .secret_scan import find_suspected_secret_fields
 
 MAX_AUTOMATION_CONTEXT_LENGTH = 12_000
+
+
+def _reject_suspected_secrets(value):
+    fields = find_suspected_secret_fields(value)
+    if fields:
+        raise AIProviderError(
+            "В данных обнаружены признаки секрета. Удалите пароль, токен или ключ "
+            "из текста и используйте имя параметра или безопасную заглушку. "
+            "Проверьте поля: " + ", ".join(fields[:10])
+        )
 
 
 def generate_automation_test_draft(provider, test_case_context):
     """Generate a validated code draft; never persist or execute generated code."""
     if not isinstance(test_case_context, dict):
         raise ValueError("Не удалось подготовить данные тест-кейса.")
-
     required = {"title", "preconditions", "steps", "parameters"}
     if set(test_case_context) != required:
         raise ValueError("Данные тест-кейса имеют неверный формат.")
     title = test_case_context["title"]
     if not isinstance(title, str) or not title.strip() or len(title) > 200:
         raise ValueError("У тест-кейса должно быть корректное название.")
-
     preconditions = test_case_context["preconditions"]
     if not isinstance(preconditions, list) or len(preconditions) > 10:
         raise ValueError("Предусловия имеют неверный формат.")
     if any(not isinstance(value, str) or len(value) > 1000 for value in preconditions):
         raise ValueError("Текст предусловий имеет неверный формат.")
-
     steps = test_case_context["steps"]
     if not isinstance(steps, list) or not 1 <= len(steps) <= 30:
         raise ValueError("В тест-кейсе должно быть от 1 до 30 шагов.")
@@ -36,17 +39,12 @@ def generate_automation_test_draft(provider, test_case_context):
     for index, step in enumerate(steps, start=1):
         if not isinstance(step, dict) or set(step) != {"action", "expected_result"}:
             raise ValueError(f"Шаг {index} имеет неверный формат.")
-        action = step["action"]
-        expected = step["expected_result"]
+        action, expected = step["action"], step["expected_result"]
         if not isinstance(action, str) or not action.strip() or len(action) > 1000:
             raise ValueError(f"Действие шага {index} имеет неверный формат.")
         if not isinstance(expected, str) or len(expected) > 1000:
             raise ValueError(f"Ожидаемый результат шага {index} имеет неверный формат.")
-        normalized_steps.append({
-            "action": action.strip(),
-            "expected_result": expected.strip(),
-        })
-
+        normalized_steps.append({"action": action.strip(), "expected_result": expected.strip()})
     parameters = test_case_context["parameters"]
     if not isinstance(parameters, list) or len(parameters) > 100:
         raise ValueError("Параметры тест-кейса имеют неверный формат.")
@@ -58,21 +56,18 @@ def generate_automation_test_draft(provider, test_case_context):
             raise ValueError("Имя параметра имеет неверный формат.")
         if not isinstance(item["is_secret"], bool):
             raise ValueError("Признак секретного параметра имеет неверный формат.")
-        safe_parameters.append({
-            "name": item["name"].strip(),
-            "is_secret": item["is_secret"],
-        })
-
+        safe_parameters.append({"name": item["name"].strip(), "is_secret": item["is_secret"]})
     safe_context = {
         "title": title.strip(),
         "preconditions": [value.strip() for value in preconditions],
         "steps": normalized_steps,
         "parameters": safe_parameters,
     }
+    # Check user-authored free text before any outbound provider request.
+    _reject_suspected_secrets(safe_context)
     prompt = build_automation_user_prompt(safe_context)
     if len(prompt) > MAX_AUTOMATION_CONTEXT_LENGTH:
         raise ValueError("Тест-кейс слишком большой для подготовки автотеста.")
-
     try:
         raw_draft = provider.generate_structured(
             system_prompt=AUTOMATION_SYSTEM_PROMPT,
@@ -82,8 +77,8 @@ def generate_automation_test_draft(provider, test_case_context):
     except AIProviderError:
         raise
     except Exception as error:
-        raise AIProviderError(
-            "Не удалось подготовить черновик автотеста. Попробуйте позже."
-        ) from error
-
-    return validate_automation_test_draft(raw_draft)
+        raise AIProviderError("Не удалось подготовить черновик автотеста. Попробуйте позже.") from error
+    validated_draft = validate_automation_test_draft(raw_draft)
+    # Model output is untrusted too; block before it can be displayed or exported.
+    _reject_suspected_secrets(validated_draft)
+    return validated_draft
