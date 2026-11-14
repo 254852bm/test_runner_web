@@ -3,6 +3,9 @@ from app.ai.secret_scan import find_suspected_secret_fields
 
 @pytest.mark.parametrize("text", [
     'password = "correct-horse-battery-staple"',
+    'password = "my real secret value with spaces"',
+    '"password": "json-secret-value-with-spaces"',
+    "'client_secret': 'another long secret value'",
     "api_key: sk_live_1234567890abcdef",
     "Authorization: Bearer abcdefghijklmnopqrstuvwxyz123456",
     "-----BEGIN PRIVATE KEY-----",
