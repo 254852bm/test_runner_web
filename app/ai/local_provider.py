@@ -33,7 +33,7 @@ class OllamaLocalProvider:
         )
 
     def generate_structured(
-        self, *, system_prompt, user_prompt, response_format, local_schema=False
+        self, *, system_prompt, user_prompt, response_format
     ):
         body = {
             "model": self.model,
