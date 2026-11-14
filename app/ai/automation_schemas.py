@@ -92,7 +92,7 @@ def _notes(value, field):
 def _safe_relative_path(value):
     path_text = _text(value, "files.path", 240)
     # Use POSIX separators in the interchange format on every platform.
-    if "\\" in path_text or path_text.startswith("/") or ":" in path_text:
+    if "\\" in path_text or path_text.startswith("/") or ":" in path_text or any(ord(char) < 32 for char in path_text):
         raise ValueError("Путь файла должен быть безопасным относительным путём.")
     path = PurePosixPath(path_text)
     if any(part in {"", ".", ".."} for part in path.parts):
