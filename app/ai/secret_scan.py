@@ -16,6 +16,8 @@ _PLACEHOLDER = re.compile(r"^(?:\{\{[^}]+\}\}|<[^>]+>|\*{3,}|REDACTED)$", re.IGN
 def _has_suspicious_secret(text):
     if _PRIVATE_KEY.search(text) or _TOKEN_PREFIX.search(text) or _BEARER.search(text):
         return True
+    # Remove explicit non-secret placeholders before looking for assignments.
+    text = re.sub(r"\\$\\{[^}]+\\}|\\{\\{[^}]+\\}\\}|<[^>]+>", "PLACEHOLDER", text)
     for match in _SECRET_ASSIGNMENT.finditer(text):
         candidate = match.group(1).rstrip(".")
         if candidate.lower() in {"null", "none", "false", "true", "your_password", "changeme"}:
