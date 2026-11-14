@@ -174,7 +174,7 @@ def test_prepare_test_data_does_not_evaluate_template_expressions(app):
 def test_prepare_test_data_rejects_malformed_placeholder(app):
     with app.app_context():
         case, dataset, row, columns = _objects()
-        case.precondition = "Open {{base url}}"
+        case.precondition = "Open {{base.url}}"
         with pytest.raises(ValueError, match="Некорректный формат переменной"):
             prepare_test_data(case, dataset, row)
 
