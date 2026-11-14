@@ -761,6 +761,42 @@ def create_test_data_row(project_id, test_id, dataset_id):
     return redirect(target)
 
 
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/duplicate', methods=['POST'])
+@login_required
+def duplicate_test_data_row(project_id, test_id, dataset_id, row_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    source = TestDataRow.query.filter_by(id=row_id, dataset_id=dataset.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+
+    if len(dataset.rows) >= 500:
+        flash('В одном наборе можно создать не более 500 вариантов.', 'danger')
+        return redirect(target)
+
+    requested_name = request.form.get('row_name', '').strip()
+    new_name = requested_name or f'{source.name} — копия'
+    if not new_name or len(new_name) > 120:
+        flash('Название копии должно содержать не более 120 символов.', 'danger')
+        return redirect(target)
+
+    # Copy ciphertext as-is: secrets are never decrypted or rendered during duplication.
+    duplicate = TestDataRow(
+        dataset_id=dataset.id,
+        name=new_name,
+        values_json=dict(source.values_json or {}),
+        encrypted_values_json=source.encrypted_values_json,
+        is_enabled=False,
+        position=max((row.position for row in dataset.rows), default=-1) + 1,
+    )
+    db.session.add(duplicate)
+    db.session.commit()
+    flash('Вариант скопирован. Новая копия отключена — проверьте её перед запуском.', 'success')
+    return redirect(target)
+
+
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/edit', methods=['POST'])
 @login_required
 def edit_test_data_row(project_id, test_id, dataset_id, row_id):
