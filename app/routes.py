@@ -527,11 +527,11 @@ def create_test_data_set(project_id, test_id):
     test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
     name = request.form.get('dataset_name', '').strip()
     keys = [value.strip() for value in request.form.getlist('column_key[]')]
-    labels = [value.strip() for value in request.form.getlist('column_label[]')]
-    if not labels:
-        labels = list(keys)
-    else:
-        labels = [label or key for key, label in zip(keys, labels)]
+    submitted_labels = [value.strip() for value in request.form.getlist('column_label[]')]
+    labels = [
+        submitted_labels[index] if index < len(submitted_labels) and submitted_labels[index] else key
+        for index, key in enumerate(keys)
+    ]
     secret_flags = [
         request.form.get(f'column_is_secret_{index}') == '1'
         for index in range(len(keys))
