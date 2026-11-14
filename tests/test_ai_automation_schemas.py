@@ -54,6 +54,11 @@ def test_schema_is_strict_and_requires_every_field():
     ".hidden/LoginTest.java",
     "src/" + chr(1) + "LoginTest.java",
     "src/test/run.sh",
+    "src/CON.java",
+    "src/nul.md",
+    "src/trailing .java",
+    "src/trailing./LoginTest.java",
+    "src/" + chr(127) + "LoginTest.java",
 ])
 def test_validator_rejects_unsafe_or_unsupported_paths(path):
     payload = valid_automation_draft()
@@ -109,4 +114,15 @@ def test_validator_rejects_non_string_profile_fields(value):
     payload["target_profile"]["test_type"] = value
 
     with pytest.raises(ValueError, match="профиль"):
+        validate_automation_test_draft(payload)
+
+
+def test_validator_rejects_duplicate_paths_case_insensitively():
+    payload = valid_automation_draft()
+    payload["files"].append({
+        "path": "src/test/java/example/logintest.java",
+        "content": "class LoginTest {}",
+    })
+
+    with pytest.raises(ValueError, match="повторяющиеся"):
         validate_automation_test_draft(payload)
