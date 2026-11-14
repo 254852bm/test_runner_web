@@ -542,3 +542,74 @@ def test_test_data_page_renders_variants_as_editable_matrix_without_secrets(app)
     assert "Изменить" in html
     assert "Скрыто" in html
     assert "never-render-this-password" not in html
+
+
+def test_user_can_duplicate_data_row_without_exposing_secret_and_copy_starts_disabled(app):
+    from cryptography.fernet import Fernet
+    from flask import current_app
+    from app.test_data_crypto import encrypt_secret_values
+
+    with app.app_context():
+        current_app.config["TEST_DATA_ENCRYPTION_KEY"] = Fernet.generate_key().decode("ascii")
+        user, project, case = _case()
+        dataset = TestDataSet(test_case_id=case.id, name="Набор")
+        db.session.add(dataset)
+        db.session.flush()
+        ordinary = TestDataColumn(dataset_id=dataset.id, key="Логин", label="Логин", position=0)
+        secret = TestDataColumn(dataset_id=dataset.id, key="Пароль", label="Пароль", position=1, is_secret=True)
+        encrypted = encrypt_secret_values({"Пароль": "secret-that-must-not-be-decrypted"})
+        source = TestDataRow(
+            dataset_id=dataset.id, name="Успешный вход",
+            values_json={"Логин": "qa@example.test"},
+            encrypted_values_json=encrypted, is_enabled=True, position=0,
+        )
+        db.session.add_all([ordinary, secret, source])
+        db.session.commit()
+        user_id, project_id, case_id, dataset_id, row_id = user.id, project.id, case.id, dataset.id, source.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/rows/{row_id}/duplicate",
+        data={"row_name": "Неверный пароль"},
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        rows = TestDataRow.query.filter_by(dataset_id=dataset_id).order_by(TestDataRow.position).all()
+        assert len(rows) == 2
+        duplicate = rows[1]
+        assert duplicate.name == "Неверный пароль"
+        assert duplicate.values_json == {"Логин": "qa@example.test"}
+        assert duplicate.encrypted_values_json == encrypted
+        assert duplicate.is_enabled is False
+        assert duplicate.position > rows[0].position
+
+    response = client.get(f"/project/{project_id}/test/{case_id}/data")
+    html = response.get_data(as_text=True)
+    assert "Копировать" in html
+    assert "secret-that-must-not-be-decrypted" not in html
+
+
+def test_user_cannot_duplicate_another_users_data_row(app):
+    with app.app_context():
+        owner, project, case = _case()
+        dataset = TestDataSet(test_case_id=case.id, name="Набор")
+        db.session.add(dataset)
+        db.session.flush()
+        row = TestDataRow(dataset_id=dataset.id, name="Вариант", values_json={}, is_enabled=True)
+        db.session.add(row)
+        other = User(email="duplicate-other@example.test", password="not-a-real-password")
+        db.session.add(other)
+        db.session.commit()
+        other_id, project_id, case_id, dataset_id, row_id = other.id, project.id, case.id, dataset.id, row.id
+
+    client = app.test_client()
+    _login(client, other_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}/rows/{row_id}/duplicate",
+        data={"row_name": "Чужая копия"},
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert TestDataRow.query.filter_by(dataset_id=dataset_id).count() == 1
