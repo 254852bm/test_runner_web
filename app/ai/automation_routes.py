@@ -12,7 +12,6 @@ from app.models import AICredential, Project, TestCase, TestDataColumn, TestData
 from .routes import (
     _provider,
     _provider_mode,
-    _maximum_estimated_cost_rub,
     _reserve_generation_slot,
 )
 from .automation_service import generate_automation_test_draft
@@ -129,5 +128,4 @@ def automation_test_draft(project_id, test_id):
         enabled=enabled,
         credential_available=credential_available,
         provider_mode=provider_mode,
-        estimated_max_cost_rub=(0 if provider_mode == "ollama" else _maximum_estimated_cost_rub()),
     )
