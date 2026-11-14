@@ -152,9 +152,11 @@ def validate_automation_test_draft(payload):
         if not isinstance(item, dict) or set(item) != {"path", "content"}:
             raise ValueError(f"Файл {index + 1} имеет неверный формат.")
         path = _safe_relative_path(item["path"])
-        if path in seen_paths:
+        # Windows filesystems commonly treat paths as case-insensitive.
+        path_identity = path.casefold()
+        if path_identity in seen_paths:
             raise ValueError("Черновик содержит повторяющиеся пути файлов.")
-        seen_paths.add(path)
+        seen_paths.add(path_identity)
         content = _text(
             item["content"], f"files[{index}].content",
             MAX_AUTOMATION_FILE_CHARS,
