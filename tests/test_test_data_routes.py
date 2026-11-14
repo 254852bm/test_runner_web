@@ -441,3 +441,26 @@ def test_renaming_dataset_rejects_empty_name(app):
     assert response.status_code == 302
     with app.app_context():
         assert db.session.get(TestDataSet, dataset_id).name == "Исходный набор"
+
+
+def test_create_dataset_uses_parameter_name_as_display_label_when_label_is_omitted(app):
+    with app.app_context():
+        user, project, case = _case()
+        user_id, project_id, case_id = user.id, project.id, case.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/create",
+        data={
+            "dataset_name": "Русские параметры",
+            "column_key[]": ["Исполнитель 1", "Текст поручения"],
+        },
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        dataset = TestDataSet.query.filter_by(test_case_id=case_id).one()
+        assert [(column.key, column.label) for column in dataset.columns] == [
+            ("Исполнитель 1", "Исполнитель 1"),
+            ("Текст поручения", "Текст поручения"),
+        ]
