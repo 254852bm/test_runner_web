@@ -118,3 +118,99 @@ def test_automation_context_contains_parameter_names_but_no_values(app):
         assert "ciphertext-must-not-be-read" not in repr(context)
         assert "values_json" not in repr(context)
         assert context["steps"][0]["action"] == "Открыть форму входа"
+
+
+
+def _valid_automation_draft():
+    return {
+        "summary": "Черновик проверки формы входа",
+        "target_profile": {
+            "language": "java",
+            "framework": "junit5",
+            "test_type": "ui",
+        },
+        "files": [{
+            "path": "src/test/java/LoginTest.java",
+            "content": "class LoginTest { /* TODO: add verified locator */ }",
+        }],
+        "assumptions": ["Используется согласованный тестовый стенд."],
+        "open_questions": ["Какой URL тестового стенда использовать?"],
+        "todo_items": ["Добавить проверенный URL и локаторы."],
+        "coverage_notes": ["Проверяется отображение формы входа."],
+    }
+
+
+def test_automation_draft_post_renders_generated_code_without_persisting(
+    client, app, monkeypatch
+):
+    from app.ai import automation_routes
+    from app import db
+
+    _login(client, app)
+    app.config["AI_AUTOMATION_TESTS_ENABLED"] = True
+    app.config["AI_PROVIDER_MODE"] = "ollama"
+
+    calls = {"provider": 0, "reserved": 0}
+
+    class FakeProvider:
+        pass
+
+    def fake_generate(provider, context):
+        calls["provider"] += 1
+        assert context["parameters"] == [{"name": "Пароль", "is_secret": True}]
+        return _valid_automation_draft()
+
+    monkeypatch.setattr(automation_routes, "_provider", lambda: FakeProvider())
+    monkeypatch.setattr(automation_routes, "_reserve_generation_slot",
+                        lambda: calls.__setitem__("reserved", calls["reserved"] + 1) or True)
+    monkeypatch.setattr(automation_routes, "generate_automation_test_draft", fake_generate)
+    monkeypatch.setattr(automation_routes, "validate_csrf", lambda token: None)
+
+    response = client.post(
+        f"/project/{app.config['PROJECT_ID']}/test/{app.config['TEST_ID']}/automation-draft",
+        data={"csrf_token": "test-token"},
+    )
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Черновик проверки формы входа" in html
+    assert "class LoginTest" in html
+    assert "Какой URL тестового стенда использовать?" in html
+    assert calls == {"provider": 1, "reserved": 1}
+
+    with app.app_context():
+        from app.models import TestCase
+        test_case = db.session.get(TestCase, app.config["TEST_ID"])
+        assert test_case.title == "Проверка авторизации"
+        assert "LoginTest" not in (test_case.steps or "")
+
+
+def test_automation_draft_provider_error_is_shown_without_traceback(
+    client, app, monkeypatch
+):
+    from app.ai import automation_routes
+    from app.ai.provider import AIProviderError
+
+    _login(client, app)
+    app.config["AI_AUTOMATION_TESTS_ENABLED"] = True
+    app.config["AI_PROVIDER_MODE"] = "ollama"
+    monkeypatch.setattr(automation_routes, "_provider", lambda: object())
+    monkeypatch.setattr(automation_routes, "_reserve_generation_slot", lambda: True)
+    monkeypatch.setattr(
+        automation_routes,
+        "generate_automation_test_draft",
+        lambda provider, context: (_ for _ in ()).throw(
+            AIProviderError("Не удалось подготовить черновик автотеста. Попробуйте позже.")
+        ),
+    )
+    monkeypatch.setattr(automation_routes, "validate_csrf", lambda token: None)
+
+    response = client.post(
+        f"/project/{app.config['PROJECT_ID']}/test/{app.config['TEST_ID']}/automation-draft",
+        data={"csrf_token": "test-token"},
+    )
+
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Не удалось подготовить черновик автотеста" in html
+    assert "Traceback" not in html
