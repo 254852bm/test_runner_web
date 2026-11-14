@@ -499,6 +499,25 @@ def test_data_sets(project_id, test_id):
     return render_template('test_data.html', project=project, test=test, datasets=datasets)
 
 
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rename', methods=['POST'])
+@login_required
+def rename_test_data_set(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    name = request.form.get('dataset_name', '').strip()
+    if not name or len(name) > 120:
+        flash('Укажите название набора данных (до 120 символов).', 'danger')
+        return redirect(target)
+    dataset.name = name
+    db.session.commit()
+    flash('Название набора данных обновлено. История запусков не изменена.', 'success')
+    return redirect(target)
+
+
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/create', methods=['POST'])
 @login_required
 def create_test_data_set(project_id, test_id):
@@ -525,7 +544,7 @@ def create_test_data_set(project_id, test_id):
         flash('Добавьте от 1 до 30 корректных колонок.', 'danger')
         return redirect(target)
     if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
-        flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
+        flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
         return redirect(target)
     sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
     if any(
@@ -571,7 +590,7 @@ def add_test_data_column(project_id, test_id, dataset_id):
         flash('В одном наборе можно создать не более 30 колонок.', 'danger')
         return redirect(target)
     if not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key):
-        flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
+        flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
         return redirect(target)
     sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
     if re.search(sensitive_pattern, key, re.IGNORECASE) and not is_secret:
@@ -613,7 +632,7 @@ def edit_test_data_column(project_id, test_id, dataset_id, column_id):
     new_label = request.form.get('column_label', '').strip()
 
     if not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', new_key):
-        flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
+        flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
         return redirect(target)
     sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
     if re.search(sensitive_pattern, new_key, re.IGNORECASE) and not column.is_secret:
