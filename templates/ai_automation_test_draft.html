@@ -54,8 +54,8 @@
 <div class="card mb-3">
     <div class="card-header"><strong>{{ file.path }}</strong></div>
     <div class="card-body">
-        <textarea class="form-control font-monospace" rows="18" readonly spellcheck="false">{{ file.content }}</textarea>
-        <div class="form-text">На этом этапе файл доступен для просмотра и копирования. ZIP-экспорт будет добавлен отдельно.</div>
+        <textarea class="form-control font-monospace" rows="18" spellcheck="false">{{ file.content }}</textarea>
+        <div class="form-text">Черновик можно отредактировать прямо здесь и скопировать. Скачивание ZIP будет добавлено отдельным этапом.</div>
     </div>
 </div>
 {% endfor %}
