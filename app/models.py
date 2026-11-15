@@ -239,6 +239,7 @@ class TestDataSet(db.Model):
         db.Integer, db.ForeignKey('test_case.id'), nullable=False, index=True
     )
     name = db.Column(db.String(120), nullable=False)
+    is_default = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
