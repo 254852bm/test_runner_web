@@ -10,6 +10,83 @@
     </div>
 </div>
 
+{% if data_sets %}
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
+            <div>
+                <h5 class="mb-1">Параметры тест-кейса</h5>
+                <div class="text-muted small">Значения первого активного варианта показаны как значения по умолчанию. Секреты не раскрываются.</div>
+            </div>
+            <a href="{{ url_for('main.test_data_sets', project_id=project.id, test_id=test.id) }}" class="btn btn-outline-primary btn-sm">Управлять параметрами</a>
+        </div>
+        {% for dataset in data_sets %}
+        <section class="{% if not loop.first %}border-top pt-3 mt-3{% endif %}">
+            <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+                <strong>{{ dataset.name }}</strong>
+                <span class="text-muted small">{{ dataset.columns|length }} параметров · {{ dataset.rows|length }} вариантов</span>
+            </div>
+            {% set default_row = (dataset.rows|selectattr('is_enabled')|list|first) or (dataset.rows|first) %}
+            {% if dataset.columns %}
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-3">
+                    <thead><tr><th>Название параметра</th><th>Переменная</th><th>Значение по умолчанию</th></tr></thead>
+                    <tbody>
+                    {% for column in dataset.columns %}
+                    <tr>
+                        <td>{{ column.label }}</td>
+                        <td><code>{{ '{{' ~ column.key ~ '}}' }}</code></td>
+                        <td>
+                            {% if column.is_secret %}
+                                <span class="text-muted">Скрыто</span>
+                            {% elif default_row %}
+                                {{ (default_row.values_json or {}).get(column.key, '') or 'Не задано' }}
+                            {% else %}
+                                <span class="text-muted">Не задано</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+            <details>
+                <summary class="small">Показать варианты данных ({{ dataset.rows|length }})</summary>
+                {% if dataset.rows %}
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm table-striped align-middle">
+                        <thead><tr><th>Вариант</th><th>Статус</th>{% for column in dataset.columns %}<th>{{ column.label }}</th>{% endfor %}</tr></thead>
+                        <tbody>
+                        {% for row in dataset.rows %}
+                        <tr>
+                            <td>{{ row.name }}</td>
+                            <td>{{ 'Активен' if row.is_enabled else 'Отключён' }}</td>
+                            {% for column in dataset.columns %}
+                            <td>{% if column.is_secret %}<span class="text-muted">Скрыто</span>{% else %}{{ (row.values_json or {}).get(column.key, '') or '—' }}{% endif %}</td>
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted small mt-2 mb-0">Варианты данных пока не добавлены.</p>
+                {% endif %}
+            </details>
+        </section>
+        {% endfor %}
+    </div>
+</div>
+{% else %}
+<div class="card mb-4">
+    <div class="card-body d-flex justify-content-between align-items-center gap-2 flex-wrap">
+        <div><strong>Параметры тест-кейса</strong><div class="text-muted small">Добавьте параметры, чтобы использовать одни и те же шаги с разными данными.</div></div>
+        <a href="{{ url_for('main.test_data_sets', project_id=project.id, test_id=test.id) }}" class="btn btn-outline-primary btn-sm">Добавить параметры</a>
+    </div>
+</div>
+{% endif %}
+
 <div class="card mb-4">
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">

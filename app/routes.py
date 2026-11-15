@@ -477,9 +477,12 @@ def test_detail(project_id, test_id):
     versions = TestCaseVersion.query.filter_by(test_case_id=test.id).order_by(
         TestCaseVersion.version_number.desc()
     ).all()
+    data_sets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
+        TestDataSet.created_at.asc()
+    ).all()
     return render_template('test_detail.html', project=project, test=test, steps=steps,
                            status_labels=STATUS_LABELS, current_version=current_version,
-                           versions=versions)
+                           versions=versions, data_sets=data_sets)
 
 
 
@@ -496,6 +499,25 @@ def test_data_sets(project_id, test_id):
     return render_template('test_data.html', project=project, test=test, datasets=datasets)
 
 
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rename', methods=['POST'])
+@login_required
+def rename_test_data_set(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    name = request.form.get('dataset_name', '').strip()
+    if not name or len(name) > 120:
+        flash('Укажите название набора данных (до 120 символов).', 'danger')
+        return redirect(target)
+    dataset.name = name
+    db.session.commit()
+    flash('Название набора данных обновлено. История запусков не изменена.', 'success')
+    return redirect(target)
+
+
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/create', methods=['POST'])
 @login_required
 def create_test_data_set(project_id, test_id):
@@ -505,26 +527,30 @@ def create_test_data_set(project_id, test_id):
     test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
     name = request.form.get('dataset_name', '').strip()
     keys = [value.strip() for value in request.form.getlist('column_key[]')]
-    labels = [value.strip() for value in request.form.getlist('column_label[]')]
+    submitted_labels = [value.strip() for value in request.form.getlist('column_label[]')]
+    labels = [
+        submitted_labels[index] if index < len(submitted_labels) and submitted_labels[index] else key
+        for index, key in enumerate(keys)
+    ]
     secret_flags = [
         request.form.get(f'column_is_secret_{index}') == '1'
         for index in range(len(keys))
     ]
     target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
     if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
-        flash('Секретные колонки доступны после настройки TEST_DATA_ENCRYPTION_KEY на сервере.', 'danger')
+        flash('Секретные параметры доступны после настройки TEST_DATA_ENCRYPTION_KEY на сервере.', 'danger')
         return redirect(target)
 
     if not name or len(name) > 120:
         flash('Укажите название набора данных (до 120 символов).', 'danger')
         return redirect(target)
     if not keys or len(keys) > 30 or len(keys) != len(labels):
-        flash('Добавьте от 1 до 30 корректных колонок.', 'danger')
+        flash('Добавьте от 1 до 30 корректных параметров.', 'danger')
         return redirect(target)
-    if any(not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key) for key in keys):
-        flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
+    if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
+        flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
         return redirect(target)
-    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
     if any(
         re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
         for index, key in enumerate(keys)
@@ -561,16 +587,16 @@ def add_test_data_column(project_id, test_id, dataset_id):
     dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
     target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
     key = request.form.get('column_key', '').strip()
-    label = request.form.get('column_label', '').strip()
+    label = request.form.get('column_label', '').strip() or key
     is_secret = request.form.get('is_secret') == '1'
 
     if len(dataset.columns) >= 30:
-        flash('В одном наборе можно создать не более 30 колонок.', 'danger')
+        flash('В одном наборе можно создать не более 30 параметров.', 'danger')
         return redirect(target)
-    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', key):
-        flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
+    if not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key):
+        flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
         return redirect(target)
-    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
     if re.search(sensitive_pattern, key, re.IGNORECASE) and not is_secret:
         flash('Колонки с паролями, токенами и ключами необходимо отметить как секретные.', 'danger')
         return redirect(target)
@@ -592,7 +618,7 @@ def add_test_data_column(project_id, test_id, dataset_id):
         position=len(dataset.columns), is_secret=is_secret
     ))
     db.session.commit()
-    flash('Колонка добавлена. В существующих строках её значение пока пустое.', 'success')
+    flash('Параметр добавлен. В существующих строках её значение пока пустое.', 'success')
     return redirect(target)
 
 
@@ -609,10 +635,10 @@ def edit_test_data_column(project_id, test_id, dataset_id, column_id):
     new_key = request.form.get('column_key', '').strip()
     new_label = request.form.get('column_label', '').strip()
 
-    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', new_key):
-        flash('Имя переменной должно содержать латинские буквы, цифры и подчёркивание.', 'danger')
+    if not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', new_key):
+        flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
         return redirect(target)
-    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
     if re.search(sensitive_pattern, new_key, re.IGNORECASE) and not column.is_secret:
         flash('Колонки с паролями, токенами и ключами должны быть секретными.', 'danger')
         return redirect(target)
@@ -651,7 +677,7 @@ def edit_test_data_column(project_id, test_id, dataset_id, column_id):
 
     column.label = new_label
     db.session.commit()
-    flash('Колонка обновлена. История ранее выполненных запусков не меняется.', 'success')
+    flash('Параметр обновлён. История ранее выполненных запусков не меняется.', 'success')
     return redirect(target)
 
 
@@ -686,7 +712,7 @@ def delete_test_data_column(project_id, test_id, dataset_id, column_id):
 
     db.session.delete(column)
     db.session.commit()
-    flash('Колонка удалена из текущего набора. Исторические снимки запусков не изменены.', 'success')
+    flash('Параметр удалён из текущего набора. Исторические снимки запусков не изменены.', 'success')
     return redirect(target)
 
 
@@ -732,6 +758,42 @@ def create_test_data_row(project_id, test_id, dataset_id):
     ))
     db.session.commit()
     flash('Строка тестовых данных добавлена.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/duplicate', methods=['POST'])
+@login_required
+def duplicate_test_data_row(project_id, test_id, dataset_id, row_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    source = TestDataRow.query.filter_by(id=row_id, dataset_id=dataset.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+
+    if len(dataset.rows) >= 500:
+        flash('В одном наборе можно создать не более 500 вариантов.', 'danger')
+        return redirect(target)
+
+    requested_name = request.form.get('row_name', '').strip()
+    new_name = requested_name or f'{source.name} — копия'
+    if not new_name or len(new_name) > 120:
+        flash('Название копии должно содержать не более 120 символов.', 'danger')
+        return redirect(target)
+
+    # Copy ciphertext as-is: secrets are never decrypted or rendered during duplication.
+    duplicate = TestDataRow(
+        dataset_id=dataset.id,
+        name=new_name,
+        values_json=dict(source.values_json or {}),
+        encrypted_values_json=source.encrypted_values_json,
+        is_enabled=False,
+        position=max((row.position for row in dataset.rows), default=-1) + 1,
+    )
+    db.session.add(duplicate)
+    db.session.commit()
+    flash('Вариант скопирован. Новая копия отключена — проверьте её перед запуском.', 'success')
     return redirect(target)
 
 
@@ -798,6 +860,52 @@ def toggle_test_data_row(project_id, test_id, dataset_id, row_id):
     db.session.commit()
     flash('Статус строки обновлён.', 'success')
     return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/bulk-status', methods=['POST'])
+@login_required
+def bulk_update_test_data_rows(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+
+    row_ids = set()
+    for raw_id in request.form.getlist('row_ids[]'):
+        try:
+            row_ids.add(int(raw_id))
+        except (TypeError, ValueError):
+            flash('Некорректный список вариантов.', 'danger')
+            return redirect(target)
+
+    if not row_ids:
+        flash('Выберите хотя бы один вариант.', 'warning')
+        return redirect(target)
+    if len(row_ids) > 500:
+        flash('За один раз можно изменить не более 500 вариантов.', 'danger')
+        return redirect(target)
+
+    status = request.form.get('is_enabled')
+    if status not in {'0', '1'}:
+        flash('Неизвестная операция.', 'danger')
+        return redirect(target)
+
+    rows = TestDataRow.query.filter(
+        TestDataRow.dataset_id == dataset.id,
+        TestDataRow.id.in_(row_ids),
+    ).all()
+    if len(rows) != len(row_ids):
+        flash('Некоторые выбранные варианты не найдены в этом наборе.', 'danger')
+        return redirect(target)
+
+    enabled = status == '1'
+    for row in rows:
+        row.is_enabled = enabled
+    db.session.commit()
+    flash(f'Обновлён статус вариантов: {len(rows)}.', 'success')
+    return redirect(target)
 
 
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/delete', methods=['POST'])
@@ -1123,7 +1231,13 @@ def edit_test(project_id, test_id):
             flash('Тест-кейс обновлён! Создана новая версия.', 'success')
             return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
 
-    return render_template('edit_test.html', project=project, test=test, steps=steps)
+    data_sets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
+        TestDataSet.created_at.asc()
+    ).all()
+    return render_template(
+        'edit_test.html', project=project, test=test, steps=steps,
+        data_sets=data_sets
+    )
 
 
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/delete', methods=['POST'])
