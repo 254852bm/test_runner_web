@@ -673,3 +673,46 @@ def test_bulk_status_rejects_row_ids_outside_selected_dataset(app):
     assert response.status_code == 302
     with app.app_context():
         assert db.session.get(TestDataRow, row_id).is_enabled is False
+
+
+@pytest.mark.parametrize("sensitive_name", ["Пароль", "Токен", "Ключ API", "Секрет"])
+def test_russian_sensitive_parameter_names_must_be_marked_secret(app, sensitive_name):
+    with app.app_context():
+        user, project, case = _case()
+        user_id, project_id, case_id = user.id, project.id, case.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/data/create",
+        data={
+            "dataset_name": "Небезопасные параметры",
+            "column_key[]": [sensitive_name],
+            "column_label[]": [sensitive_name],
+        },
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert TestDataSet.query.filter_by(test_case_id=case_id).count() == 0
+
+
+def test_russian_sensitive_legacy_column_is_rejected_before_substitution(app):
+    from app.test_data import prepare_test_data
+
+    with app.app_context():
+        user, project, case = _case()
+        dataset = TestDataSet(test_case_id=case.id, name="Legacy credentials")
+        db.session.add(dataset)
+        db.session.flush()
+        column = TestDataColumn(
+            dataset_id=dataset.id, key="Пароль", label="Пароль",
+            position=0, is_secret=False,
+        )
+        row = TestDataRow(
+            dataset_id=dataset.id, name="Legacy row",
+            values_json={"Пароль": "must-not-be-used"},
+        )
+        db.session.add_all([column, row])
+        db.session.commit()
+        with pytest.raises(ValueError, match="секретными"):
+            prepare_test_data(case, dataset, row)
