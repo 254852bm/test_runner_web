@@ -8,6 +8,10 @@ _SECRET_ASSIGNMENT = re.compile(
     r"""(?ix)\b(?:password|passwd|pwd|api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|token|credential|private[_-]?key)\b[\"']?\s*[:=]\s*(?:\"([^\"\r\n]{8,})\"|'([^'\r\n]{8,})'|([^\s\"'`,;)}\]]{8,}))"""
 )
 
+_RUSSIAN_SECRET_ASSIGNMENT = re.compile(
+    r"""(?ix)\b(?:пароль|пароля|паролем|токен(?:\s+доступа)?|ключ(?:\s+api)?|api[-_ ]ключ|секрет|секретный\s+ключ|уч[её]тные\s+данные|приватный\s+ключ|ключ\s+доступа)\b["']?\s*[:=]\s*(?:"([^"\r\n]{8,})"|'([^'\r\n]{8,})'|([^\s"',;)}\]]{8,}))"""
+)
+
 _BEARER = re.compile(r"(?i)\bauthorization\s*:\s*bearer\s+([A-Za-z0-9._~+/-]{12,})")
 _PRIVATE_KEY = re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----")
 _TOKEN_PREFIX = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|ya29\.[A-Za-z0-9._-]{20,}|sk-[A-Za-z0-9_-]{20,})\b")
@@ -20,13 +24,14 @@ def _has_suspicious_secret(text):
         return True
     # Remove explicit environment and template placeholders before assignment checks.
     text = re.sub(r"\x24\{[^}]+\}|\{\{[^}]+\}\}|<[^>]+>", "PLACEHOLDER", text)
-    for match in _SECRET_ASSIGNMENT.finditer(text):
-        candidate = next((group for group in match.groups() if group is not None), "").rstrip(".")
-        if candidate.lower() in {"null", "none", "false", "true", "your_password", "changeme"}:
-            continue
-        if candidate == "PLACEHOLDER":
-            continue
-        return True
+    for pattern in (_SECRET_ASSIGNMENT, _RUSSIAN_SECRET_ASSIGNMENT):
+        for match in pattern.finditer(text):
+            candidate = next((group for group in match.groups() if group is not None), "").rstrip(".")
+            if candidate.lower() in {"null", "none", "false", "true", "your_password", "changeme"}:
+                continue
+            if candidate == "PLACEHOLDER":
+                continue
+            return True
     return False
 
 
