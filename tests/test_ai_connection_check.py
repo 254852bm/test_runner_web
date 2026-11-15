@@ -46,7 +46,7 @@ def test_check_lists_models_without_sending_prompt():
     assert captured["url"] == "https://ai.api.cloud.yandex.net/v1/models"
     assert captured["method"] == "GET"
     assert captured["data"] is None
-    assert captured["headers"]["Authorization"] == "Api-key dummy-secret"
+    assert captured["headers"]["Authorization"] == "Api-Key dummy-secret"
     assert captured["headers"]["X-project"] == "folder-123"
 
 
