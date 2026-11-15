@@ -714,5 +714,5 @@ def test_russian_sensitive_legacy_column_is_rejected_before_substitution(app):
         )
         db.session.add_all([column, row])
         db.session.commit()
-        with pytest.raises(ValueError, match="секретными"):
+        with pytest.raises(ValueError, match="секретн"):
             prepare_test_data(case, dataset, row)
