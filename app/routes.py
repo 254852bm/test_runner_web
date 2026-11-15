@@ -550,7 +550,7 @@ def create_test_data_set(project_id, test_id):
     if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
         flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
         return redirect(target)
-    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
     if any(
         re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
         for index, key in enumerate(keys)
@@ -596,7 +596,7 @@ def add_test_data_column(project_id, test_id, dataset_id):
     if not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key):
         flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
         return redirect(target)
-    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
     if re.search(sensitive_pattern, key, re.IGNORECASE) and not is_secret:
         flash('Колонки с паролями, токенами и ключами необходимо отметить как секретные.', 'danger')
         return redirect(target)
@@ -638,7 +638,7 @@ def edit_test_data_column(project_id, test_id, dataset_id, column_id):
     if not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', new_key):
         flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
         return redirect(target)
-    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key)'
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
     if re.search(sensitive_pattern, new_key, re.IGNORECASE) and not column.is_secret:
         flash('Колонки с паролями, токенами и ключами должны быть секретными.', 'danger')
         return redirect(target)
