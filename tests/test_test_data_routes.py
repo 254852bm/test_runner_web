@@ -883,3 +883,36 @@ def test_direct_test_run_uses_default_data_set_and_default_row(app):
     assert "Default row" in html
     assert "https://default.test" in html
     assert "default" in html
+
+
+
+def test_inline_test_creation_rolls_back_case_when_data_set_is_invalid(app):
+    with app.app_context():
+        user, project, _ = _case()
+        user_id, project_id = user.id, project.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/create_test",
+        data={
+            "title": "Must roll back",
+            "step_action[]": ["Use {{login}}"],
+            "step_expected[]": ["Success"],
+            "data_set_count": "1",
+            "data_0_name": "Invalid set",
+            "data_0_column_key[]": ["login", "login"],
+            "data_0_column_label[]": ["Login", "Duplicate login"],
+        },
+    )
+    assert response.status_code == 200
+
+    with app.app_context():
+        assert TestCase.query.filter_by(
+            project_id=project_id, title="Must roll back"
+        ).count() == 0
+        assert TestDataSet.query.filter(
+            TestDataSet.test_case_id.in_(
+                db.session.query(TestCase.id).filter_by(title="Must roll back")
+            )
+        ).count() == 0
