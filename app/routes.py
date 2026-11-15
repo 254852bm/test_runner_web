@@ -1190,6 +1190,7 @@ def create_test(project_id):
                         request.files.getlist(f'test_step_screenshot_{index}[]'),
                         user_id=current_user.id, test_step_id=step.id
                     ))
+                _save_inline_test_data_sets(test, request.form)
                 create_test_version(test)
                 db.session.commit()
             except ValueError as error:
