@@ -45,3 +45,23 @@ def test_scanner_reports_only_field_paths_for_nested_output():
 ])
 def test_scanner_detects_additional_credential_shapes(text):
     assert find_suspected_secret_fields({"text": text}) == ["text"]
+
+@pytest.mark.parametrize("text", [
+    'пароль = "секретное-значение-123"',
+    '"токен доступа": "abcdef1234567890"',
+    "ключ API: very-long-api-key-value",
+    "api-ключ = 'длинное-секретное-значение'",
+    "секретный ключ: abcdefghijklmnop",
+])
+def test_scanner_detects_russian_credential_labels(text):
+    assert find_suspected_secret_fields({"steps": [{"action": text}]}) == ["steps[0].action"]
+
+
+@pytest.mark.parametrize("text", [
+    "Введите пароль в форму",
+    "Проверить токен доступа после авторизации",
+    "Использовать {{Пароль}} из защищённой переменной",
+    "ключ API должен быть настроен администратором",
+])
+def test_scanner_allows_russian_instructions_without_secret_values(text):
+    assert find_suspected_secret_fields({"text": text}) == []
