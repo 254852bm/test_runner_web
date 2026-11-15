@@ -3,11 +3,11 @@ import re
 
 from app.test_data_crypto import decrypt_secret_values, encrypt_secret_values
 
-_PLACEHOLDER_RE = re.compile(r"{{([A-Za-z_][A-Za-z0-9_]*)}}")
+_PLACEHOLDER_RE = re.compile(r"{{([^{}]+)}}")
 _ANY_PLACEHOLDER_RE = re.compile(r"{{(.*?)}}")
-_KEY_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_KEY_RE = re.compile(r"[^\W\d]\w*(?:[ -]\w+)*", re.UNICODE)
 _SENSITIVE_KEY_RE = re.compile(
-    r"(password|passwd|secret|token|api[_-]?key|access[_-]?key)", re.IGNORECASE
+    r"(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)", re.IGNORECASE
 )
 
 
@@ -100,7 +100,7 @@ def prepare_test_data(test_case, dataset, row):
         for match in _ANY_PLACEHOLDER_RE.finditer(source or ""):
             if not _KEY_RE.fullmatch(match.group(1)):
                 raise ValueError(
-                    "Некорректный формат переменной. Используйте {{variable_name}}."
+                    "Некорректный формат параметра. Используйте {{Название параметра}}, например {{Исполнитель 1}}."
                 )
         used_keys.update(_placeholders(source))
 

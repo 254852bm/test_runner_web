@@ -43,7 +43,11 @@ def test_empty_secret_values_do_not_create_ciphertext(app):
         assert decrypt_secret_values(None) == {}
 
 
-def test_encryption_fails_closed_when_key_is_missing(app):
+def test_encryption_fails_closed_when_app_config_disables_key(app, monkeypatch):
+    # Even if the process has a key, an explicit empty Flask config must win.
+    monkeypatch.setenv(
+        "TEST_DATA_ENCRYPTION_KEY", Fernet.generate_key().decode("ascii")
+    )
     app.config["TEST_DATA_ENCRYPTION_KEY"] = ""
     with app.app_context():
         with pytest.raises(SecretEncryptionUnavailable, match="не настроен"):

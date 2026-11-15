@@ -15,10 +15,12 @@ class SecretEncryptionUnavailable(ValueError):
 
 
 def _cipher():
-    key = ''
+    # Inside Flask, app config is authoritative. Falling back to the process
+    # environment here would make an explicitly empty test/deployment config
+    # unexpectedly inherit a key and would make "disabled" impossible to test.
     if has_app_context():
         key = current_app.config.get('TEST_DATA_ENCRYPTION_KEY', '') or ''
-    if not key:
+    else:
         key = os.getenv('TEST_DATA_ENCRYPTION_KEY', '')
     if isinstance(key, str):
         key = key.encode('ascii', errors='ignore')

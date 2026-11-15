@@ -16,6 +16,25 @@
                 <textarea class="form-control" id="precondition" name="precondition" rows="3">{{ test.precondition or '' }}</textarea>
             </div>
 
+            {% if data_sets %}
+            <div class="alert alert-info mb-3">
+                <strong>Вставить параметр в текст</strong>
+                <div class="small mb-2">Сначала щёлкните в поле действия или ожидаемого результата, затем выберите параметр. Он вставится в место курсора.</div>
+                <div class="d-flex flex-wrap gap-2">
+                    {% for dataset in data_sets %}
+                        {% for column in dataset.columns %}
+                        <button type="button" class="btn btn-sm btn-outline-primary parameter-insert"
+                                data-token="{{ '{{' ~ column.key ~ '}}' }}"
+                                title="{{ dataset.name }} · {{ column.label }}">
+                            {{ column.label }} <code>{{ '{{' ~ column.key ~ '}}' }}</code>
+                            {% if column.is_secret %} · секрет{% endif %}
+                        </button>
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
             <div class="mb-3">
                 <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
                     <label class="form-label mb-0">Шаги тест-кейса</label>
@@ -61,6 +80,29 @@
 </div>
 
 <script>
+let lastParameterField = null;
+
+document.addEventListener('focusin', function (event) {
+    if (event.target.matches('textarea[name="step_action[]"], textarea[name="step_expected[]"], #precondition')) {
+        lastParameterField = event.target;
+    }
+});
+
+document.querySelectorAll('.parameter-insert').forEach(function (button) {
+    button.addEventListener('click', function () {
+        if (!lastParameterField) {
+            window.alert('Сначала выберите поле предусловия, действия или ожидаемого результата.');
+            return;
+        }
+        const field = lastParameterField;
+        const token = button.dataset.token;
+        const start = field.selectionStart;
+        const end = field.selectionEnd;
+        field.setRangeText(token, start, end, 'end');
+        field.focus();
+    });
+});
+
 function addStep() {
     const container = document.getElementById('steps-container');
     const cards = container.querySelectorAll('.step-card');

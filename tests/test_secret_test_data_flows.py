@@ -2,6 +2,7 @@ import sqlite3
 
 import pytest
 from cryptography.fernet import Fernet
+from werkzeug.security import generate_password_hash
 
 from app import create_app, db
 from app.models import (
@@ -106,10 +107,30 @@ def test_manual_run_never_persists_decrypted_secret_in_history(app):
     response = client.get(url)
     assert response.status_code == 200
     page = response.get_data(as_text=True)
-    # Secret is present only in the dedicated password input, never in step text.
-    assert page.count("secret-phrase-123") == 1
-    assert 'type="password" value="secret-phrase-123"' in page
+    # The decrypted secret must not be present anywhere in the initial HTML.
+    assert "secret-phrase-123" not in page
+    assert 'type="password" value=""' in page
+    assert "Показать" in page
     assert "qa@example.test" in page
+
+    reveal_url = (
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}"
+        f"/rows/{row_id}/secrets/"
+    )
+    with app.app_context():
+        secret_column_id = TestDataColumn.query.filter_by(
+            dataset_id=dataset_id, key="password"
+        ).one().id
+    import re
+    csrf_match = re.search(r'data-csrf-token="([^"]+)"', page)
+    assert csrf_match, "CSRF token must be present for the explicit reveal action"
+    reveal_response = client.post(
+        reveal_url + str(secret_column_id),
+        headers={"X-CSRFToken": csrf_match.group(1)},
+    )
+    assert reveal_response.status_code == 200
+    assert reveal_response.get_json()["value"] == "secret-phrase-123"
+    assert reveal_response.headers["Cache-Control"].startswith("no-store")
 
     response = client.post(
         url,
@@ -156,6 +177,8 @@ def test_api_hides_secret_by_default_and_requires_explicit_header_to_retrieve(ap
     assert response.status_code == 200
     assert response.get_json()["secrets_included"] is True
     assert response.get_json()["rows"][0]["values"]["password"] == "secret-phrase-123"
+    assert "no-store" in response.headers["Cache-Control"]
+    assert response.headers["Pragma"] == "no-cache"
 
 
 def test_api_run_encrypts_secret_snapshot_and_redacts_step_results(app):
@@ -468,3 +491,132 @@ def test_column_structure_edits_move_current_values_but_preserve_run_snapshots(a
         assert decrypt_secret_values(edited_row.encrypted_values_json) == {}
         snapshot = db.session.get(TestRunDataSnapshot, snapshot_id)
         assert snapshot.encrypted_values_snapshot == old_encrypted_snapshot
+
+
+
+def test_manual_secret_reveal_requires_csrf_and_project_ownership(app):
+    with app.app_context():
+        user, project, case, dataset, row, step, token = _secret_case()
+        owner_id, project_id, case_id = user.id, project.id, case.id
+        dataset_id, row_id = dataset.id, row.id
+        column_id = TestDataColumn.query.filter_by(
+            dataset_id=dataset_id, key="password"
+        ).one().id
+        from werkzeug.security import generate_password_hash
+        stranger_password = "stranger-test-password"
+        stranger = User(
+            email="stranger@example.test",
+            password=generate_password_hash(stranger_password),
+        )
+        db.session.add(stranger)
+        db.session.commit()
+        stranger_id = stranger.id
+
+    endpoint = (
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}"
+        f"/rows/{row_id}/secrets/{column_id}"
+    )
+    owner_client = app.test_client()
+    _login(owner_client, owner_id)
+
+    missing_csrf = owner_client.post(endpoint)
+    assert missing_csrf.status_code == 400
+
+    stranger_client = app.test_client()
+    login_response = stranger_client.post(
+        "/auth/login",
+        data={"email": "stranger@example.test", "password": stranger_password},
+    )
+    assert login_response.status_code == 302
+    from flask import session as flask_session
+    from flask_wtf.csrf import generate_csrf
+
+    # Generate a valid CSRF token and copy its backing session value while
+    # preserving the authenticated session established by the real login route.
+    with app.test_request_context():
+        csrf_token = generate_csrf()
+        csrf_session_token = flask_session["csrf_token"]
+    with stranger_client.session_transaction() as client_session:
+        client_session["csrf_token"] = csrf_session_token
+    forbidden = stranger_client.post(
+        endpoint, headers={"X-CSRFToken": csrf_token}
+    )
+    assert forbidden.status_code == 404
+    assert "secret-phrase-123" not in forbidden.get_data(as_text=True)
+
+
+def test_manual_secret_reveal_rejects_missing_or_invalid_csrf_token(app):
+    with app.app_context():
+        user, project, case, dataset, row, step, token = _secret_case()
+        user_id, project_id, case_id = user.id, project.id, case.id
+        dataset_id, row_id = dataset.id, row.id
+        secret_column_id = TestDataColumn.query.filter_by(
+            dataset_id=dataset_id, key="password"
+        ).one().id
+
+    client = app.test_client()
+    _login(client, user_id)
+    endpoint = (
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}"
+        f"/rows/{row_id}/secrets/{secret_column_id}"
+    )
+    assert client.post(endpoint).status_code == 400
+    assert client.post(
+        endpoint, headers={"X-CSRFToken": "invalid-token"}
+    ).status_code == 400
+
+
+def test_manual_secret_reveal_rejects_another_users_session(app):
+    with app.app_context():
+        user, project, case, dataset, row, step, token = _secret_case()
+        user_id, project_id, case_id = user.id, project.id, case.id
+        dataset_id, row_id = dataset.id, row.id
+        secret_column_id = TestDataColumn.query.filter_by(
+            dataset_id=dataset_id, key="password"
+        ).one().id
+        other_user_password = "another-user-password"
+        other_user = User(
+            email="another-user@example.test",
+            password=generate_password_hash(other_user_password),
+        )
+        db.session.add(other_user)
+        db.session.commit()
+        other_user_id = other_user.id
+
+    owner_client = app.test_client()
+    _login(owner_client, user_id)
+    page = owner_client.get(
+        f"/project/{project_id}/run?test_id={case_id}"
+        f"&data_set_id={dataset_id}&data_row_id={row_id}"
+    )
+    assert page.status_code == 200
+    import re
+    csrf_match = re.search(
+        r'data-csrf-token="([^"]+)"', page.get_data(as_text=True)
+    )
+    assert csrf_match
+    with owner_client.session_transaction() as owner_session:
+        csrf_session_token = owner_session["csrf_token"]
+
+    # Use a separate client so the owner session cannot leak into the stranger request.
+    stranger_client = app.test_client()
+    login_response = stranger_client.post(
+        "/auth/login",
+        data={
+            "email": "another-user@example.test",
+            "password": other_user_password,
+        },
+    )
+    assert login_response.status_code == 302
+    with stranger_client.session_transaction() as stranger_session:
+        stranger_session["csrf_token"] = csrf_session_token
+
+    endpoint = (
+        f"/project/{project_id}/test/{case_id}/data/{dataset_id}"
+        f"/rows/{row_id}/secrets/{secret_column_id}"
+    )
+    response = stranger_client.post(
+        endpoint, headers={"X-CSRFToken": csrf_match.group(1)}
+    )
+    assert response.status_code == 404
+    assert "secret-phrase-123" not in response.get_data(as_text=True)

@@ -168,3 +168,74 @@ def test_sequential_batch_cannot_be_used_by_another_user(app):
         "&run_all=1&batch_id=private-batch-token&data_index=0"
     )
     assert response.status_code in (302, 404)
+
+
+
+def test_sequential_batch_stops_cleanly_when_next_row_was_deleted(app):
+    with app.app_context():
+        user, project, case, dataset, first, second, disabled = _batch_case()
+        batch = TestDataBatch(
+            token="deleted-row-batch",
+            user_id=user.id,
+            test_case_id=case.id,
+            dataset_id=dataset.id,
+            row_ids_json=[first.id, second.id],
+            next_index=1,
+        )
+        db.session.add(batch)
+        db.session.commit()
+        user_id, project_id, case_id, dataset_id, second_id = (
+            user.id, project.id, case.id, dataset.id, second.id
+        )
+
+    client = app.test_client()
+    _login(client, user_id)
+    with app.app_context():
+        db.session.delete(db.session.get(TestDataRow, second_id))
+        db.session.commit()
+
+    response = client.get(
+        f"/project/{project_id}/run?test_id={case_id}&data_set_id={dataset_id}"
+        "&run_all=1&batch_id=deleted-row-batch&data_index=1",
+        follow_redirects=False,
+    )
+    assert response.status_code == 302
+    assert f"/project/{project_id}/test/{case_id}/data" in response.headers["Location"]
+
+    with app.app_context():
+        assert TestDataBatch.query.filter_by(token="deleted-row-batch").first() is None
+        assert TestRun.query.filter_by(test_case_id=case_id).count() == 0
+
+
+def test_replaying_same_batch_iteration_does_not_create_duplicate_run(app):
+    with app.app_context():
+        user, project, case, dataset, first, second, disabled = _batch_case()
+        user_id, project_id, case_id, dataset_id = user.id, project.id, case.id, dataset.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    start = client.get(
+        f"/project/{project_id}/run?test_id={case_id}"
+        f"&data_set_id={dataset_id}&run_all=1",
+        follow_redirects=False,
+    )
+    first_url = start.headers["Location"]
+    assert client.get(first_url).status_code == 200
+
+    payload = {
+        "step_status[]": ["PASS"],
+        "step_comment[]": ["Only one result should be saved"],
+    }
+    first_submit = client.post(first_url, data=payload, follow_redirects=False)
+    assert first_submit.status_code == 302
+    replay = client.post(first_url, data=payload, follow_redirects=False)
+    assert replay.status_code == 302
+    assert "data_index=1" in replay.headers["Location"]
+
+    with app.app_context():
+        runs = TestRun.query.filter_by(test_case_id=case_id).all()
+        assert len(runs) == 1
+        assert runs[0].status == "PASS"
+        batch = TestDataBatch.query.filter_by(user_id=user_id).first()
+        assert batch is not None
+        assert batch.next_index == 1
