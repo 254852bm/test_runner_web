@@ -1,104 +1,189 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-10">
-        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
-            <h2 class="mb-0">Новый тест-кейс</h2>
-            <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-outline-secondary">← Назад к проекту</a>
-        </div>
-
-        <form method="POST" enctype="multipart/form-data">
-            <div class="mb-3">
-                <label for="title" class="form-label">Заголовок</label>
-                <input type="text" class="form-control" id="title" name="title" placeholder="Например: Проверка входа с корректным паролем" required>
-            </div>
-            <div class="mb-3">
-                <label for="precondition" class="form-label">Предусловие</label>
-                <textarea class="form-control" id="precondition" name="precondition" rows="3" placeholder="Можно писать несколько строк или списком"></textarea>
-            </div>
-
-            <div class="mb-3">
-                <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-                    <label class="form-label mb-0">Шаги тест-кейса</label>
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="addStep()">+ Добавить шаг</button>
-                </div>
-                <div id="steps-container">
-                    <div class="card mb-3 step-card">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <strong>Шаг <span class="step-number">1</span></strong>
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label">Действие</label>
-                                <textarea class="form-control" name="step_action[]" rows="2" placeholder="Например: Открыть страницу авторизации" required></textarea>
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label">Ожидаемый результат</label>
-                                <textarea class="form-control" name="step_expected[]" rows="2" placeholder="Например: Открывается страница авторизации"></textarea>
-                            </div>
-                            <div>
-                                <label class="form-label">Скриншоты ожидаемого результата</label>
-                                <input class="form-control" type="file" name="test_step_screenshot_0[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple>
-                                <div class="form-text">До 5 изображений на шаг, не более 5 МБ каждое.</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-text">Для каждого шага укажите действие и ожидаемый результат.</div>
-            </div>
-
-            <div class="action-buttons">
-                <button type="submit" class="btn btn-success">Сохранить</button>
-                <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-secondary">Отмена</a>
-            </div>
-        </form>
+<div class="row justify-content-center"><div class="col-md-10">
+    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
+        <h2 class="mb-0">Новый тест-кейс</h2>
+        <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-outline-secondary">← Назад к проекту</a>
     </div>
-</div>
-
+    <form method="POST" enctype="multipart/form-data" id="create-test-form">
+        <div class="mb-3">
+            <label for="title" class="form-label">Заголовок</label>
+            <input type="text" class="form-control" id="title" name="title" placeholder="Например: Проверка входа с корректным паролем" required>
+        </div>
+        <div class="mb-3">
+            <label for="precondition" class="form-label">Предусловие</label>
+            <textarea class="form-control" id="precondition" name="precondition" rows="3" placeholder="Можно писать несколько строк или списком"></textarea>
+        </div>
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                <label class="form-label mb-0">Шаги тест-кейса</label>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="addStep()">+ Добавить шаг</button>
+            </div>
+            <div id="steps-container">
+                <div class="card mb-3 step-card"><div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2"><strong>Шаг <span class="step-number">1</span></strong></div>
+                    <div class="mb-2"><label class="form-label">Действие</label><textarea class="form-control" name="step_action[]" rows="2" placeholder="Например: Открыть страницу авторизации" required></textarea></div>
+                    <div class="mb-2"><label class="form-label">Ожидаемый результат</label><textarea class="form-control" name="step_expected[]" rows="2" placeholder="Например: Открывается страница авторизации"></textarea></div>
+                    <div><label class="form-label">Скриншоты ожидаемого результата</label><input class="form-control" type="file" name="test_step_screenshot_0[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple><div class="form-text">До 5 изображений на шаг, не более 5 МБ каждое.</div></div>
+                </div></div>
+            </div>
+            <div class="form-text">Для каждого шага укажите действие и ожидаемый результат.</div>
+        </div>
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div><strong>Параметры и тестовые данные</strong><div class="small text-muted">Необязательный раздел — его можно пропустить.</div></div>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="addDataSet()">+ Добавить набор данных</button>
+            </div>
+            <div class="card-body">
+                <input type="hidden" name="data_set_count" id="data-set-count" value="0">
+                <div id="data-sets-container"><div class="text-muted small" id="data-sets-empty">Наборы данных не добавлены.</div></div>
+                <div class="form-text mt-2">Для подстановки используйте формат {{ '{{Имя параметра}}' }}. Секретные значения сохраняются зашифрованными.</div>
+            </div>
+        </div>
+        <div class="action-buttons">
+            <button type="submit" class="btn btn-success">Сохранить тест-кейс</button>
+            <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-secondary">Отмена</a>
+        </div>
+    </form>
+</div></div>
 <script>
 function addStep() {
     const container = document.getElementById('steps-container');
-    const cards = container.querySelectorAll('.step-card');
-    const number = cards.length + 1;
+    const number = container.querySelectorAll('.step-card').length + 1;
     const card = document.createElement('div');
     card.className = 'card mb-3 step-card';
-    card.innerHTML = `
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <strong>Шаг <span class="step-number">${number}</span></strong>
-                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeStep(this)">Удалить</button>
-            </div>
-            <div class="mb-2">
-                <label class="form-label">Действие</label>
-                <textarea class="form-control" name="step_action[]" rows="2" placeholder="Например: Ввести логин" required></textarea>
-            </div>
-            <div class="mb-2">
-                <label class="form-label">Ожидаемый результат</label>
-                <textarea class="form-control" name="step_expected[]" rows="2" placeholder="Например: Логин принят системой"></textarea>
-            </div>
-            <div>
-                <label class="form-label">Скриншоты ожидаемого результата</label>
-                <input class="form-control" type="file" name="test_step_screenshot_${number - 1}[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple>
-                <div class="form-text">До 5 изображений на шаг, не более 5 МБ каждое.</div>
-            </div>
-        </div>`;
+    card.innerHTML = '<div class="card-body">' +
+        '<div class="d-flex justify-content-between align-items-center mb-2"><strong>Шаг <span class="step-number">' + number + '</span></strong><button type="button" class="btn btn-outline-danger btn-sm" onclick="removeStep(this)">Удалить</button></div>' +
+        '<div class="mb-2"><label class="form-label">Действие</label><textarea class="form-control" name="step_action[]" rows="2" required></textarea></div>' +
+        '<div class="mb-2"><label class="form-label">Ожидаемый результат</label><textarea class="form-control" name="step_expected[]" rows="2"></textarea></div>' +
+        '<div><label class="form-label">Скриншоты ожидаемого результата</label><input class="form-control" type="file" name="test_step_screenshot_' + (number - 1) + '[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple></div></div>';
     container.appendChild(card);
     renumberSteps();
 }
-
 function removeStep(button) {
     const container = document.getElementById('steps-container');
-    if (container.querySelectorAll('.step-card').length === 1) return;
-    button.closest('.step-card').remove();
+    if (container.querySelectorAll('.step-card').length > 1) button.closest('.step-card').remove();
     renumberSteps();
 }
-
 function renumberSteps() {
-    document.querySelectorAll('#steps-container .step-card').forEach((card, index) => {
+    document.querySelectorAll('#steps-container .step-card').forEach(function(card, index) {
         card.querySelector('.step-number').textContent = index + 1;
-        const screenshotInput = card.querySelector('input[type="file"]');
-        if (screenshotInput) screenshotInput.name = 'test_step_screenshot_' + index + '[]';
+        card.querySelector('input[type="file"]').name = 'test_step_screenshot_' + index + '[]';
     });
 }
+function addDataSet() {
+    document.getElementById('data-sets-empty')?.remove();
+    const card = document.createElement('section');
+    card.className = 'border rounded p-3 mb-3 data-set-card';
+    card.innerHTML =
+        '<div class="d-flex justify-content-between align-items-end gap-2 mb-3"><div class="flex-grow-1"><label class="form-label">Название набора</label><input class="form-control" data-role="dataset-name" maxlength="120" required placeholder="Например: Проверка авторизации"></div><button type="button" class="btn btn-outline-danger btn-sm" onclick="removeDataSet(this)">Удалить набор</button></div>' +
+        '<div class="form-check mb-3"><input class="form-check-input" data-role="dataset-default" type="radio"><label class="form-check-label">Использовать этот набор по умолчанию при запуске</label></div>' +
+        '<div class="d-flex justify-content-between align-items-center mb-2"><strong>Параметры</strong><button type="button" class="btn btn-outline-primary btn-sm" onclick="addDataColumn(this)">+ Добавить параметр</button></div>' +
+        '<div class="data-columns">' + columnMarkup(true) + '</div><hr>' +
+        '<div class="d-flex justify-content-between align-items-center mb-2"><strong>Строки тестовых данных</strong><button type="button" class="btn btn-outline-primary btn-sm" onclick="addDataRow(this)">+ Добавить строку</button></div>' +
+        '<div class="data-rows"><div class="text-muted small data-rows-empty">Строки пока не добавлены.</div></div>' +
+        '<div class="form-text mt-2">Можно выбрать строку по умолчанию. Секретные значения не показываются после сохранения.</div>';
+    document.getElementById('data-sets-container').appendChild(card);
+    reindexDataSets();
+}
+function columnMarkup(first) {
+    return '<div class="row g-2 align-items-end data-column mb-2">' +
+        '<div class="col-md-4"><label class="form-label small">Имя переменной</label><input class="form-control" data-role="column-key" maxlength="64" required placeholder="login"></div>' +
+        '<div class="col-md-4"><label class="form-label small">Подпись</label><input class="form-control" data-role="column-label" maxlength="120" placeholder="Логин"></div>' +
+        '<div class="col-md-3"><div class="form-check mb-2"><input class="form-check-input" data-role="column-secret" type="checkbox" value="1"><label class="form-check-label small">Секретное значение</label></div></div>' +
+        '<div class="col-md-1"><button type="button" class="btn btn-outline-danger btn-sm" onclick="removeDataColumn(this)" ' + (first ? 'disabled' : '') + '>×</button></div></div>';
+}
+function removeDataSet(button) {
+    button.closest('.data-set-card').remove();
+    reindexDataSets();
+    if (!document.querySelector('.data-set-card')) document.getElementById('data-sets-container').innerHTML = '<div class="text-muted small" id="data-sets-empty">Наборы данных не добавлены.</div>';
+}
+function addDataColumn(button) {
+    const card = button.closest('.data-set-card');
+    const columns = card.querySelector('.data-columns');
+    if (columns.querySelectorAll('.data-column').length >= 30) return alert('Не более 30 параметров в одном наборе.');
+    const item = document.createElement('div');
+    item.innerHTML = columnMarkup(false);
+    columns.appendChild(item.firstElementChild);
+    reindexDataSets();
+}
+function removeDataColumn(button) {
+    const card = button.closest('.data-set-card');
+    const columns = card.querySelectorAll('.data-column');
+    if (columns.length <= 1) return;
+    const index = Array.from(columns).indexOf(button.closest('.data-column'));
+    button.closest('.data-column').remove();
+    card.querySelectorAll('.data-row').forEach(function(row) {
+        row.querySelectorAll('.data-value-cell')[index]?.remove();
+    });
+    reindexDataSets();
+}
+function addDataRow(button) {
+    const card = button.closest('.data-set-card');
+    const rows = card.querySelector('.data-rows');
+    rows.querySelector('.data-rows-empty')?.remove();
+    if (rows.querySelectorAll('.data-row').length >= 500) return alert('Не более 500 строк в одном наборе.');
+    const row = document.createElement('div');
+    row.className = 'border rounded p-2 mb-2 data-row';
+    row.innerHTML = '<div class="d-flex justify-content-between align-items-center mb-2"><div class="form-check"><input class="form-check-input" data-role="row-default" type="radio"><label class="form-check-label small">Строка по умолчанию</label></div><button type="button" class="btn btn-outline-danger btn-sm" onclick="removeDataRow(this)">Удалить строку</button></div>' +
+        '<div class="mb-2"><label class="form-label small">Название строки</label><input class="form-control" data-role="row-name" maxlength="120" required placeholder="Например: Успешная авторизация"></div><div class="row g-2 data-values"></div>';
+    rows.appendChild(row);
+    reindexDataSets();
+}
+function removeDataRow(button) {
+    const rows = button.closest('.data-rows');
+    button.closest('.data-row').remove();
+    if (!rows.querySelector('.data-row')) rows.innerHTML = '<div class="text-muted small data-rows-empty">Строки пока не добавлены.</div>';
+    reindexDataSets();
+}
+function reindexDataSets() {
+    const cards = Array.from(document.querySelectorAll('.data-set-card'));
+    document.getElementById('data-set-count').value = cards.length;
+    cards.forEach(function(card, datasetIndex) {
+        card.querySelector('[data-role="dataset-name"]').name = 'data_' + datasetIndex + '_name';
+        const defaultDataset = card.querySelector('[data-role="dataset-default"]');
+        defaultDataset.name = 'default_data_set_index';
+        defaultDataset.value = datasetIndex;
+        const columns = Array.from(card.querySelectorAll('.data-column'));
+        columns.forEach(function(column, columnIndex) {
+            column.querySelector('[data-role="column-key"]').name = 'data_' + datasetIndex + '_column_key[]';
+            column.querySelector('[data-role="column-label"]').name = 'data_' + datasetIndex + '_column_label[]';
+            column.querySelector('[data-role="column-secret"]').name = 'data_' + datasetIndex + '_column_is_secret_' + columnIndex;
+            column.querySelector('button').disabled = columns.length <= 1;
+        });
+        const rows = Array.from(card.querySelectorAll('.data-row'));
+        rows.forEach(function(row, rowIndex) {
+            row.querySelector('[data-role="row-name"]').name = 'data_' + datasetIndex + '_row_name[]';
+            const defaultRow = row.querySelector('[data-role="row-default"]');
+            defaultRow.name = 'data_' + datasetIndex + '_default_row_index';
+            defaultRow.value = rowIndex;
+            const values = row.querySelector('.data-values');
+            const existingCells = Array.from(values.querySelectorAll('.data-value-cell'));
+            while (existingCells.length > columns.length) existingCells.pop().remove();
+            columns.forEach(function(column, columnIndex) {
+                let cell = values.querySelectorAll('.data-value-cell')[columnIndex];
+                if (!cell) {
+                    cell = document.createElement('div');
+                    cell.className = 'col-md-3 data-value-cell';
+                    cell.innerHTML = '<label class="form-label small"></label><input class="form-control data-value" maxlength="10000">';
+                    values.appendChild(cell);
+                }
+                const key = column.querySelector('[data-role="column-key"]').value.trim();
+                const label = column.querySelector('[data-role="column-label"]').value.trim() || key || ('Параметр ' + (columnIndex + 1));
+                cell.querySelector('label').textContent = label;
+                const input = cell.querySelector('input');
+                input.name = 'data_' + datasetIndex + '_row_' + rowIndex + '_value_' + columnIndex;
+                input.type = column.querySelector('[data-role="column-secret"]').checked ? 'password' : 'text';
+                input.placeholder = input.type === 'password' ? 'Секретное значение' : 'Значение';
+            });
+        });
+    });
+}
+document.getElementById('data-sets-container').addEventListener('input', function(event) {
+    if (event.target.matches('[data-role="column-key"], [data-role="column-label"]')) reindexDataSets();
+});
+document.getElementById('data-sets-container').addEventListener('change', function(event) {
+    if (event.target.matches('[data-role="column-secret"]')) reindexDataSets();
+});
 </script>
 {% endblock %}
