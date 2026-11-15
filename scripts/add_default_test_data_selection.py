@@ -45,10 +45,11 @@ def main():
             else:
                 print(f"{table}.{column} already exists")
 
-        connection.commit()
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
+            connection.rollback()
             raise SystemExit(f"Database integrity check failed: {integrity}")
+        connection.commit()
         print(f"Default data-set selection is ready in {database}")
         print(f"Integrity: {integrity}")
     finally:
