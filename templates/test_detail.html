@@ -25,6 +25,7 @@
         <section class="{% if not loop.first %}border-top pt-3 mt-3{% endif %}">
             <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
                 <strong>{{ dataset.name }}</strong>
+                {% if dataset.is_default %}<span class="badge bg-primary ms-2">Набор по умолчанию</span>{% endif %}
                 <span class="text-muted small">{{ dataset.columns|length }} параметров · {{ dataset.rows|length }} вариантов</span>
             </div>
             {% set default_row = (dataset.rows|selectattr('is_enabled')|list|first) or (dataset.rows|first) %}
@@ -61,7 +62,7 @@
                         <tbody>
                         {% for row in dataset.rows %}
                         <tr>
-                            <td>{{ row.name }}</td>
+                            <td>{{ row.name }} {% if row.is_default %}<span class="badge bg-primary">По умолчанию</span>{% endif %}</td>
                             <td>{{ 'Активен' if row.is_enabled else 'Отключён' }}</td>
                             {% for column in dataset.columns %}
                             <td>{% if column.is_secret %}<span class="text-muted">Скрыто</span>{% else %}{{ (row.values_json or {}).get(column.key, '') or '—' }}{% endif %}</td>

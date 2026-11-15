@@ -1028,6 +1028,137 @@ def compare_test_versions(project_id, test_id):
     )
 
 
+def _save_inline_test_data_sets(test, form):
+    """Create optional data sets atomically with a new test case."""
+    raw_count = (form.get('data_set_count') or '0').strip()
+    try:
+        dataset_count = int(raw_count)
+    except (TypeError, ValueError):
+        raise ValueError('Некорректное количество наборов тестовых данных.')
+    if dataset_count < 0 or dataset_count > 10:
+        raise ValueError('При создании теста можно добавить не более 10 наборов данных.')
+    if dataset_count == 0:
+        return
+
+    default_dataset_raw = (form.get('default_data_set_index') or '').strip()
+    try:
+        default_dataset_index = int(default_dataset_raw) if default_dataset_raw else None
+    except ValueError:
+        raise ValueError('Некорректный выбор основного набора данных.')
+    if default_dataset_index is not None and not 0 <= default_dataset_index < dataset_count:
+        raise ValueError('Выбранный основной набор данных не существует.')
+
+    sensitive_pattern = (
+        r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|'
+        r'парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|'
+        r'секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
+    )
+
+    for dataset_index in range(dataset_count):
+        prefix = f'data_{dataset_index}_'
+        name = (form.get(prefix + 'name') or '').strip()
+        keys = [value.strip() for value in form.getlist(prefix + 'column_key[]')]
+        submitted_labels = [value.strip() for value in form.getlist(prefix + 'column_label[]')]
+        labels = [
+            submitted_labels[index] if index < len(submitted_labels) and submitted_labels[index] else key
+            for index, key in enumerate(keys)
+        ]
+        secret_flags = [
+            form.get(prefix + f'column_is_secret_{index}') == '1'
+            for index in range(len(keys))
+        ]
+        if not name or len(name) > 120:
+            raise ValueError(f'Укажите название набора данных №{dataset_index + 1} (до 120 символов).')
+        if not keys or len(keys) > 30 or len(keys) != len(labels):
+            raise ValueError(f'В наборе «{name}» добавьте от 1 до 30 параметров.')
+        if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
+            raise ValueError(f'В наборе «{name}» есть некорректное имя параметра.')
+        if len(keys) != len(set(keys)):
+            raise ValueError(f'В наборе «{name}» имена параметров должны быть уникальными.')
+        if any(not label or len(label) > 120 for label in labels):
+            raise ValueError(f'Укажите подпись каждого параметра в наборе «{name}».')
+        if any(
+            re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
+            for index, key in enumerate(keys)
+        ):
+            raise ValueError(
+                f'Параметры с паролями, токенами и ключами в наборе «{name}» должны быть отмечены как секретные.'
+            )
+        if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
+            raise ValueError(
+                'Секретные параметры нельзя сохранить: на сервере не настроен TEST_DATA_ENCRYPTION_KEY.'
+            )
+
+        row_names = [value.strip() for value in form.getlist(prefix + 'row_name[]')]
+        if len(row_names) > 500:
+            raise ValueError(f'В наборе «{name}» допускается не более 500 строк.')
+        if any(not row_name or len(row_name) > 120 for row_name in row_names):
+            raise ValueError(f'Укажите название каждой строки данных в наборе «{name}» (до 120 символов).')
+
+        default_row_raw = (form.get(prefix + 'default_row_index') or '').strip()
+        try:
+            default_row_index = int(default_row_raw) if default_row_raw else None
+        except ValueError:
+            raise ValueError(f'Некорректный выбор строки по умолчанию в наборе «{name}».')
+        if default_row_index is not None and not 0 <= default_row_index < len(row_names):
+            raise ValueError(f'Выбранная строка по умолчанию в наборе «{name}» не существует.')
+
+        dataset = TestDataSet(
+            test_case_id=test.id,
+            name=name,
+            is_default=(dataset_index == default_dataset_index),
+        )
+        db.session.add(dataset)
+        db.session.flush()
+        columns = []
+        for position, (key, label) in enumerate(zip(keys, labels)):
+            column = TestDataColumn(
+                dataset_id=dataset.id,
+                key=key,
+                label=label,
+                position=position,
+                is_secret=secret_flags[position],
+            )
+            db.session.add(column)
+            columns.append(column)
+        db.session.flush()
+
+        for row_index, row_name in enumerate(row_names):
+            ordinary_values = {}
+            secret_values = {}
+            for column_index, column in enumerate(columns):
+                value = (form.get(
+                    prefix + f'row_{row_index}_value_{column_index}'
+                ) or '')
+                if len(value) > 10000:
+                    raise ValueError(
+                        f'Значение параметра «{column.label}» в наборе «{name}» превышает 10 000 символов.'
+                    )
+                if column.is_secret:
+                    if value:
+                        secret_values[column.key] = value
+                else:
+                    ordinary_values[column.key] = value
+            try:
+                encrypted_values = encrypt_secret_values(secret_values)
+            except Exception:
+                current_app.logger.warning(
+                    'Could not encrypt inline test-data secrets during test creation'
+                )
+                raise ValueError(
+                    'Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.'
+                ) from None
+            db.session.add(TestDataRow(
+                dataset_id=dataset.id,
+                name=row_name,
+                values_json=ordinary_values,
+                encrypted_values_json=encrypted_values,
+                is_enabled=True,
+                is_default=(row_index == default_row_index),
+                position=row_index,
+            ))
+
+
 @main_bp.route('/project/<int:project_id>/create_test', methods=['GET', 'POST'])
 @login_required
 def create_test(project_id):
@@ -1059,6 +1190,7 @@ def create_test(project_id):
                         request.files.getlist(f'test_step_screenshot_{index}[]'),
                         user_id=current_user.id, test_step_id=step.id
                     ))
+                _save_inline_test_data_sets(test, request.form)
                 create_test_version(test)
                 db.session.commit()
             except ValueError as error:
@@ -1427,16 +1559,45 @@ def run_tests(project_id):
             return redirect(url_for('main.run_stats', project_id=project.id))
         data_row_id = batch_row_ids[data_index]
 
-    if bool(data_set_id) != bool(data_row_id) or ((data_set_id or data_row_id) and not selected_test_id):
-        flash('Для запуска с тестовыми данными выберите тест-кейс, набор и строку.', 'danger')
-        return redirect(url_for('main.project_detail', project_id=project.id))
     if selected_test_id:
-        selected_test = TestCase.query.filter_by(id=selected_test_id, project_id=project.id).first_or_404()
+        selected_test = TestCase.query.filter_by(
+            id=selected_test_id, project_id=project.id
+        ).first_or_404()
+        # If the user marked a data set as default while creating the test,
+        # apply its default row when they start this test directly.
+        if not data_set_id and not data_row_id:
+            default_dataset = TestDataSet.query.filter_by(
+                test_case_id=selected_test.id, is_default=True
+            ).order_by(TestDataSet.id.asc()).first()
+            if default_dataset:
+                default_row = TestDataRow.query.filter_by(
+                    dataset_id=default_dataset.id, is_enabled=True
+                ).order_by(
+                    TestDataRow.is_default.desc(),
+                    TestDataRow.position.asc(),
+                    TestDataRow.id.asc()
+                ).first()
+                if default_row is None:
+                    flash(
+                        'Для основного набора ещё не добавлена активная строка тестовых данных.',
+                        'warning'
+                    )
+                    return redirect(url_for(
+                        'main.test_data_sets',
+                        project_id=project.id,
+                        test_id=selected_test.id
+                    ))
+                data_set_id = default_dataset.id
+                data_row_id = default_row.id
         tests = [selected_test]
         single_test = True
     else:
         tests = TestCase.query.filter_by(project_id=project.id).all()
         single_test = False
+
+    if bool(data_set_id) != bool(data_row_id) or ((data_set_id or data_row_id) and not selected_test_id):
+        flash('Для запуска с тестовыми данными выберите тест-кейс, набор и строку.', 'danger')
+        return redirect(url_for('main.project_detail', project_id=project.id))
 
     if not tests:
         flash('В этом проекте нет тестов для прогона', 'warning')
