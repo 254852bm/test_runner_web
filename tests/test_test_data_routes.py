@@ -720,6 +720,7 @@ def test_russian_sensitive_legacy_column_is_rejected_before_substitution(app):
 
 
 def test_test_creation_can_save_data_sets_and_rows_before_first_commit(app):
+    """Create a parameterized test and its data before the initial commit."""
     with app.app_context():
         user, project, _ = _case()
         user_id, project_id = user.id, project.id
