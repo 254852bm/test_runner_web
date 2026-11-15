@@ -14,6 +14,11 @@
             <label for="precondition" class="form-label">Предусловие</label>
             <textarea class="form-control" id="precondition" name="precondition" rows="3" placeholder="Можно писать несколько строк или списком"></textarea>
         </div>
+        <div class="alert alert-light border mb-3" id="parameter-insert-panel" hidden>
+            <strong class="small d-block mb-2">Вставить параметр</strong>
+            <div class="d-flex flex-wrap gap-2" id="parameter-buttons"></div>
+            <div class="form-text">Сначала поставьте курсор в предусловие, действие или ожидаемый результат, затем выберите параметр.</div>
+        </div>
         <div class="mb-3">
             <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
                 <label class="form-label mb-0">Шаги тест-кейса</label>
@@ -47,6 +52,44 @@
     </form>
 </div></div>
 <script>
+let lastParameterField = null;
+document.addEventListener('focusin', function(event) {
+    if (event.target.matches('#precondition, textarea[name="step_action[]"], textarea[name="step_expected[]"]')) {
+        lastParameterField = event.target;
+    }
+});
+document.getElementById('parameter-buttons').addEventListener('click', function(event) {
+    const button = event.target.closest('[data-parameter-token]');
+    if (!button) return;
+    if (!lastParameterField) {
+        alert('Сначала выберите поле предусловия, действия или ожидаемого результата.');
+        return;
+    }
+    const field = lastParameterField;
+    field.setRangeText(button.dataset.parameterToken, field.selectionStart, field.selectionEnd, 'end');
+    field.focus();
+});
+function updateParameterButtons() {
+    const container = document.getElementById('parameter-buttons');
+    const panel = document.getElementById('parameter-insert-panel');
+    container.replaceChildren();
+    const seen = new Set();
+    document.querySelectorAll('.data-set-card').forEach(function(card) {
+        card.querySelectorAll('.data-column').forEach(function(column) {
+            const key = column.querySelector('[data-role="column-key"]').value.trim();
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            const label = column.querySelector('[data-role="column-label"]').value.trim() || key;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn btn-sm btn-outline-primary';
+            button.dataset.parameterToken = '{{' + key + '}}';
+            button.textContent = label + ' · ' + button.dataset.parameterToken;
+            container.appendChild(button);
+        });
+    });
+    panel.hidden = seen.size === 0;
+}
 function addStep() {
     const container = document.getElementById('steps-container');
     const number = container.querySelectorAll('.step-card').length + 1;
@@ -178,6 +221,7 @@ function reindexDataSets() {
             });
         });
     });
+    updateParameterButtons();
 }
 document.getElementById('data-sets-container').addEventListener('input', function(event) {
     if (event.target.matches('[data-role="column-key"], [data-role="column-label"]')) reindexDataSets();
