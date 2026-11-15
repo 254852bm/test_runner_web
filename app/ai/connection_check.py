@@ -8,9 +8,26 @@ class AIConnectionCheckError(Exception):
     """Safe message suitable for display; never contains credentials or bodies."""
 
 
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Never forward an API key to a redirect target."""
+
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        return None
+
+
+def _open_without_redirects(request, timeout):
+    opener = urllib.request.build_opener(_NoRedirectHandler())
+    return opener.open(request, timeout=timeout)
+
+
 def check_yandex_connection(*, api_key, folder_id, opener=None, timeout_seconds=10):
-    if not api_key or not folder_id:
+    if (
+        not isinstance(api_key, str) or not api_key
+        or not isinstance(folder_id, str) or not folder_id
+        or any(ord(char) < 32 or ord(char) == 127 for char in api_key + folder_id)
+    ):
         raise AIConnectionCheckError("Не настроены API-ключ или Folder ID.")
+
     request = urllib.request.Request(
         "https://ai.api.cloud.yandex.net/v1/models",
         headers={
@@ -20,7 +37,7 @@ def check_yandex_connection(*, api_key, folder_id, opener=None, timeout_seconds=
         },
         method="GET",
     )
-    open_request = opener or urllib.request.urlopen
+    open_request = opener or _open_without_redirects
     try:
         with open_request(request, timeout=timeout_seconds) as response:
             raw = response.read(256_001)
@@ -46,6 +63,12 @@ def check_yandex_connection(*, api_key, folder_id, opener=None, timeout_seconds=
         payload = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError):
         raise AIConnectionCheckError("Yandex AI Studio вернула некорректный ответ.") from None
-    if not isinstance(payload, dict) or payload.get("object") != "list" or not isinstance(payload.get("data"), list):
-        raise AIConnectionCheckError("Yandex AI Studio вернула неожиданный формат списка моделей.")
+    if (
+        not isinstance(payload, dict)
+        or payload.get("object") != "list"
+        or not isinstance(payload.get("data"), list)
+    ):
+        raise AIConnectionCheckError(
+            "Yandex AI Studio вернула неожиданный формат списка моделей."
+        )
     return len(payload["data"])
