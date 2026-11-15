@@ -63,6 +63,8 @@ def create_app(test_config=None):
     app.register_blueprint(admin_bp)
     from .ai.routes import ai_bp
     app.register_blueprint(ai_bp)
+    from .ai.automation_routes import automation_ai_bp
+    app.register_blueprint(automation_ai_bp)
     from .ai.credential_routes import ai_credentials_bp
     app.register_blueprint(ai_credentials_bp)
     app.config.setdefault('AI_CREDENTIAL_ENCRYPTION_KEY', os.getenv('AI_CREDENTIAL_ENCRYPTION_KEY', ''))

@@ -38,18 +38,25 @@ class YandexAIStudioProvider:
         self._opener = opener or urllib.request.urlopen
 
     def generate(self, requirement):
+        return self.generate_structured(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=build_user_prompt(requirement),
+            response_format=json_schema_response_format(),
+        )
+
+    def generate_structured(self, *, system_prompt, user_prompt, response_format):
         body = {
             "model": self.config.model_uri,
             "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": build_user_prompt(requirement)},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
             "temperature": 0.2,
             "n": 1,
             "stream": False,
             "store": False,
             "max_completion_tokens": self.config.max_completion_tokens,
-            "response_format": json_schema_response_format(),
+            "response_format": response_format,
         }
         request = urllib.request.Request(
             self.ENDPOINT,
@@ -58,17 +65,14 @@ class YandexAIStudioProvider:
                 "Authorization": f"Api-Key {self.config.api_key}",
                 "Content-Type": "application/json",
                 "x-folder-id": self.config.folder_id,
-                # Requests are logged by default in AI Studio; always opt out.
                 "x-data-logging-enabled": "false",
             },
             method="POST",
         )
-
         try:
             with self._opener(request, timeout=self.config.timeout_seconds) as response:
                 raw_response = response.read(1_000_001)
         except urllib.error.HTTPError as error:
-            # Do not log or expose provider response bodies: they may echo user text.
             raise AIProviderError(
                 "Сервис генерации временно недоступен. Попробуйте позже."
             ) from error
@@ -76,10 +80,8 @@ class YandexAIStudioProvider:
             raise AIProviderError(
                 "Не удалось связаться с сервисом генерации. Попробуйте позже."
             ) from error
-
         if len(raw_response) > 1_000_000:
             raise AIProviderError("Сервис генерации вернул слишком большой ответ.")
-
         try:
             response_data = json.loads(raw_response.decode("utf-8"))
             content = response_data["choices"][0]["message"]["content"]
