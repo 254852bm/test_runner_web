@@ -7,7 +7,7 @@ _PLACEHOLDER_RE = re.compile(r"{{([^{}]+)}}")
 _ANY_PLACEHOLDER_RE = re.compile(r"{{(.*?)}}")
 _KEY_RE = re.compile(r"[^\W\d]\w*(?:[ -]\w+)*", re.UNICODE)
 _SENSITIVE_KEY_RE = re.compile(
-    r"(password|passwd|secret|token|api[_-]?key|access[_-]?key)", re.IGNORECASE
+    r"(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)", re.IGNORECASE
 )
 
 
