@@ -1559,16 +1559,45 @@ def run_tests(project_id):
             return redirect(url_for('main.run_stats', project_id=project.id))
         data_row_id = batch_row_ids[data_index]
 
-    if bool(data_set_id) != bool(data_row_id) or ((data_set_id or data_row_id) and not selected_test_id):
-        flash('Для запуска с тестовыми данными выберите тест-кейс, набор и строку.', 'danger')
-        return redirect(url_for('main.project_detail', project_id=project.id))
     if selected_test_id:
-        selected_test = TestCase.query.filter_by(id=selected_test_id, project_id=project.id).first_or_404()
+        selected_test = TestCase.query.filter_by(
+            id=selected_test_id, project_id=project.id
+        ).first_or_404()
+        # If the user marked a data set as default while creating the test,
+        # apply its default row when they start this test directly.
+        if not data_set_id and not data_row_id:
+            default_dataset = TestDataSet.query.filter_by(
+                test_case_id=selected_test.id, is_default=True
+            ).order_by(TestDataSet.id.asc()).first()
+            if default_dataset:
+                default_row = TestDataRow.query.filter_by(
+                    dataset_id=default_dataset.id, is_enabled=True
+                ).order_by(
+                    TestDataRow.is_default.desc(),
+                    TestDataRow.position.asc(),
+                    TestDataRow.id.asc()
+                ).first()
+                if default_row is None:
+                    flash(
+                        'Для основного набора ещё не добавлена активная строка тестовых данных.',
+                        'warning'
+                    )
+                    return redirect(url_for(
+                        'main.test_data_sets',
+                        project_id=project.id,
+                        test_id=selected_test.id
+                    ))
+                data_set_id = default_dataset.id
+                data_row_id = default_row.id
         tests = [selected_test]
         single_test = True
     else:
         tests = TestCase.query.filter_by(project_id=project.id).all()
         single_test = False
+
+    if bool(data_set_id) != bool(data_row_id) or ((data_set_id or data_row_id) and not selected_test_id):
+        flash('Для запуска с тестовыми данными выберите тест-кейс, набор и строку.', 'danger')
+        return redirect(url_for('main.project_detail', project_id=project.id))
 
     if not tests:
         flash('В этом проекте нет тестов для прогона', 'warning')
