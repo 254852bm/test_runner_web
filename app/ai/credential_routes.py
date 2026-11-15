@@ -6,7 +6,8 @@ from flask_login import current_user, login_required
 from flask_wtf.csrf import ValidationError, validate_csrf
 
 from app import db
-from app.ai_credentials import encrypt_ai_credential
+from app.ai_credentials import decrypt_ai_credential, encrypt_ai_credential, AICredentialEncryptionError
+from app.ai.connection_check import check_yandex_connection, AIConnectionCheckError
 from app.models import AICredential
 
 
@@ -28,6 +29,30 @@ def settings():
     if request.method == "POST":
         _check_csrf()
         action = request.form.get("action", "save")
+        if action == "check":
+            if not credential or not credential.is_enabled:
+                flash("Сначала сохраните и включите AI-ключ.", "warning")
+            else:
+                try:
+                    secrets = decrypt_ai_credential(
+                        user_id=current_user.id,
+                        provider=credential.provider,
+                        encrypted_payload=credential.encrypted_payload,
+                    )
+                    model_count = check_yandex_connection(**secrets)
+                    flash(
+                        f"Подключение успешно. Yandex AI Studio доступна; моделей в каталоге: {model_count}.",
+                        "success",
+                    )
+                except (AICredentialEncryptionError, AIConnectionCheckError) as error:
+                    flash(str(error), "warning")
+                except Exception as error:
+                    current_app.logger.warning(
+                        "AI connection check failed (user_id=%s, error_type=%s)",
+                        current_user.id, type(error).__name__,
+                    )
+                    flash("Не удалось проверить подключение. Подробности не записаны из соображений безопасности.", "danger")
+            return redirect(url_for("ai_credentials.settings"))
         if action == "disable":
             if credential:
                 credential.is_enabled = False
