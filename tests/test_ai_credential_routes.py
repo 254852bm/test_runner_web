@@ -111,3 +111,43 @@ def test_disable_and_delete_are_post_only_and_csrf_protected(client, app):
     _login(client, app.config["OWNER_ID"])
     assert client.get("/settings/ai-credentials/delete").status_code == 405
     assert client.post("/settings/ai-credentials/delete").status_code == 400
+
+
+def test_connection_check_requires_explicit_post_and_uses_only_saved_credential(client, app, monkeypatch):
+    import app.ai.credential_routes as routes
+
+    monkeypatch.setattr(routes, "validate_csrf", lambda token: None)
+    _login(client, app.config["OWNER_ID"])
+    client.post("/settings/ai-credentials", data=_form())
+
+    calls = []
+    monkeypatch.setattr(
+        routes,
+        "check_yandex_connection",
+        lambda **credentials: calls.append(credentials) or 3,
+    )
+    response = client.post(
+        "/settings/ai-credentials",
+        data={"csrf_token": "test-token", "action": "check"},
+    )
+    assert response.status_code == 302
+    assert calls == [{"api_key": "never-store-plaintext", "folder_id": "folder-123"}]
+
+
+def test_connection_check_does_not_run_for_disabled_credential(client, app, monkeypatch):
+    import app.ai.credential_routes as routes
+
+    monkeypatch.setattr(routes, "validate_csrf", lambda token: None)
+    _login(client, app.config["OWNER_ID"])
+    client.post("/settings/ai-credentials", data=_form())
+    client.post("/settings/ai-credentials/disable", data={"csrf_token": "test-token"})
+
+    def unexpected_call(**credentials):
+        pytest.fail("Provider request must not run for a disabled credential")
+
+    monkeypatch.setattr(routes, "check_yandex_connection", unexpected_call)
+    response = client.post(
+        "/settings/ai-credentials",
+        data={"csrf_token": "test-token", "action": "check"},
+    )
+    assert response.status_code == 302
