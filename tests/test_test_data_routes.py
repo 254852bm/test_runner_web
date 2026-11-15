@@ -716,3 +716,170 @@ def test_russian_sensitive_legacy_column_is_rejected_before_substitution(app):
         db.session.commit()
         with pytest.raises(ValueError, match="секретн"):
             prepare_test_data(case, dataset, row)
+
+
+
+def test_test_creation_can_save_data_sets_and_rows_before_first_commit(app):
+    with app.app_context():
+        user, project, _ = _case()
+        user_id, project_id = user.id, project.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/create_test",
+        data={
+            "title": "Login with inline test data",
+            "precondition": "Open {{base_url}}",
+            "step_action[]": ["Enter {{login}}"],
+            "step_expected[]": ["Welcome {{login}}"],
+            "data_set_count": "1",
+            "data_0_name": "Основной набор",
+            "default_data_set_index": "0",
+            "data_0_column_key[]": ["base_url", "login"],
+            "data_0_column_label[]": ["Адрес сайта", "Логин"],
+            "data_0_row_name[]": ["Успешный вход", "Второй пользователь"],
+            "data_0_row_0_value_0": "https://example.test",
+            "data_0_row_0_value_1": "user1",
+            "data_0_row_1_value_0": "https://example.test",
+            "data_0_row_1_value_1": "user2",
+            "data_0_default_row_index": "1",
+        },
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        test = TestCase.query.filter_by(
+            project_id=project_id, title="Login with inline test data"
+        ).one()
+        dataset = TestDataSet.query.filter_by(test_case_id=test.id).one()
+        assert dataset.name == "Основной набор"
+        assert dataset.is_default is True
+        assert [column.key for column in dataset.columns] == ["base_url", "login"]
+        rows = sorted(dataset.rows, key=lambda row: row.position)
+        assert [row.name for row in rows] == ["Успешный вход", "Второй пользователь"]
+        assert rows[0].is_default is False
+        assert rows[1].is_default is True
+        assert rows[1].values_json["login"] == "user2"
+
+
+def test_test_creation_without_inline_test_data_remains_supported(app):
+    with app.app_context():
+        user, project, _ = _case()
+        user_id, project_id = user.id, project.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/create_test",
+        data={
+            "title": "Ordinary test without data",
+            "precondition": "",
+            "step_action[]": ["Open the home page"],
+            "step_expected[]": ["Home page is visible"],
+        },
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        test = TestCase.query.filter_by(
+            project_id=project_id, title="Ordinary test without data"
+        ).one()
+        assert TestDataSet.query.filter_by(test_case_id=test.id).count() == 0
+
+
+def test_inline_test_creation_encrypts_secret_values(app):
+    from cryptography.fernet import Fernet
+    from flask import current_app
+    from app.test_data_crypto import decrypt_secret_values
+
+    key = Fernet.generate_key().decode("ascii")
+    with app.app_context():
+        current_app.config["TEST_DATA_ENCRYPTION_KEY"] = key
+        user, project, _ = _case()
+        user_id, project_id = user.id, project.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/create_test",
+        data={
+            "title": "Login with secret inline data",
+            "step_action[]": ["Enter {{login}} and {{password}}"],
+            "step_expected[]": ["Account is opened"],
+            "data_set_count": "1",
+            "data_0_name": "Secret credentials",
+            "default_data_set_index": "0",
+            "data_0_column_key[]": ["login", "password"],
+            "data_0_column_label[]": ["Логин", "Пароль"],
+            "data_0_column_is_secret_1": "1",
+            "data_0_row_name[]": ["Test account"],
+            "data_0_row_0_value_0": "tester",
+            "data_0_row_0_value_1": "never-store-this-plaintext",
+        },
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        test = TestCase.query.filter_by(
+            project_id=project_id, title="Login with secret inline data"
+        ).one()
+        dataset = TestDataSet.query.filter_by(test_case_id=test.id).one()
+        row = dataset.rows[0]
+        assert row.values_json == {"login": "tester"}
+        assert "never-store-this-plaintext" not in (row.encrypted_values_json or "")
+        assert decrypt_secret_values(row.encrypted_values_json) == {
+            "password": "never-store-this-plaintext"
+        }
+
+
+def test_direct_test_run_uses_default_data_set_and_default_row(app):
+    with app.app_context():
+        user, project, _ = _case()
+        test = TestCase(
+            title="Default data run",
+            precondition="Open {{base_url}}",
+            steps="Enter {{login}}",
+            expected_result="",
+            project_id=project.id,
+        )
+        db.session.add(test)
+        db.session.flush()
+        step = TestStep(
+            test_case_id=test.id, position=1,
+            action="Enter {{login}}", expected_result="Welcome"
+        )
+        dataset = TestDataSet(
+            test_case_id=test.id, name="Selected by default", is_default=True
+        )
+        db.session.add_all([step, dataset])
+        db.session.flush()
+        db.session.add_all([
+            TestDataColumn(dataset_id=dataset.id, key="base_url", label="URL", position=0),
+            TestDataColumn(dataset_id=dataset.id, key="login", label="Login", position=1),
+        ])
+        db.session.flush()
+        db.session.add_all([
+            TestDataRow(
+                dataset_id=dataset.id, name="First row",
+                values_json={"base_url": "https://first.test", "login": "first"},
+                position=0, is_default=False
+            ),
+            TestDataRow(
+                dataset_id=dataset.id, name="Default row",
+                values_json={"base_url": "https://default.test", "login": "default"},
+                position=1, is_default=True
+            ),
+        ])
+        db.session.commit()
+        user_id, project_id, test_id = user.id, project.id, test.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.get(f"/project/{project_id}/run?test_id={test_id}")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Selected by default" in html
+    assert "Default row" in html
+    assert "https://default.test" in html
+    assert "default" in html
