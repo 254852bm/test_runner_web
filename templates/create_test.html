@@ -1,103 +1,182 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-10">
-        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
-            <h2 class="mb-0">Новый тест-кейс</h2>
-            <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-outline-secondary">← Назад к проекту</a>
+<div class="row justify-content-center"><div class="col-md-10">
+    <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-3">
+        <h2 class="mb-0">Новый тест-кейс</h2>
+        <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-outline-secondary">← Назад к проекту</a>
+    </div>
+    <form method="POST" enctype="multipart/form-data" id="create-test-form">
+        <div class="mb-3">
+            <label for="title" class="form-label">Заголовок</label>
+            <input type="text" class="form-control" id="title" name="title" placeholder="Например: Проверка входа с корректным паролем" required>
+        </div>
+        <div class="mb-3">
+            <label for="precondition" class="form-label">Предусловие</label>
+            <textarea class="form-control" id="precondition" name="precondition" rows="3" placeholder="Можно писать несколько строк или списком"></textarea>
         </div>
 
-        <form method="POST" enctype="multipart/form-data">
-            <div class="mb-3">
-                <label for="title" class="form-label">Заголовок</label>
-                <input type="text" class="form-control" id="title" name="title" placeholder="Например: Проверка входа с корректным паролем" required>
-            </div>
-            <div class="mb-3">
-                <label for="precondition" class="form-label">Предусловие</label>
-                <textarea class="form-control" id="precondition" name="precondition" rows="3" placeholder="Можно писать несколько строк или списком"></textarea>
-            </div>
-
-            <div class="mb-3">
-                <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
-                    <label class="form-label mb-0">Шаги тест-кейса</label>
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="addStep()">+ Добавить шаг</button>
+        <section class="card mb-4" aria-labelledby="test-parameters-title">
+            <div class="card-header d-flex justify-content-between align-items-center gap-2 flex-wrap">
+                <div>
+                    <strong id="test-parameters-title">Тестовые данные</strong>
+                    <div class="small text-muted">Необязательно. Добавьте пары «Параметр — Значение».</div>
                 </div>
-                <div id="steps-container">
-                    <div class="card mb-3 step-card">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <strong>Шаг <span class="step-number">1</span></strong>
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label">Действие</label>
-                                <textarea class="form-control" name="step_action[]" rows="2" placeholder="Например: Открыть страницу авторизации" required></textarea>
-                            </div>
-                            <div class="mb-2">
-                                <label class="form-label">Ожидаемый результат</label>
-                                <textarea class="form-control" name="step_expected[]" rows="2" placeholder="Например: Открывается страница авторизации"></textarea>
-                            </div>
-                            <div>
-                                <label class="form-label">Скриншоты ожидаемого результата</label>
-                                <input class="form-control" type="file" name="test_step_screenshot_0[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple>
-                                <div class="form-text">До 5 изображений на шаг, не более 5 МБ каждое.</div>
-                            </div>
-                        </div>
-                    </div>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="add-parameter">+ Добавить параметр</button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table align-middle mb-2" id="parameters-table">
+                        <thead><tr><th>Параметр</th><th>Значение</th><th class="text-center">Секрет</th><th></th></tr></thead>
+                        <tbody id="parameters-body"></tbody>
+                    </table>
                 </div>
-                <div class="form-text">Для каждого шага укажите действие и ожидаемый результат.</div>
+                <div class="form-text">Используйте параметр в предусловии, действии или ожидаемом результате в формате <code>{{ '{{login}}' }}</code>. Пароли и ключи сохраняются только в зашифрованном виде.</div>
+                <input type="hidden" name="data_set_count" id="data-set-count" value="0">
+                <input type="hidden" name="default_data_set_index" value="0">
+                <input type="hidden" name="data_0_name" value="Основные параметры">
+                <input type="hidden" name="data_0_default_row_index" value="0">
+                <input type="hidden" name="data_0_row_name[]" value="Значения по умолчанию">
             </div>
+        </section>
 
-            <div class="action-buttons">
-                <button type="submit" class="btn btn-success">Сохранить</button>
-                <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-secondary">Отмена</a>
+        <div class="alert alert-light border mb-3" id="parameter-insert-panel" hidden>
+            <strong class="small d-block mb-2">Вставить параметр</strong>
+            <div class="d-flex flex-wrap gap-2" id="parameter-buttons"></div>
+            <div class="form-text">Поставьте курсор в текстовое поле и выберите параметр.</div>
+        </div>
+
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-2">
+                <label class="form-label mb-0">Шаги тест-кейса</label>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="addStep()">+ Добавить шаг</button>
             </div>
-        </form>
-    </div>
-</div>
-
+            <div id="steps-container">
+                <div class="card mb-3 step-card"><div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2"><strong>Шаг <span class="step-number">1</span></strong></div>
+                    <div class="mb-2"><label class="form-label">Действие</label><textarea class="form-control" name="step_action[]" rows="2" placeholder="Например: Ввести {{login}} и {{password}}" required></textarea></div>
+                    <div class="mb-2"><label class="form-label">Ожидаемый результат</label><textarea class="form-control" name="step_expected[]" rows="2" placeholder="Например: Пользователь успешно вошёл"></textarea></div>
+                    <div><label class="form-label">Скриншоты ожидаемого результата</label><input class="form-control" type="file" name="test_step_screenshot_0[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple><div class="form-text">До 5 изображений на шаг, не более 5 МБ каждое.</div></div>
+                </div></div>
+            </div>
+            <div class="form-text">Для каждого шага укажите действие и ожидаемый результат.</div>
+        </div>
+        <div class="action-buttons">
+            <button type="submit" class="btn btn-success">Сохранить тест-кейс</button>
+            <a href="{{ url_for('main.project_detail', project_id=project_id) }}" class="btn btn-secondary">Отмена</a>
+        </div>
+    </form>
+</div></div>
 <script>
+let lastParameterField = null;
+document.addEventListener('focusin', function(event) {
+    if (event.target.matches('#precondition, textarea[name="step_action[]"], textarea[name="step_expected[]"]')) {
+        lastParameterField = event.target;
+    }
+});
+
+function parameterRows() {
+    return Array.from(document.querySelectorAll('#parameters-body tr.parameter-row'));
+}
+function updateParameters() {
+    const rows = parameterRows();
+    document.getElementById('data-set-count').value = rows.length ? '1' : '0';
+    const buttons = document.getElementById('parameter-buttons');
+    buttons.replaceChildren();
+    rows.forEach(function(row) {
+        const key = row.querySelector('[data-role="parameter-key"]').value.trim();
+        if (!key) return;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'btn btn-sm btn-outline-primary';
+        button.textContent = '{{' + key + '}}';
+        button.dataset.token = '{{' + key + '}}';
+        buttons.appendChild(button);
+    });
+    document.getElementById('parameter-insert-panel').hidden = buttons.children.length === 0;
+    rows.forEach(function(row, index) {
+        const key = row.querySelector('[data-role="parameter-key"]');
+        const value = row.querySelector('[data-role="parameter-value"]');
+        const secret = row.querySelector('[data-role="parameter-secret"]');
+        key.name = 'data_0_column_key[]';
+        key.setAttribute('aria-label', 'Имя параметра ' + (index + 1));
+        row.querySelector('[data-role="parameter-label"]').name = 'data_0_column_label[]';
+        row.querySelector('[data-role="parameter-label"]').value = key.value;
+        secret.name = 'data_0_column_is_secret_' + index;
+        secret.value = '1';
+        secret.checked = secret.checked || /password|passwd|secret|token|api[_-]?key|access[_-]?key|парол|токен|секрет|ключ/i.test(key.value);
+        value.name = 'data_0_row_0_value_' + index;
+        value.type = secret.checked ? 'password' : 'text';
+        value.autocomplete = secret.checked ? 'new-password' : 'off';
+        value.placeholder = secret.checked ? 'Секретное значение' : 'Введите значение';
+    });
+}
+function addParameter() {
+    const row = document.createElement('tr');
+    row.className = 'parameter-row';
+    row.innerHTML =
+        '<td><input class="form-control" data-role="parameter-key" maxlength="64" placeholder="Например, login" required></td>' +
+        '<td><input class="form-control" data-role="parameter-value" maxlength="10000" placeholder="Введите значение" required></td>' +
+        '<td class="text-center"><input class="form-check-input" type="checkbox" data-role="parameter-secret" aria-label="Секретное значение"></td>' +
+        '<td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" aria-label="Удалить параметр">×</button>' +
+        '<input type="hidden" data-role="parameter-label"></td>';
+    row.querySelector('button').addEventListener('click', function() {
+        row.remove();
+        updateParameters();
+    });
+    document.getElementById('parameters-body').appendChild(row);
+    updateParameters();
+    row.querySelector('[data-role="parameter-key"]').focus();
+}
+document.getElementById('add-parameter').addEventListener('click', addParameter);
+document.getElementById('parameters-body').addEventListener('input', updateParameters);
+document.getElementById('parameters-body').addEventListener('change', updateParameters);
+document.getElementById('parameter-buttons').addEventListener('click', function(event) {
+    const button = event.target.closest('[data-token]');
+    if (!button) return;
+    if (!lastParameterField) {
+        alert('Сначала выберите поле предусловия, действия или ожидаемого результата.');
+        return;
+    }
+    lastParameterField.setRangeText(button.dataset.token, lastParameterField.selectionStart, lastParameterField.selectionEnd, 'end');
+    lastParameterField.focus();
+});
+document.getElementById('create-test-form').addEventListener('submit', function(event) {
+    const rows = parameterRows();
+    const keys = rows.map(row => row.querySelector('[data-role="parameter-key"]').value.trim());
+    if (new Set(keys).size !== keys.length) {
+        event.preventDefault();
+        alert('Имена параметров должны быть уникальными.');
+        return;
+    }
+    if (rows.some(row => !/^[^\W\d]\w*(?:[ -]\w+)*$/u.test(row.querySelector('[data-role="parameter-key"]').value.trim()))) {
+        event.preventDefault();
+        alert('Имя параметра должно начинаться с буквы и содержать только буквы, цифры, пробелы, дефисы или подчёркивания.');
+        return;
+    }
+    updateParameters();
+});
 function addStep() {
     const container = document.getElementById('steps-container');
-    const cards = container.querySelectorAll('.step-card');
-    const number = cards.length + 1;
+    const number = container.querySelectorAll('.step-card').length + 1;
     const card = document.createElement('div');
     card.className = 'card mb-3 step-card';
-    card.innerHTML = `
-        <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-2">
-                <strong>Шаг <span class="step-number">${number}</span></strong>
-                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeStep(this)">Удалить</button>
-            </div>
-            <div class="mb-2">
-                <label class="form-label">Действие</label>
-                <textarea class="form-control" name="step_action[]" rows="2" placeholder="Например: Ввести логин" required></textarea>
-            </div>
-            <div class="mb-2">
-                <label class="form-label">Ожидаемый результат</label>
-                <textarea class="form-control" name="step_expected[]" rows="2" placeholder="Например: Логин принят системой"></textarea>
-            </div>
-            <div>
-                <label class="form-label">Скриншоты ожидаемого результата</label>
-                <input class="form-control" type="file" name="test_step_screenshot_${number - 1}[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple>
-                <div class="form-text">До 5 изображений на шаг, не более 5 МБ каждое.</div>
-            </div>
-        </div>`;
+    card.innerHTML = '<div class="card-body">' +
+        '<div class="d-flex justify-content-between align-items-center mb-2"><strong>Шаг <span class="step-number">' + number + '</span></strong><button type="button" class="btn btn-outline-danger btn-sm" onclick="removeStep(this)">Удалить</button></div>' +
+        '<div class="mb-2"><label class="form-label">Действие</label><textarea class="form-control" name="step_action[]" rows="2" required></textarea></div>' +
+        '<div class="mb-2"><label class="form-label">Ожидаемый результат</label><textarea class="form-control" name="step_expected[]" rows="2"></textarea></div>' +
+        '<div><label class="form-label">Скриншоты ожидаемого результата</label><input class="form-control" type="file" name="test_step_screenshot_' + (number - 1) + '[]" accept="image/png,image/jpeg,image/gif,image/webp" multiple></div></div>';
     container.appendChild(card);
     renumberSteps();
 }
-
 function removeStep(button) {
     const container = document.getElementById('steps-container');
-    if (container.querySelectorAll('.step-card').length === 1) return;
-    button.closest('.step-card').remove();
+    if (container.querySelectorAll('.step-card').length > 1) button.closest('.step-card').remove();
     renumberSteps();
 }
-
 function renumberSteps() {
-    document.querySelectorAll('#steps-container .step-card').forEach((card, index) => {
+    document.querySelectorAll('#steps-container .step-card').forEach(function(card, index) {
         card.querySelector('.step-number').textContent = index + 1;
-        const screenshotInput = card.querySelector('input[type="file"]');
-        if (screenshotInput) screenshotInput.name = 'test_step_screenshot_' + index + '[]';
+        card.querySelector('input[type="file"]').name = 'test_step_screenshot_' + index + '[]';
     });
 }
 </script>
