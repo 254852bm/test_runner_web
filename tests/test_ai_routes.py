@@ -445,3 +445,52 @@ def test_reviewed_draft_save_is_idempotent_when_form_is_submitted_twice(client, 
         assert TestCaseVersion.query.count() == 1
         assert AIDraftSave.query.count() == 1
         assert AIDraftSave.query.first().test_case_id == TestCase.query.first().id
+
+
+def test_ai_start_page_requires_login(client):
+    response = client.get("/ai/start")
+    assert response.status_code == 302
+
+
+def test_ai_start_page_shows_two_workflows_for_authenticated_user(client, app):
+    _login(client, app)
+    response = client.get("/ai/start")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Сгенерировать тест-кейс с ИИ" in html
+    assert "Сгенерировать авто-тест с ИИ" in html
+
+
+def test_ai_start_rejects_project_not_owned_by_user(client, app, monkeypatch):
+    import app.ai.routes as ai_routes
+    _login(client, app)
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
+    response = client.post("/ai/start", data={
+        "csrf_token": "test-token", "action": "test_case",
+        "project_id": str(app.config["TEST_FOREIGN_PROJECT_ID"]),
+    })
+    assert response.status_code == 404
+
+
+def test_ai_start_routes_to_owned_project(client, app, monkeypatch):
+    import app.ai.routes as ai_routes
+    _login(client, app)
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
+    response = client.post("/ai/start", data={
+        "csrf_token": "test-token", "action": "test_case",
+        "project_id": str(app.config["TEST_PROJECT_ID"]),
+    })
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(
+        f"/project/{app.config['TEST_PROJECT_ID']}/ai-draft"
+    )
+
+
+def test_ai_start_rejects_unknown_action(client, app, monkeypatch):
+    import app.ai.routes as ai_routes
+    _login(client, app)
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
+    response = client.post("/ai/start", data={
+        "csrf_token": "test-token", "action": "unknown",
+    })
+    assert response.status_code == 400
