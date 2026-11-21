@@ -189,7 +189,7 @@ document.querySelector('form').addEventListener('submit', function(event) {
         alert('Имена параметров должны быть уникальными.');
         return;
     }
-    if (rows.some(row => !/^[^\\W\\d]\\w*(?:[ -]\\w+)*$/u.test(row.querySelector('[data-role="parameter-key"]').value.trim()))) {
+    if (rows.some(row => !/^[^\W\d]\w*(?:[ -]\w+)*$/u.test(row.querySelector('[data-role="parameter-key"]').value.trim()))) {
         event.preventDefault();
         alert('Имя параметра должно начинаться с буквы и содержать только буквы, цифры, пробелы, дефисы или подчёркивания.');
         return;
