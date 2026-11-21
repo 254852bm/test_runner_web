@@ -1222,7 +1222,6 @@ def _update_inline_test_data_sets(test, form):
         db.session.flush()
     else:
         dataset.name = 'Основные параметры'
-        dataset.is_default = True
 
     ordinary_values = {}
     secret_values = {}
@@ -1274,8 +1273,6 @@ def _update_inline_test_data_sets(test, form):
         )
         db.session.add(row)
     row.name = 'Значения по умолчанию'
-    row.is_enabled = True
-    row.is_default = True
     row.position = 0
     row.values_json = ordinary_values
     row.encrypted_values_json = encrypted_values
@@ -1498,7 +1495,16 @@ def edit_test(project_id, test_id):
     )
     simple_inline_data = (
         len(data_sets) == 0 or
-        (inline_dataset is not None and len(inline_rows) <= 1 and inline_batches == 0)
+        (
+            inline_dataset is not None
+            and inline_dataset.is_default
+            and len(inline_rows) <= 1
+            and inline_batches == 0
+            and (
+                not inline_rows
+                or (inline_rows[0].is_default and inline_rows[0].is_enabled)
+            )
+        )
     )
     inline_row = inline_rows[0] if inline_rows else None
     return render_template(
