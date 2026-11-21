@@ -1044,7 +1044,7 @@ def _save_simple_test_data(test, form):
     labels = [value.strip() for value in form.getlist('data_0_column_label[]')]
     if not keys or len(keys) > 30 or len(keys) != len(labels):
         raise ValueError('Добавьте от 1 до 30 корректных параметров.')
-    if any(not re.fullmatch(r'[^\\W\\d]\\w*(?:[ -]\\w+)*', key) for key in keys):
+    if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
         raise ValueError('Имя параметра должно начинаться с буквы и содержать только буквы, цифры, пробелы, дефисы или подчёркивания.')
     if len(set(keys)) != len(keys):
         raise ValueError('Имена параметров должны быть уникальными.')
