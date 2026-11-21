@@ -33,23 +33,23 @@
                                     {% for column in inline_dataset.columns %}
                                     <tr class="parameter-row">
                                         <td>
-                                            <input type="hidden" data-role="parameter-id" value="{{ column.id }}">
-                                            <input class="form-control" data-role="parameter-key" maxlength="64" value="{{ column.key }}" required>
-                                            <input type="hidden" data-role="parameter-label" value="{{ column.label }}">
+                                            <input type="hidden" data-role="parameter-id" name="data_0_column_id[]" value="{{ column.id }}">
+                                            <input class="form-control" data-role="parameter-key" name="data_0_column_key[]" maxlength="64" value="{{ column.key }}" required>
+                                            <input type="hidden" data-role="parameter-label" name="data_0_column_label[]" value="{{ column.label }}">
                                         </td>
                                         <td>
                                             {% if column.is_secret %}
-                                            <input class="form-control" data-role="parameter-value" type="password" maxlength="10000" autocomplete="new-password" placeholder="Секрет сохранён; оставьте пустым, чтобы не менять">
+                                            <input class="form-control" data-role="parameter-value" name="data_0_row_0_value_{{ loop.index0 }}" type="password" maxlength="10000" autocomplete="new-password" placeholder="Секрет сохранён; оставьте пустым, чтобы не менять">
                                             <div class="form-check mt-1">
-                                                <input class="form-check-input" type="checkbox" data-role="parameter-clear-secret" value="1">
+                                                <input class="form-check-input" type="checkbox" data-role="parameter-clear-secret" name="data_0_row_0_clear_secret_{{ loop.index0 }}" value="1">
                                                 <label class="form-check-label small">Очистить сохранённый секрет</label>
                                             </div>
                                             {% else %}
-                                            <input class="form-control" data-role="parameter-value" type="text" maxlength="10000" value="{{ (inline_row.values_json or {}).get(column.key, '') if inline_row else '' }}" placeholder="Введите значение">
+                                            <input class="form-control" data-role="parameter-value" name="data_0_row_0_value_{{ loop.index0 }}" type="text" maxlength="10000" value="{{ (inline_row.values_json or {}).get(column.key, '') if inline_row else '' }}" placeholder="Введите значение">
                                             {% endif %}
                                         </td>
                                         <td class="text-center">
-                                            <input class="form-check-input" type="checkbox" data-role="parameter-secret" {% if column.is_secret %}checked{% endif %} aria-label="Секретное значение">
+                                            <input class="form-check-input" type="checkbox" data-role="parameter-secret" name="data_0_column_is_secret_{{ loop.index0 }}" value="1" {% if column.is_secret %}checked{% endif %} aria-label="Секретное значение">
                                         </td>
                                         <td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" data-role="remove-parameter" aria-label="Удалить параметр">×</button></td>
                                     </tr>
