@@ -11,6 +11,23 @@
     </div>
 </div>
 
+
+<section class="card mb-4" aria-labelledby="ai-tools-title">
+    <div class="card-body">
+        <h4 class="mb-1" id="ai-tools-title">ИИ-помощник</h4>
+        <p class="text-muted small">Подготовьте черновик тест-кейса или Java-автотеста. Результат можно проверить и отредактировать.</p>
+        <div class="row g-2">
+            <div class="col-md-6">
+                <a href="{{ url_for('ai.start') }}#test-case" class="btn btn-outline-primary w-100 py-3">Сгенерировать тест-кейс с ИИ</a>
+            </div>
+            <div class="col-md-6">
+                <a href="{{ url_for('ai.start') }}#automation" class="btn btn-outline-primary w-100 py-3">Сгенерировать авто-тест с ИИ</a>
+            </div>
+        </div>
+        <div class="form-text mt-2">Подключение ИИ необязательно. Возможная стоимость запроса и необходимость подтверждения будут показаны до генерации.</div>
+    </div>
+</section>
+
 <div class="row g-2 g-lg-3 mb-4 dashboard-stats">
     {% for status, label, icon in [('PASS', 'Пройдено', '✓'), ('FAIL', 'Не пройдено', '×'), ('SKIP', 'Пропущено', '–')] %}
     <div class="col-6 col-xl-3">

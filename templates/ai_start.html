@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
+    <div>
+        <h2 class="mb-1">ИИ-помощник TestRun</h2>
+        <p class="text-muted mb-0">Выберите задачу. ИИ подготовит черновик, который вы сможете проверить и отредактировать.</p>
+    </div>
+    <a href="{{ url_for('main.dashboard') }}" class="btn btn-outline-secondary">← На главную</a>
+</div>
+<div class="row g-3">
+    <div class="col-12" id="test-case">
+        <section class="card"><div class="card-body">
+            <h3 class="h5">Сгенерировать тест-кейс с ИИ</h3>
+            <p class="text-muted small">Опишите требование или функциональность — ИИ предложит предусловие, шаги и ожидаемые результаты.</p>
+            {% if projects %}
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="test_case">
+                <label class="form-label" for="ai-project">Проект</label>
+                <select class="form-select mb-3" id="ai-project" name="project_id" required>
+                    <option value="">Выберите проект</option>
+                    {% for project in projects %}<option value="{{ project.id }}">{{ project.name }}</option>{% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary">Продолжить</button>
+            </form>
+            {% else %}<div class="alert alert-info mb-0">Сначала создайте проект.</div>{% endif %}
+        </div></section>
+    </div>
+    <div class="col-12" id="automation">
+        <section class="card"><div class="card-body">
+            <h3 class="h5">Сгенерировать авто-тест с ИИ</h3>
+            <p class="text-muted small">Выберите существующий тест-кейс. Будет подготовлен редактируемый Java/JUnit 5 черновик без автоматического запуска.</p>
+            {% if test_case_options %}
+            <form method="post">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="action" value="automation">
+                <label class="form-label" for="ai-test-case">Тест-кейс</label>
+                <select class="form-select mb-3" id="ai-test-case" name="test_case_id" required>
+                    <option value="">Выберите тест-кейс</option>
+                    {% for test_case, project_name in test_case_options %}<option value="{{ test_case.id }}">{{ project_name }} — {{ test_case.title }}</option>{% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary">Продолжить</button>
+            </form>
+            {% else %}<div class="alert alert-info mb-0">Сначала создайте тест-кейс в проекте.</div>{% endif %}
+        </div></section>
+    </div>
+</div>
+<div class="alert alert-warning mt-4"><strong>Важно:</strong> облачная генерация может быть платной. Перед каждым платным запросом TestRun запросит подтверждение. Не указывайте реальные пароли, API-ключи и персональные данные.</div>
+{% endblock %}
