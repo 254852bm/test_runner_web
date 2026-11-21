@@ -719,8 +719,8 @@ def test_russian_sensitive_legacy_column_is_rejected_before_substitution(app):
 
 
 
-def test_test_creation_can_save_data_sets_and_rows_before_first_commit(app):
-    """Create a parameterized test and its data before the initial commit."""
+def test_test_creation_can_save_simple_parameters_before_first_commit(app):
+    """Create a test and its single default parameter row in one transaction."""
     with app.app_context():
         user, project, _ = _case()
         user_id, project_id = user.id, project.id
@@ -735,16 +735,10 @@ def test_test_creation_can_save_data_sets_and_rows_before_first_commit(app):
             "step_action[]": ["Enter {{login}}"],
             "step_expected[]": ["Welcome {{login}}"],
             "data_set_count": "1",
-            "data_0_name": "Основной набор",
-            "default_data_set_index": "0",
             "data_0_column_key[]": ["base_url", "login"],
             "data_0_column_label[]": ["Адрес сайта", "Логин"],
-            "data_0_row_name[]": ["Успешный вход", "Второй пользователь"],
             "data_0_row_0_value_0": "https://example.test",
             "data_0_row_0_value_1": "user1",
-            "data_0_row_1_value_0": "https://example.test",
-            "data_0_row_1_value_1": "user2",
-            "data_0_default_row_index": "1",
         },
     )
     assert response.status_code == 302
@@ -754,14 +748,17 @@ def test_test_creation_can_save_data_sets_and_rows_before_first_commit(app):
             project_id=project_id, title="Login with inline test data"
         ).one()
         dataset = TestDataSet.query.filter_by(test_case_id=test.id).one()
-        assert dataset.name == "Основной набор"
+        assert dataset.name == "Основные параметры"
         assert dataset.is_default is True
         assert [column.key for column in dataset.columns] == ["base_url", "login"]
         rows = sorted(dataset.rows, key=lambda row: row.position)
-        assert [row.name for row in rows] == ["Успешный вход", "Второй пользователь"]
-        assert rows[0].is_default is False
-        assert rows[1].is_default is True
-        assert rows[1].values_json["login"] == "user2"
+        assert len(rows) == 1
+        assert rows[0].name == "Значения по умолчанию"
+        assert rows[0].is_default is True
+        assert rows[0].values_json == {
+            "base_url": "https://example.test",
+            "login": "user1",
+        }
 
 
 def test_test_creation_without_inline_test_data_remains_supported(app):
