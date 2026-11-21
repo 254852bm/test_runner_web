@@ -1028,6 +1028,73 @@ def compare_test_versions(project_id, test_id):
     )
 
 
+def _save_simple_test_data(test, form):
+    """Save one optional key/value table as a single default data row."""
+    raw_count = (form.get('data_set_count') or '0').strip()
+    try:
+        count = int(raw_count)
+    except (TypeError, ValueError):
+        raise ValueError('Некорректные тестовые данные.')
+    if count == 0:
+        return
+    if count != 1:
+        raise ValueError('Для тест-кейса допускается одна таблица параметров.')
+
+    keys = [value.strip() for value in form.getlist('data_0_column_key[]')]
+    labels = [value.strip() for value in form.getlist('data_0_column_label[]')]
+    if not keys or len(keys) > 30 or len(keys) != len(labels):
+        raise ValueError('Добавьте от 1 до 30 корректных параметров.')
+    if any(not re.fullmatch(r'[^\\W\\d]\\w*(?:[ -]\\w+)*', key) for key in keys):
+        raise ValueError('Имя параметра должно начинаться с буквы и содержать только буквы, цифры, пробелы, дефисы или подчёркивания.')
+    if len(set(keys)) != len(keys):
+        raise ValueError('Имена параметров должны быть уникальными.')
+    if any(not label or len(label) > 120 for label in labels):
+        raise ValueError('Название параметра должно быть не длиннее 120 символов.')
+
+    secret_flags = [
+        form.get(f'data_0_column_is_secret_{index}') == '1'
+        for index in range(len(keys))
+    ]
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол|токен|секрет|ключ)'
+    if any(re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
+           for index, key in enumerate(keys)):
+        raise ValueError('Пароли, токены и ключи необходимо отметить как секретные.')
+    if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
+        raise ValueError('Секретные параметры нельзя сохранить: на сервере не настроено шифрование.')
+
+    ordinary_values = {}
+    secret_values = {}
+    for index, key in enumerate(keys):
+        value = form.get(f'data_0_row_0_value_{index}', '')
+        if len(value) > 10000:
+            raise ValueError(f'Значение параметра «{labels[index]}» превышает 10 000 символов.')
+        if secret_flags[index]:
+            if value:
+                secret_values[key] = value
+        else:
+            ordinary_values[key] = value
+
+    try:
+        encrypted_values = encrypt_secret_values(secret_values)
+    except Exception:
+        current_app.logger.warning('Could not encrypt simple test-data values')
+        raise ValueError('Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.') from None
+
+    dataset = TestDataSet(test_case_id=test.id, name='Основные параметры', is_default=True)
+    db.session.add(dataset)
+    db.session.flush()
+    for position, (key, label) in enumerate(zip(keys, labels)):
+        db.session.add(TestDataColumn(
+            dataset_id=dataset.id, key=key, label=label,
+            position=position, is_secret=secret_flags[position]
+        ))
+    db.session.add(TestDataRow(
+        dataset_id=dataset.id, name='Значения по умолчанию',
+        values_json=ordinary_values, encrypted_values_json=encrypted_values,
+        is_enabled=True, is_default=True, position=0
+    ))
+
+
 @main_bp.route('/project/<int:project_id>/create_test', methods=['GET', 'POST'])
 @login_required
 def create_test(project_id):
@@ -1059,6 +1126,7 @@ def create_test(project_id):
                         request.files.getlist(f'test_step_screenshot_{index}[]'),
                         user_id=current_user.id, test_step_id=step.id
                     ))
+                _save_simple_test_data(test, request.form)
                 create_test_version(test)
                 db.session.commit()
             except ValueError as error:
