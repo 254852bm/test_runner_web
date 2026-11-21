@@ -1313,8 +1313,6 @@ def create_test(project_id):
                         user_id=current_user.id, test_step_id=step.id
                     ))
                 _save_inline_test_data_sets(test, request.form)
-                if 'data_set_count' in request.form:
-                    _update_inline_test_data_sets(test, request.form)
                 create_test_version(test)
                 db.session.commit()
             except ValueError as error:
@@ -1454,6 +1452,8 @@ def edit_test(project_id, test_id):
                 for old_id, items in old_screenshots_by_id.items():
                     if old_id not in retained_source_ids:
                         old_screenshot_paths_to_remove.extend(upload_dir / item['stored_name'] for item in items)
+                if 'data_set_count' in request.form:
+                    _update_inline_test_data_sets(test, request.form)
                 create_test_version(test)
                 db.session.commit()
                 for old_path in old_screenshot_paths_to_remove:
