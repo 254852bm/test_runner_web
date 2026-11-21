@@ -1160,7 +1160,7 @@ def _update_inline_test_data_sets(test, form):
     ]
     if not keys or len(keys) > 30:
         raise ValueError('Добавьте от 1 до 30 параметров.')
-    if any(not re.fullmatch(r'[^\\W\\d]\\w*(?:[ -]\\w+)*', key) for key in keys):
+    if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
         raise ValueError('Имя параметра должно начинаться с буквы и содержать только буквы, цифры, пробелы, дефисы или подчёркивания.')
     if len(set(keys)) != len(keys):
         raise ValueError('Имена параметров должны быть уникальными.')
@@ -1201,7 +1201,6 @@ def _update_inline_test_data_sets(test, form):
     if len(submitted_ids) != len(keys):
         raise ValueError('Некорректный список параметров.')
 
-    old_values = dict(row.values_json or {}) if row else {}
     try:
         old_secret_values = decrypt_secret_values(row.encrypted_values_json) if row else {}
     except ValueError:
@@ -1487,9 +1486,21 @@ def edit_test(project_id, test_id):
     data_sets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
         TestDataSet.created_at.asc()
     ).all()
+    inline_dataset = data_sets[0] if len(data_sets) == 1 else None
+    inline_rows = list(inline_dataset.rows) if inline_dataset is not None else []
+    inline_batches = (
+        TestDataBatch.query.filter_by(dataset_id=inline_dataset.id).count()
+        if inline_dataset is not None else 0
+    )
+    simple_inline_data = (
+        len(data_sets) == 0 or
+        (inline_dataset is not None and len(inline_rows) <= 1 and inline_batches == 0)
+    )
+    inline_row = inline_rows[0] if inline_rows else None
     return render_template(
         'edit_test.html', project=project, test=test, steps=steps,
-        data_sets=data_sets
+        data_sets=data_sets, simple_inline_data=simple_inline_data,
+        inline_dataset=inline_dataset, inline_row=inline_row
     )
 
 
