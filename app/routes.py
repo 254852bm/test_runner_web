@@ -1029,134 +1029,91 @@ def compare_test_versions(project_id, test_id):
 
 
 def _save_inline_test_data_sets(test, form):
-    """Create optional data sets atomically with a new test case."""
+    """Save the simple parameter table as one default data set and one row."""
     raw_count = (form.get('data_set_count') or '0').strip()
     try:
         dataset_count = int(raw_count)
     except (TypeError, ValueError):
-        raise ValueError('Некорректное количество наборов тестовых данных.')
-    if dataset_count < 0 or dataset_count > 10:
-        raise ValueError('При создании теста можно добавить не более 10 наборов данных.')
+        raise ValueError('Некорректные тестовые данные.')
     if dataset_count == 0:
         return
+    if dataset_count != 1:
+        raise ValueError('Для тест-кейса допускается одна таблица параметров.')
 
-    default_dataset_raw = (form.get('default_data_set_index') or '').strip()
-    try:
-        default_dataset_index = int(default_dataset_raw) if default_dataset_raw else None
-    except ValueError:
-        raise ValueError('Некорректный выбор основного набора данных.')
-    if default_dataset_index is not None and not 0 <= default_dataset_index < dataset_count:
-        raise ValueError('Выбранный основной набор данных не существует.')
+    keys = [value.strip() for value in form.getlist('data_0_column_key[]')]
+    submitted_labels = [value.strip() for value in form.getlist('data_0_column_label[]')]
+    labels = [
+        submitted_labels[index] if index < len(submitted_labels) and submitted_labels[index] else key
+        for index, key in enumerate(keys)
+    ]
+    if not keys or len(keys) > 30:
+        raise ValueError('Добавьте от 1 до 30 параметров.')
+    if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
+        raise ValueError('Имя параметра должно начинаться с буквы и содержать только буквы, цифры, пробелы, дефисы или подчёркивания.')
+    if len(set(keys)) != len(keys):
+        raise ValueError('Имена параметров должны быть уникальными.')
+    if any(not label or len(label) > 120 for label in labels):
+        raise ValueError('Название параметра должно быть не длиннее 120 символов.')
 
     sensitive_pattern = (
         r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|'
         r'парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|'
         r'секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
     )
+    secret_flags = [
+        form.get(f'data_0_column_is_secret_{index}') == '1'
+        for index in range(len(keys))
+    ]
+    if any(
+        re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
+        for index, key in enumerate(keys)
+    ):
+        raise ValueError('Пароли, токены и ключи необходимо отметить как секретные.')
+    if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
+        raise ValueError('Секретные параметры нельзя сохранить: на сервере не настроено шифрование.')
 
-    for dataset_index in range(dataset_count):
-        prefix = f'data_{dataset_index}_'
-        name = (form.get(prefix + 'name') or '').strip()
-        keys = [value.strip() for value in form.getlist(prefix + 'column_key[]')]
-        submitted_labels = [value.strip() for value in form.getlist(prefix + 'column_label[]')]
-        labels = [
-            submitted_labels[index] if index < len(submitted_labels) and submitted_labels[index] else key
-            for index, key in enumerate(keys)
-        ]
-        secret_flags = [
-            form.get(prefix + f'column_is_secret_{index}') == '1'
-            for index in range(len(keys))
-        ]
-        if not name or len(name) > 120:
-            raise ValueError(f'Укажите название набора данных №{dataset_index + 1} (до 120 символов).')
-        if not keys or len(keys) > 30 or len(keys) != len(labels):
-            raise ValueError(f'В наборе «{name}» добавьте от 1 до 30 параметров.')
-        if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
-            raise ValueError(f'В наборе «{name}» есть некорректное имя параметра.')
-        if len(keys) != len(set(keys)):
-            raise ValueError(f'В наборе «{name}» имена параметров должны быть уникальными.')
-        if any(not label or len(label) > 120 for label in labels):
-            raise ValueError(f'Укажите подпись каждого параметра в наборе «{name}».')
-        if any(
-            re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
-            for index, key in enumerate(keys)
-        ):
-            raise ValueError(
-                f'Параметры с паролями, токенами и ключами в наборе «{name}» должны быть отмечены как секретные.'
-            )
-        if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
-            raise ValueError(
-                'Секретные параметры нельзя сохранить: на сервере не настроен TEST_DATA_ENCRYPTION_KEY.'
-            )
+    ordinary_values = {}
+    secret_values = {}
+    for index, key in enumerate(keys):
+        value = form.get(f'data_0_row_0_value_{index}', '')
+        if len(value) > 10000:
+            raise ValueError(f'Значение параметра «{labels[index]}» превышает 10 000 символов.')
+        if secret_flags[index]:
+            if value:
+                secret_values[key] = value
+        else:
+            ordinary_values[key] = value
 
-        row_names = [value.strip() for value in form.getlist(prefix + 'row_name[]')]
-        if len(row_names) > 500:
-            raise ValueError(f'В наборе «{name}» допускается не более 500 строк.')
-        if any(not row_name or len(row_name) > 120 for row_name in row_names):
-            raise ValueError(f'Укажите название каждой строки данных в наборе «{name}» (до 120 символов).')
+    try:
+        encrypted_values = encrypt_secret_values(secret_values)
+    except Exception:
+        current_app.logger.warning('Could not encrypt simple test-data secrets during test creation')
+        raise ValueError('Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.') from None
 
-        default_row_raw = (form.get(prefix + 'default_row_index') or '').strip()
-        try:
-            default_row_index = int(default_row_raw) if default_row_raw else None
-        except ValueError:
-            raise ValueError(f'Некорректный выбор строки по умолчанию в наборе «{name}».')
-        if default_row_index is not None and not 0 <= default_row_index < len(row_names):
-            raise ValueError(f'Выбранная строка по умолчанию в наборе «{name}» не существует.')
-
-        dataset = TestDataSet(
-            test_case_id=test.id,
-            name=name,
-            is_default=(dataset_index == default_dataset_index),
+    dataset = TestDataSet(test_case_id=test.id, name='Основные параметры', is_default=True)
+    db.session.add(dataset)
+    db.session.flush()
+    columns = []
+    for position, (key, label) in enumerate(zip(keys, labels)):
+        column = TestDataColumn(
+            dataset_id=dataset.id,
+            key=key,
+            label=label,
+            position=position,
+            is_secret=secret_flags[position],
         )
-        db.session.add(dataset)
-        db.session.flush()
-        columns = []
-        for position, (key, label) in enumerate(zip(keys, labels)):
-            column = TestDataColumn(
-                dataset_id=dataset.id,
-                key=key,
-                label=label,
-                position=position,
-                is_secret=secret_flags[position],
-            )
-            db.session.add(column)
-            columns.append(column)
-        db.session.flush()
-
-        for row_index, row_name in enumerate(row_names):
-            ordinary_values = {}
-            secret_values = {}
-            for column_index, column in enumerate(columns):
-                value = (form.get(
-                    prefix + f'row_{row_index}_value_{column_index}'
-                ) or '')
-                if len(value) > 10000:
-                    raise ValueError(
-                        f'Значение параметра «{column.label}» в наборе «{name}» превышает 10 000 символов.'
-                    )
-                if column.is_secret:
-                    if value:
-                        secret_values[column.key] = value
-                else:
-                    ordinary_values[column.key] = value
-            try:
-                encrypted_values = encrypt_secret_values(secret_values)
-            except Exception:
-                current_app.logger.warning(
-                    'Could not encrypt inline test-data secrets during test creation'
-                )
-                raise ValueError(
-                    'Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.'
-                ) from None
-            db.session.add(TestDataRow(
-                dataset_id=dataset.id,
-                name=row_name,
-                values_json=ordinary_values,
-                encrypted_values_json=encrypted_values,
-                is_enabled=True,
-                is_default=(row_index == default_row_index),
-                position=row_index,
-            ))
+        db.session.add(column)
+        columns.append(column)
+    db.session.flush()
+    db.session.add(TestDataRow(
+        dataset_id=dataset.id,
+        name='Значения по умолчанию',
+        values_json=ordinary_values,
+        encrypted_values_json=encrypted_values,
+        is_enabled=True,
+        is_default=True,
+        position=0,
+    ))
 
 
 @main_bp.route('/project/<int:project_id>/create_test', methods=['GET', 'POST'])
