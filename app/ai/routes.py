@@ -17,7 +17,7 @@ from flask_wtf.csrf import ValidationError, validate_csrf
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
-from app.models import AICredential, AIGenerationAttempt, AIDraftSave, Project
+from app.models import AICredential, AIGenerationAttempt, AIDraftSave, Project, TestCase
 from app.ai_credentials import AICredentialEncryptionError, decrypt_ai_credential
 from .provider import AIProviderError, YandexAIStudioConfig, YandexAIStudioProvider
 from .schemas import MAX_REQUIREMENT_LENGTH, MAX_STEPS, MAX_STEP_TEXT_LENGTH
@@ -44,6 +44,65 @@ def _owned_project(project_id):
     return project
 
 
+
+@ai_bp.route("/ai/start", methods=["GET", "POST"])
+@login_required
+def start():
+    """Select an owned project or test case before opening an AI draft workflow."""
+    projects = Project.query.filter_by(user_id=current_user.id).order_by(
+        Project.name.asc(), Project.id.asc()
+    ).all()
+    test_case_options = (
+        db.session.query(TestCase, Project.name)
+        .join(Project, TestCase.project_id == Project.id)
+        .filter(Project.user_id == current_user.id)
+        .order_by(Project.name.asc(), TestCase.title.asc(), TestCase.id.asc())
+        .all()
+    )
+
+    if request.method == "POST":
+        try:
+            validate_csrf(request.form.get("csrf_token"))
+        except ValidationError:
+            abort(400, description="Недействительный CSRF-токен")
+
+        action = request.form.get("action", "")
+        if action == "test_case":
+            try:
+                project_id = int(request.form.get("project_id", ""))
+            except (TypeError, ValueError):
+                project_id = None
+            project = Project.query.filter_by(
+                id=project_id, user_id=current_user.id
+            ).first() if project_id is not None else None
+            if project is None:
+                abort(404)
+            return redirect(url_for("ai.test_case_draft", project_id=project.id))
+
+        if action == "automation":
+            try:
+                test_case_id = int(request.form.get("test_case_id", ""))
+            except (TypeError, ValueError):
+                test_case_id = None
+            selected = (
+                db.session.query(TestCase, Project)
+                .join(Project, TestCase.project_id == Project.id)
+                .filter(TestCase.id == test_case_id, Project.user_id == current_user.id)
+                .first() if test_case_id is not None else None
+            )
+            if selected is None:
+                abort(404)
+            test_case, project = selected
+            return redirect(url_for(
+                "automation_ai.automation_test_draft",
+                project_id=project.id, test_id=test_case.id,
+            ))
+
+        abort(400, description="Неизвестное действие.")
+
+    return render_template(
+        "ai_start.html", projects=projects, test_case_options=test_case_options
+    )
 
 def _generation_limit():
     try:
