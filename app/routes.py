@@ -1202,6 +1202,7 @@ def _update_inline_test_data_sets(test, form):
         raise ValueError('Некорректный список параметров.')
 
     retained_ids = {column_id for column_id in submitted_ids if column_id is not None}
+    original_column_keys = {column.id: column.key for column in existing_columns}
     # Move current keys out of the unique namespace before applying renames,
     # allowing safe key swaps and replacement of a removed key in one request.
     for existing_column in existing_columns:
@@ -1235,7 +1236,7 @@ def _update_inline_test_data_sets(test, form):
         if column is not None:
             if bool(column.is_secret) != bool(is_secret):
                 raise ValueError('Нельзя менять тип уже существующего параметра (обычный/секретный). Удалите его и создайте новый.')
-            old_key = column.key
+            old_key = original_column_keys[column.id]
             column.key = key
             column.label = label
             column.position = index
