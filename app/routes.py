@@ -1028,6 +1028,94 @@ def compare_test_versions(project_id, test_id):
     )
 
 
+def _save_inline_test_data_sets(test, form):
+    """Save the simple parameter table as one default data set and one row."""
+    raw_count = (form.get('data_set_count') or '0').strip()
+    try:
+        dataset_count = int(raw_count)
+    except (TypeError, ValueError):
+        raise ValueError('Некорректные тестовые данные.')
+    if dataset_count == 0:
+        return
+    if dataset_count != 1:
+        raise ValueError('Для тест-кейса допускается одна таблица параметров.')
+
+    keys = [value.strip() for value in form.getlist('data_0_column_key[]')]
+    submitted_labels = [value.strip() for value in form.getlist('data_0_column_label[]')]
+    labels = [
+        submitted_labels[index] if index < len(submitted_labels) and submitted_labels[index] else key
+        for index, key in enumerate(keys)
+    ]
+    if not keys or len(keys) > 30:
+        raise ValueError('Добавьте от 1 до 30 параметров.')
+    if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
+        raise ValueError('Имя параметра должно начинаться с буквы и содержать только буквы, цифры, пробелы, дефисы или подчёркивания.')
+    if len(set(keys)) != len(keys):
+        raise ValueError('Имена параметров должны быть уникальными.')
+    if any(not label or len(label) > 120 for label in labels):
+        raise ValueError('Название параметра должно быть не длиннее 120 символов.')
+
+    sensitive_pattern = (
+        r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|'
+        r'парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|'
+        r'секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
+    )
+    secret_flags = [
+        form.get(f'data_0_column_is_secret_{index}') == '1'
+        for index in range(len(keys))
+    ]
+    if any(
+        re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
+        for index, key in enumerate(keys)
+    ):
+        raise ValueError('Пароли, токены и ключи необходимо отметить как секретные.')
+    if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
+        raise ValueError('Секретные параметры нельзя сохранить: на сервере не настроено шифрование.')
+
+    ordinary_values = {}
+    secret_values = {}
+    for index, key in enumerate(keys):
+        value = form.get(f'data_0_row_0_value_{index}', '')
+        if len(value) > 10000:
+            raise ValueError(f'Значение параметра «{labels[index]}» превышает 10 000 символов.')
+        if secret_flags[index]:
+            if value:
+                secret_values[key] = value
+        else:
+            ordinary_values[key] = value
+
+    try:
+        encrypted_values = encrypt_secret_values(secret_values)
+    except Exception:
+        current_app.logger.warning('Could not encrypt simple test-data secrets during test creation')
+        raise ValueError('Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.') from None
+
+    dataset = TestDataSet(test_case_id=test.id, name='Основные параметры', is_default=True)
+    db.session.add(dataset)
+    db.session.flush()
+    columns = []
+    for position, (key, label) in enumerate(zip(keys, labels)):
+        column = TestDataColumn(
+            dataset_id=dataset.id,
+            key=key,
+            label=label,
+            position=position,
+            is_secret=secret_flags[position],
+        )
+        db.session.add(column)
+        columns.append(column)
+    db.session.flush()
+    db.session.add(TestDataRow(
+        dataset_id=dataset.id,
+        name='Значения по умолчанию',
+        values_json=ordinary_values,
+        encrypted_values_json=encrypted_values,
+        is_enabled=True,
+        is_default=True,
+        position=0,
+    ))
+
+
 @main_bp.route('/project/<int:project_id>/create_test', methods=['GET', 'POST'])
 @login_required
 def create_test(project_id):
@@ -1059,6 +1147,7 @@ def create_test(project_id):
                         request.files.getlist(f'test_step_screenshot_{index}[]'),
                         user_id=current_user.id, test_step_id=step.id
                     ))
+                _save_inline_test_data_sets(test, request.form)
                 create_test_version(test)
                 db.session.commit()
             except ValueError as error:
@@ -1427,16 +1516,45 @@ def run_tests(project_id):
             return redirect(url_for('main.run_stats', project_id=project.id))
         data_row_id = batch_row_ids[data_index]
 
-    if bool(data_set_id) != bool(data_row_id) or ((data_set_id or data_row_id) and not selected_test_id):
-        flash('Для запуска с тестовыми данными выберите тест-кейс, набор и строку.', 'danger')
-        return redirect(url_for('main.project_detail', project_id=project.id))
     if selected_test_id:
-        selected_test = TestCase.query.filter_by(id=selected_test_id, project_id=project.id).first_or_404()
+        selected_test = TestCase.query.filter_by(
+            id=selected_test_id, project_id=project.id
+        ).first_or_404()
+        # If the user marked a data set as default while creating the test,
+        # apply its default row when they start this test directly.
+        if not data_set_id and not data_row_id:
+            default_dataset = TestDataSet.query.filter_by(
+                test_case_id=selected_test.id, is_default=True
+            ).order_by(TestDataSet.id.asc()).first()
+            if default_dataset:
+                default_row = TestDataRow.query.filter_by(
+                    dataset_id=default_dataset.id, is_enabled=True
+                ).order_by(
+                    TestDataRow.is_default.desc(),
+                    TestDataRow.position.asc(),
+                    TestDataRow.id.asc()
+                ).first()
+                if default_row is None:
+                    flash(
+                        'Для основного набора ещё не добавлена активная строка тестовых данных.',
+                        'warning'
+                    )
+                    return redirect(url_for(
+                        'main.test_data_sets',
+                        project_id=project.id,
+                        test_id=selected_test.id
+                    ))
+                data_set_id = default_dataset.id
+                data_row_id = default_row.id
         tests = [selected_test]
         single_test = True
     else:
         tests = TestCase.query.filter_by(project_id=project.id).all()
         single_test = False
+
+    if bool(data_set_id) != bool(data_row_id) or ((data_set_id or data_row_id) and not selected_test_id):
+        flash('Для запуска с тестовыми данными выберите тест-кейс, набор и строку.', 'danger')
+        return redirect(url_for('main.project_detail', project_id=project.id))
 
     if not tests:
         flash('В этом проекте нет тестов для прогона', 'warning')
