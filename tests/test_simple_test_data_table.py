@@ -300,6 +300,7 @@ def test_edit_test_rejects_complex_legacy_data_without_mutating_it(app):
         db.session.add_all([column, *rows])
         db.session.commit()
         dataset_id = dataset.id
+        column_id = column.id
 
     client = app.test_client()
     _login(client, user_id)
@@ -314,7 +315,7 @@ def test_edit_test_rejects_complex_legacy_data_without_mutating_it(app):
         "step_action[]": ["Изменённое действие"],
         "step_expected[]": ["Ожидаемый результат"],
         "data_set_count": "1",
-        "data_0_column_id[]": [str(column.id)],
+        "data_0_column_id[]": [str(column_id)],
         "data_0_column_key[]": ["login"],
         "data_0_column_label[]": ["Login"],
         "data_0_column_is_secret_0": "0",
