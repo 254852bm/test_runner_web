@@ -154,7 +154,7 @@ function updateParameters() {
         secret.name = 'data_0_column_is_secret_' + index;
         secret.value = '1';
         value.name = 'data_0_row_0_value_' + index;
-        if (id) id.name = 'data_0_column_id[]';
+        id.name = 'data_0_column_id[]';
         if (clear) clear.name = 'data_0_row_0_clear_secret_' + index;
         value.type = secret.checked ? 'password' : 'text';
         value.autocomplete = secret.checked ? 'new-password' : 'off';
@@ -163,7 +163,7 @@ function updateParameters() {
 function addParameter() {
     const row = document.createElement('tr');
     row.className = 'parameter-row';
-    row.innerHTML = '<td><input class="form-control" data-role="parameter-key" maxlength="64" placeholder="Например, login" required><input type="hidden" data-role="parameter-label"></td>' +
+    row.innerHTML = '<td><input class="form-control" data-role="parameter-key" maxlength="64" placeholder="Например, login" required><input type="hidden" data-role="parameter-label"><input type="hidden" data-role="parameter-id" value=""></td>' +
         '<td><input class="form-control" data-role="parameter-value" maxlength="10000" placeholder="Введите значение"></td>' +
         '<td class="text-center"><input class="form-check-input" type="checkbox" data-role="parameter-secret" aria-label="Секретное значение"></td>' +
         '<td class="text-end"><button type="button" class="btn btn-outline-danger btn-sm" data-role="remove-parameter" aria-label="Удалить параметр">×</button></td>';
