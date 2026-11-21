@@ -1142,6 +1142,10 @@ def _update_inline_test_data_sets(test, form):
         if len(rows) > 1 or batches:
             raise ValueError('У этого тест-кейса есть несколько вариантов или пакетный запуск. Измените данные через «Управлять наборами данных», чтобы сохранить все варианты.')
         row = rows[0] if rows else None
+        if not dataset.is_default or (
+            row is not None and (not row.is_default or not row.is_enabled)
+        ):
+            raise ValueError('Этот набор или строка не отмечены как активные значения по умолчанию. Измените их через «Управлять наборами данных».')
 
     if dataset_count == 0:
         if dataset is None:
