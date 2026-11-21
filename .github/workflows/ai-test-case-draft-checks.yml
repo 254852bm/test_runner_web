@@ -3,6 +3,7 @@ name: AI test case draft checks
 on:
   pull_request:
     branches:
+      - fix/simple-test-data-default-display
       - feature/test-data-parameterization
       - feature/stage4-test-management
       - feature/ai-test-case-drafts
