@@ -11,6 +11,7 @@ on:
 
   push:
     branches:
+      - feature/edit-simple-test-data-table
       - integration/ai-provider-mvp
       - feature/ai-automation-test-design
       - integration/all-features-test
