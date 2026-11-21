@@ -494,3 +494,48 @@ def test_ai_start_rejects_unknown_action(client, app, monkeypatch):
         "csrf_token": "test-token", "action": "unknown",
     })
     assert response.status_code == 400
+
+
+def test_ai_start_routes_to_owned_test_case(client, app, monkeypatch):
+    from app.models import TestCase
+    import app.ai.routes as ai_routes
+    _login(client, app)
+    with app.app_context():
+        test_case = TestCase(
+            title="Owned test", steps="Открыть страницу",
+            expected_result="Страница открыта",
+            project_id=app.config["TEST_PROJECT_ID"],
+        )
+        db.session.add(test_case)
+        db.session.commit()
+        test_case_id = test_case.id
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
+    response = client.post("/ai/start", data={
+        "csrf_token": "test-token", "action": "automation",
+        "test_case_id": str(test_case_id),
+    })
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith(
+        f"/project/{app.config['TEST_PROJECT_ID']}/test/{test_case_id}/automation-draft"
+    )
+
+
+def test_ai_start_rejects_test_case_from_foreign_project(client, app, monkeypatch):
+    from app.models import TestCase
+    import app.ai.routes as ai_routes
+    _login(client, app)
+    with app.app_context():
+        test_case = TestCase(
+            title="Foreign test", steps="Открыть страницу",
+            expected_result="Страница открыта",
+            project_id=app.config["TEST_FOREIGN_PROJECT_ID"],
+        )
+        db.session.add(test_case)
+        db.session.commit()
+        test_case_id = test_case.id
+    monkeypatch.setattr(ai_routes, "validate_csrf", lambda token: None)
+    response = client.post("/ai/start", data={
+        "csrf_token": "test-token", "action": "automation",
+        "test_case_id": str(test_case_id),
+    })
+    assert response.status_code == 404
