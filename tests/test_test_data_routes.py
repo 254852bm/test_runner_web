@@ -914,3 +914,39 @@ def test_inline_test_creation_rolls_back_case_when_data_set_is_invalid(app):
                 db.session.query(TestCase.id).filter_by(title="Must roll back")
             )
         ).count() == 0
+
+
+
+def test_test_detail_displays_marked_default_row_not_first_active_row(app):
+    with app.app_context():
+        user, project, case = _case()
+        dataset = TestDataSet(
+            test_case_id=case.id, name="Основные параметры", is_default=True
+        )
+        db.session.add(dataset)
+        db.session.flush()
+        column = TestDataColumn(
+            dataset_id=dataset.id, key="login", label="Логин", position=0
+        )
+        first_row = TestDataRow(
+            dataset_id=dataset.id, name="Первый вариант",
+            values_json={"login": "first-user"}, is_enabled=True,
+            is_default=False, position=0,
+        )
+        default_row = TestDataRow(
+            dataset_id=dataset.id, name="Значения по умолчанию",
+            values_json={"login": "default-user"}, is_enabled=True,
+            is_default=True, position=1,
+        )
+        db.session.add_all([column, first_row, default_row])
+        db.session.commit()
+        user_id, project_id, case_id = user.id, project.id, case.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.get(f"/project/{project_id}/test/{case_id}")
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "default-user" in html
+    assert "first-user" in html
+    assert "Значения по умолчанию" in html
