@@ -3,6 +3,7 @@ name: Screenshot attachment checks
 on:
   pull_request:
     branches:
+      - fix/simple-test-data-default-display
       - feature/stage4-test-management
       - feature/test-data-parameterization
       - integration/parameterization-integrity
