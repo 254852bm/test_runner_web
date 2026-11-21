@@ -1201,6 +1201,15 @@ def _update_inline_test_data_sets(test, form):
     if len(submitted_ids) != len(keys):
         raise ValueError('Некорректный список параметров.')
 
+    retained_ids = {column_id for column_id in submitted_ids if column_id is not None}
+    # Move current keys out of the unique namespace before applying renames,
+    # allowing safe key swaps and replacement of a removed key in one request.
+    for existing_column in existing_columns:
+        existing_column.key = f'__pending_edit_{existing_column.id}__'
+        if existing_column.id not in retained_ids:
+            db.session.delete(existing_column)
+    db.session.flush()
+
     try:
         old_secret_values = decrypt_secret_values(row.encrypted_values_json) if row else {}
     except ValueError:
@@ -1216,7 +1225,6 @@ def _update_inline_test_data_sets(test, form):
 
     ordinary_values = {}
     secret_values = {}
-    retained_ids = set()
     for index, (key, label, is_secret) in enumerate(zip(keys, labels, secret_flags)):
         column_id = submitted_ids[index]
         value = form.get(f'data_0_row_0_value_{index}', '')
@@ -1228,7 +1236,6 @@ def _update_inline_test_data_sets(test, form):
             if bool(column.is_secret) != bool(is_secret):
                 raise ValueError('Нельзя менять тип уже существующего параметра (обычный/секретный). Удалите его и создайте новый.')
             old_key = column.key
-            retained_ids.add(column.id)
             column.key = key
             column.label = label
             column.position = index
@@ -1252,10 +1259,6 @@ def _update_inline_test_data_sets(test, form):
                     secret_values[key] = value
             else:
                 ordinary_values[key] = value
-
-    for column in existing_columns:
-        if column.id not in retained_ids:
-            db.session.delete(column)
 
     try:
         encrypted_values = encrypt_secret_values(secret_values)
