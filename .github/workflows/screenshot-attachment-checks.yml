@@ -3,6 +3,7 @@ name: Screenshot attachment checks
 on:
   pull_request:
     branches:
+      - feature/edit-simple-test-data-table
       - feature/stage4-test-management
       - feature/test-data-parameterization
       - integration/parameterization-integrity
