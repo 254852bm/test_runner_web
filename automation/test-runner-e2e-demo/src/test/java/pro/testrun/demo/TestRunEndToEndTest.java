@@ -142,61 +142,36 @@ class TestRunEndToEndTest {
         attachScreenshot("Создан демонстрационный проект");
     }
 
-    @Step("Создать тест-кейс с набором параметров и строкой по умолчанию")
+    @Step("Создать тест-кейс через согласованную компактную форму с параметрами")
     private void createParameterizedTestCase() {
         clickLink("+ Добавить тест");
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("title"))).sendKeys(testTitle);
-        driver.findElement(By.id("precondition")).sendKeys("Подготовить тестовую среду {{base_url}}");
+        driver.findElement(By.id("precondition"))
+            .sendKeys("Подготовить тестовую среду {{base_url}}");
 
-        driver.findElement(By.xpath("//button[contains(normalize-space(.),'Добавить набор данных')]")).click();
-        WebElement dataSet = wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector(".data-set-card")));
-        dataSet.findElement(By.cssSelector("[data-role='dataset-name']")).sendKeys("Основной набор");
-        List<WebElement> columns = dataSet.findElements(By.cssSelector(".data-column"));
-        columns.get(0).findElement(By.cssSelector("[data-role='column-key']")).sendKeys("base_url");
-        columns.get(0).findElement(By.cssSelector("[data-role='column-label']")).sendKeys("Адрес TestRun");
-        dataSet.findElement(By.xpath(".//button[contains(normalize-space(.),'Добавить параметр')]")).click();
-        columns = dataSet.findElements(By.cssSelector(".data-column"));
-        columns.get(1).findElement(By.cssSelector("[data-role='column-key']")).sendKeys("login");
-        columns.get(1).findElement(By.cssSelector("[data-role='column-label']")).sendKeys("Логин");
+        driver.findElement(By.id("add-parameter")).click();
+        List<WebElement> rows = driver.findElements(By.cssSelector("#parameters-body tr.parameter-row"));
+        assertEquals(1, rows.size(), "Компактная форма должна добавить первую строку параметра");
+        rows.get(0).findElement(By.cssSelector("[data-role='parameter-key']")).sendKeys("base_url");
+        rows.get(0).findElement(By.cssSelector("[data-role='parameter-value']")).sendKeys(baseUrl);
 
-        dataSet.findElement(By.xpath(".//button[contains(normalize-space(.),'Добавить строку')]")).click();
-        List<WebElement> primaryRows = dataSet.findElements(By.cssSelector(".data-row"));
-        WebElement alternateRow = primaryRows.get(0);
-        alternateRow.findElement(By.cssSelector("[data-role='row-name']")).sendKeys("Альтернативная строка");
-        List<WebElement> alternateValues = alternateRow.findElements(By.cssSelector(".data-value"));
-        alternateValues.get(0).sendKeys(baseUrl);
-        alternateValues.get(1).sendKeys("alternate-user");
+        driver.findElement(By.id("add-parameter")).click();
+        rows = driver.findElements(By.cssSelector("#parameters-body tr.parameter-row"));
+        assertEquals(2, rows.size(), "Можно добавить несколько параметров в компактную таблицу");
+        rows.get(1).findElement(By.cssSelector("[data-role='parameter-key']")).sendKeys("login");
+        rows.get(1).findElement(By.cssSelector("[data-role='parameter-value']")).sendKeys("demo-user");
 
-        dataSet.findElement(By.xpath(".//button[contains(normalize-space(.),'Добавить строку')]")).click();
-        primaryRows = dataSet.findElements(By.cssSelector(".data-row"));
-        WebElement dataRow = primaryRows.get(1);
-        dataRow.findElement(By.cssSelector("[data-role='row-name']")).sendKeys("Демонстрационная строка");
-        List<WebElement> values = dataRow.findElements(By.cssSelector(".data-value"));
-        values.get(0).sendKeys(baseUrl);
-        values.get(1).sendKeys("demo-user");
-        dataSet.findElement(By.cssSelector("[data-role='dataset-default']")).click();
-        dataRow.findElement(By.cssSelector("[data-role='row-default']")).click();
+        driver.findElement(By.cssSelector("textarea[name='step_action[]']"))
+            .sendKeys("Выполнить демонстрационную проверку для {{login}} на {{base_url}}");
+        driver.findElement(By.cssSelector("textarea[name='step_expected[]']"))
+            .sendKeys("Тест-кейс доступен для выполнения");
 
-        driver.findElement(By.xpath("//button[contains(normalize-space(.),'Добавить набор данных')]")).click();
-        List<WebElement> dataSets = driver.findElements(By.cssSelector(".data-set-card"));
-        assertEquals(2, dataSets.size(), "Форма должна поддерживать несколько наборов данных");
-        WebElement secondarySet = dataSets.get(1);
-        secondarySet.findElement(By.cssSelector("[data-role='dataset-name']")).sendKeys("Дополнительный набор");
-        WebElement secondaryColumn = secondarySet.findElement(By.cssSelector(".data-column"));
-        secondaryColumn.findElement(By.cssSelector("[data-role='column-key']")).sendKeys("locale");
-        secondaryColumn.findElement(By.cssSelector("[data-role='column-label']")).sendKeys("Язык");
-        secondarySet.findElement(By.xpath(".//button[contains(normalize-space(.),'Добавить строку')]")).click();
-        WebElement secondaryRow = secondarySet.findElement(By.cssSelector(".data-row"));
-        secondaryRow.findElement(By.cssSelector("[data-role='row-name']")).sendKeys("Русская локаль");
-        secondaryRow.findElement(By.cssSelector(".data-value")).sendKeys("ru-RU");
-        secondaryRow.findElement(By.cssSelector("[data-role='row-default']")).click();
-
-        driver.findElement(By.cssSelector("textarea[name='step_action[]']")).sendKeys("Выполнить демонстрационную проверку для {{login}}");
-        driver.findElement(By.cssSelector("textarea[name='step_expected[]']")).sendKeys("Тест-кейс доступен для выполнения");
+        assertEquals("1", driver.findElement(By.id("data-set-count")).getAttribute("value"),
+            "После добавления параметров должен отправляться один набор данных");
         driver.findElement(By.xpath("//button[contains(normalize-space(.),'Сохранить тест-кейс')]")).click();
         wait.until(d -> d.getCurrentUrl().contains("/project/") && !d.getCurrentUrl().contains("/create_test"));
         assertTrue(driver.getPageSource().contains(testTitle), "Новый тест-кейс должен появиться в проекте");
-        attachScreenshot("Создан тест-кейс с параметрами");
+        attachScreenshot("Создан тест-кейс через согласованную компактную форму");
     }
 
     @Step("Проверить сохранённый тест-кейс и его параметры")
@@ -207,11 +182,11 @@ class TestRunEndToEndTest {
         testItem.findElement(By.xpath(".//a[normalize-space()='Открыть']")).click();
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//*[contains(normalize-space(.),'" + testTitle + "')]")));
         String page = driver.getPageSource();
+        assertTrue(page.contains("Основные параметры"), "Компактная форма должна сохранить основной набор");
         assertTrue(page.contains("base_url"), "Переменная base_url должна сохраниться");
-        assertTrue(page.contains("demo-user"), "Значение строки по умолчанию должно сохраниться");
-        assertTrue(page.contains("alternate-user"), "Дополнительная строка первого набора должна сохраниться");
-        assertTrue(page.contains("Дополнительный набор"), "Второй набор данных должен сохраниться");
-        assertTrue(page.contains("ru-RU"), "Значение второго набора должно сохраниться");
+        assertTrue(page.contains("demo-user"), "Значение параметра login должно сохраниться");
+        assertTrue(page.contains(baseUrl), "Значение параметра base_url должно сохраниться");
+        assertTrue(page.contains("Значения по умолчанию"), "Строка по умолчанию должна сохраниться");
         attachScreenshot("Сохранённый тест-кейс и параметры");
     }
 
@@ -219,12 +194,12 @@ class TestRunEndToEndTest {
     private void executeManualRun() {
         driver.findElement(By.xpath("//a[contains(normalize-space(.),'Запустить этот тест')]")).click();
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("select[name='step_status[]']")));
-        assertTrue(driver.getPageSource().contains("Основной набор"),
-            "При запуске должен применяться набор данных по умолчанию");
-        assertTrue(driver.getPageSource().contains("Демонстрационная строка"),
+        assertTrue(driver.getPageSource().contains("Основные параметры"),
+            "При запуске должен применяться основной набор из компактной формы");
+        assertTrue(driver.getPageSource().contains("Значения по умолчанию"),
             "При запуске должна применяться строка по умолчанию");
-        assertTrue(driver.getPageSource().contains("Выполнить демонстрационную проверку для demo-user"),
-            "Параметр из выбранной строки должен подставиться в действие шага");
+        assertTrue(driver.getPageSource().contains("Выполнить демонстрационную проверку для demo-user на " + baseUrl),
+            "Параметры login и base_url должны подставиться в действие шага");
         List<WebElement> statuses = driver.findElements(By.cssSelector("select[name='step_status[]']"));
         assertFalse(statuses.isEmpty(), "В прогоне должен быть хотя бы один шаг");
         for (WebElement status : statuses) {
