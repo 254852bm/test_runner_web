@@ -1,0 +1,38 @@
+name: Java E2E demo build
+
+on:
+  pull_request:
+    branches:
+      - integration/release-candidate-2026-11
+    paths:
+      - "automation/test-runner-e2e-demo/**"
+      - ".github/workflows/java-e2e-demo.yml"
+  push:
+    branches:
+      - automation/test-runner-e2e-demo-release
+    paths:
+      - "automation/test-runner-e2e-demo/**"
+      - ".github/workflows/java-e2e-demo.yml"
+
+jobs:
+  compile-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+      - name: Compile and run safe tests
+        working-directory: automation/test-runner-e2e-demo
+        run: gradle test --no-daemon
+      - name: Upload JUnit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-e2e-demo-test-report
+          path: automation/test-runner-e2e-demo/build/reports/tests/test/
+          if-no-files-found: ignore
