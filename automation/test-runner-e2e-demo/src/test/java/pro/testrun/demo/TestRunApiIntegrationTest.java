@@ -24,6 +24,7 @@ class TestRunApiIntegrationTest {
         .build();
 
     @Test
+    @EnabledIfEnvironmentVariable(named = "TESTRUN_BASE_URL", matches = ".+")
     @EnabledIfEnvironmentVariable(named = "TESTRUN_API_TEST_ENABLED", matches = "true")
     @EnabledIfEnvironmentVariable(named = "TESTRUN_ENVIRONMENT", matches = "isolated-test")
     @EnabledIfEnvironmentVariable(named = "TESTRUN_API_TOKEN", matches = ".+")
@@ -46,6 +47,8 @@ class TestRunApiIntegrationTest {
         HttpResponse<String> rowsResponse = HTTP.send(rowsRequest, HttpResponse.BodyHandlers.ofString());
         assertEquals(200, rowsResponse.statusCode(), "API чтения строк должна вернуть HTTP 200");
         JsonNode root = JSON.readTree(rowsResponse.body());
+        assertEquals(testCaseId, root.path("test_case_id").asInt(),
+            "Выбранный набор данных должен принадлежать указанному тест-кейсу");
         JsonNode rows = root.path("rows");
         assertTrue(rows.isArray() && !rows.isEmpty(), "В наборе должна быть хотя бы одна активная строка");
 
