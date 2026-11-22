@@ -5,7 +5,7 @@ Do not point any command in this document at the production database.
 
 ## 1. Before changing the test copy
 
-- Confirm the checkout is on `integration/parameterization-integrity` (the integrated test branch containing the parameterization feature and its integrity fixes).
+- Confirm the checkout is on `integration/release-candidate-2026-11` (the isolated integration candidate).
 - Confirm the configured SQLite path belongs to the test copy, not production.
 - Make a separate SQLite backup of the test database and verify it with `PRAGMA integrity_check`.
 - Keep the test copy's current branch/commit and backup path so it can be restored.
@@ -47,27 +47,7 @@ Add the generated value to the test copy's environment configuration as
 or paste it into an issue or chat. Keep a secure backup of the key: encrypted
 values cannot be recovered if the key is lost.
 
-The key is independent from Flask's `SECRET_KEY`.
-
-## 4. Prepare only the test database
-
-Run the migration with the exact test database path:
-
-```bash
-python scripts/add_test_data_encryption_columns.py --database /absolute/path/to/test/instance/test_runner.db
-```
-
-The script refuses to create a missing database. It checks the base application
-tables, creates only the missing test-data feature tables, and adds the encrypted
-payload columns and per-token secret permission when absent.
-
-Then verify SQLite integrity:
-
-```bash
-sqlite3 /absolute/path/to/test/instance/test_runner.db "PRAGMA integrity_check;"
-```
-
-Expected result: `ok`.
+The key is independent from Flask's `SECRET_KEY`. If testing saved AI-provider credentials, configure a separate `AI_CREDENTIAL_ENCRYPTION_KEY` as described in `docs/ai-credential-vault.md`; never reuse either key.
 
 ## 5. Manual UI checks
 
