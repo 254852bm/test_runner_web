@@ -9,7 +9,7 @@ on:
       - ".github/workflows/java-e2e-demo.yml"
   push:
     branches:
-      - automation/test-runner-e2e-demo-release
+      - 'automation/test-runner-e2e-demo-*'
     paths:
       - "automation/test-runner-e2e-demo/**"
       - ".github/workflows/java-e2e-demo.yml"
