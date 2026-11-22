@@ -44,13 +44,13 @@
         {% for project, test_count in pagination.items %}
             <tr>
                 <td class="project-name">
-                    <a href="{{ url_for('main.project_detail', project_id=project.id) }}"
+                    <a href="{{ url_for('main.project_detail', project_id=project.id, ai_action=request.args.get('ai_action')) if request.args.get('ai_action') else url_for('main.project_detail', project_id=project.id) }}"
                        class="text-decoration-none fw-semibold">{{ project.name }}</a>
                 </td>
                 <td><span class="badge text-bg-secondary">{{ test_count }}</span></td>
                 <td>
                     <div class="project-row-actions">
-                        <a href="{{ url_for('main.project_detail', project_id=project.id) }}"
+                        <a href="{{ url_for('main.project_detail', project_id=project.id, ai_action=request.args.get('ai_action')) if request.args.get('ai_action') else url_for('main.project_detail', project_id=project.id) }}"
                            class="btn btn-sm btn-outline-primary">Открыть</a>
                         <a href="{{ url_for('main.run_tests', project_id=project.id) }}"
                            class="btn btn-sm btn-outline-success">Запустить</a>
