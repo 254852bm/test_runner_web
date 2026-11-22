@@ -943,3 +943,150 @@ html[data-theme="dark"] .profile-project-list .list-group-item:hover {
         padding: 1rem !important;
     }
 }
+
+
+/* ===== Calm green identity and restrained AI shortcuts ===== */
+:root {
+    --app-accent: #6f9b7b;
+    --app-accent-dark: #527d60;
+    --app-accent-pale: #e7f1e9;
+    --app-accent-soft: #c9ddce;
+}
+html[data-theme="dark"] {
+    --app-accent: #86ad91;
+    --app-accent-dark: #a5c8ad;
+    --app-accent-pale: #26372c;
+    --app-accent-soft: #3b5543;
+}
+.btn-primary,
+.btn-primary:focus {
+    --bs-btn-bg: var(--app-accent);
+    --bs-btn-border-color: var(--app-accent);
+    --bs-btn-hover-bg: var(--app-accent-dark);
+    --bs-btn-hover-border-color: var(--app-accent-dark);
+    --bs-btn-active-bg: var(--app-accent-dark);
+    --bs-btn-active-border-color: var(--app-accent-dark);
+    --bs-btn-disabled-bg: var(--app-accent);
+    --bs-btn-disabled-border-color: var(--app-accent);
+}
+.btn-outline-primary {
+    --bs-btn-color: var(--app-accent-dark);
+    --bs-btn-border-color: var(--app-accent);
+    --bs-btn-hover-bg: var(--app-accent);
+    --bs-btn-hover-border-color: var(--app-accent);
+    --bs-btn-active-bg: var(--app-accent-dark);
+    --bs-btn-active-border-color: var(--app-accent-dark);
+}
+html[data-theme="dark"] .btn-outline-primary {
+    --bs-btn-color: #b6d5bd;
+    --bs-btn-border-color: #86ad91;
+    --bs-btn-hover-bg: #527d60;
+    --bs-btn-hover-border-color: #527d60;
+    --bs-btn-hover-color: #fff;
+}
+a:not(.btn):not(.nav-link) {
+    --bs-link-color-rgb: 82, 125, 96;
+}
+.sidebar-nav .nav-link.active {
+    background-color: var(--app-accent);
+}
+.documentation-nav .list-group-item.active {
+    background-color: var(--app-accent);
+    border-color: var(--app-accent);
+}
+.dashboard-stats .dashboard-stat-card--active {
+    border-color: var(--app-accent);
+    box-shadow: 0 0 0 1px rgba(111, 155, 123, 0.18);
+}
+.dashboard-stat-card--total .dashboard-stat-value,
+.dashboard-stat-card--total .dashboard-stat-icon {
+    color: var(--app-accent-dark);
+}
+.project-test-count {
+    background: var(--app-accent-pale);
+    color: var(--app-accent-dark);
+}
+html[data-theme="dark"] .project-test-count {
+    background: rgba(134, 173, 145, 0.18);
+    color: #b6d5bd;
+}
+.app-navbar-start--dashboard {
+    gap: 0.8rem;
+}
+.navbar-ai-links {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    min-width: 0;
+    padding: 0.3rem 0.45rem;
+    border: 1px solid rgba(201, 221, 206, 0.32);
+    border-radius: 0.65rem;
+    background: rgba(231, 241, 233, 0.09);
+}
+.navbar-ai-label {
+    color: #d8e9dc;
+    font-size: 0.78rem;
+    font-weight: 650;
+    white-space: nowrap;
+    padding: 0 0.25rem;
+}
+.navbar-ai-label span {
+    color: #a9cfb2;
+}
+.navbar-ai-links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: #f2f7f3;
+    text-decoration: none;
+    font-size: 0.8rem;
+    line-height: 1.25;
+    white-space: nowrap;
+    padding: 0.38rem 0.55rem;
+    border: 1px solid rgba(201, 221, 206, 0.35);
+    border-radius: 0.45rem;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.navbar-ai-links a:hover,
+.navbar-ai-links a:focus-visible {
+    color: #fff;
+    background: rgba(111, 155, 123, 0.42);
+    border-color: #a9cfb2;
+}
+@media (max-width: 767.98px) {
+    .app-navbar-start--dashboard {
+        align-items: flex-start;
+        gap: 0.4rem;
+    }
+    .app-navbar-start--dashboard .navbar-ai-links {
+        order: 3;
+        flex-basis: 100%;
+        margin-left: 2.8rem;
+        padding: 0.25rem 0.35rem;
+    }
+    .navbar-ai-label {
+        font-size: 0.72rem;
+    }
+    .navbar-ai-links a {
+        font-size: 0.75rem;
+        padding: 0.32rem 0.45rem;
+    }
+}
+@media (max-width: 420px) {
+    .app-navbar-start--dashboard .navbar-ai-links {
+        margin-left: 0;
+    }
+}
+/* Slightly shorter charts: retain both visualizations and their interactions. */
+.dashboard-chart-wrap {
+    height: 220px;
+}
+.dashboard-doughnut-wrap {
+    max-width: 300px;
+}
+@media (max-width: 575.98px) {
+    .dashboard-chart-wrap {
+        height: 185px;
+    }
+}
