@@ -21,11 +21,21 @@ class DemoSafetyTest {
     void uiTestIsEnabledOnlyForExplicitIsolatedEnvironment() {
         assertTrue(DemoSafety.uiEnabled(Map.of(
             "TESTRUN_E2E_ENABLED", "true",
-            "TESTRUN_ENVIRONMENT", "isolated-test"
+            "TESTRUN_ENVIRONMENT", "isolated-test",
+            "TESTRUN_BASE_URL", "http://127.0.0.1:15052"
         )));
         assertFalse(DemoSafety.uiEnabled(Map.of(
             "TESTRUN_E2E_ENABLED", "TRUE",
             "TESTRUN_ENVIRONMENT", "isolated-test"
+        )));
+    }
+
+    @Test
+    void uiTestRejectsNonLoopbackUrlsEvenWhenExplicitlyEnabled() {
+        assertFalse(DemoSafety.uiEnabled(Map.of(
+            "TESTRUN_E2E_ENABLED", "true",
+            "TESTRUN_ENVIRONMENT", "isolated-test",
+            "TESTRUN_BASE_URL", "https://testrun.pro"
         )));
     }
 
