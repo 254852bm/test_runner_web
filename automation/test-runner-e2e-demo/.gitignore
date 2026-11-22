@@ -1,0 +1,7 @@
+.gradle/
+build/
+allure-results/
+allure-report/
+.idea/
+*.iml
+.env
