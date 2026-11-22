@@ -1011,3 +1011,47 @@ def test_inline_test_creation_supports_multiple_data_sets_and_default_rows(app):
         assert account_rows[0].is_default is True
         assert account_rows[0].values_json == {"login": "demo-user"}
 
+def test_editing_test_case_preserves_multiple_data_sets_without_inline_overwrite(app):
+    """Editing steps on a multi-dataset test must not drop its parameterization."""
+    with app.app_context():
+        user, project, case = _case()
+        step = TestStep.query.filter_by(test_case_id=case.id).one()
+        first = TestDataSet(test_case_id=case.id, name="Browser matrix", is_default=True)
+        second = TestDataSet(test_case_id=case.id, name="Accounts", is_default=False)
+        db.session.add_all([first, second])
+        db.session.flush()
+        db.session.add_all([
+            TestDataColumn(dataset_id=first.id, key="browser", label="Browser", position=0),
+            TestDataColumn(dataset_id=second.id, key="login", label="Login", position=0),
+        ])
+        db.session.add_all([
+            TestDataRow(dataset_id=first.id, name="Chrome", values_json={"browser": "Chrome"}, is_default=True),
+            TestDataRow(dataset_id=second.id, name="Demo", values_json={"login": "demo-user"}, is_default=True),
+        ])
+        db.session.commit()
+        user_id, project_id, case_id, step_id = user.id, project.id, case.id, step.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/test/{case_id}/edit",
+        data={
+            "title": "Updated login test",
+            "precondition": "Updated precondition",
+            "step_id[]": [str(step_id)],
+            "step_action[]": ["Enter {{login}} and continue"],
+            "step_expected[]": ["Dashboard is shown"],
+        },
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        saved_case = db.session.get(TestCase, case_id)
+        assert saved_case.title == "Updated login test"
+        datasets = TestDataSet.query.filter_by(test_case_id=case_id).order_by(
+            TestDataSet.id.asc()
+        ).all()
+        assert [dataset.name for dataset in datasets] == ["Browser matrix", "Accounts"]
+        assert datasets[0].rows[0].values_json == {"browser": "Chrome"}
+        assert datasets[1].rows[0].values_json == {"login": "demo-user"}
+
