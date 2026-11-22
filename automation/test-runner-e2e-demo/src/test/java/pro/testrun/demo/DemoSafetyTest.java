@@ -32,7 +32,6 @@ class DemoSafetyTest {
     @Test
     void apiTestRequiresAllExplicitCredentialsAndIds() {
         Map<String, String> valid = Map.of(
-            "TESTRUN_E2E_ENABLED", "true",
             "TESTRUN_ENVIRONMENT", "isolated-test",
             "TESTRUN_API_TEST_ENABLED", "true",
             "TESTRUN_BASE_URL", "http://127.0.0.1:15052",
@@ -54,7 +53,6 @@ class DemoSafetyTest {
     @Test
     void apiTestRejectsMalformedIdsAndNonIsolatedEnvironment() {
         Map<String, String> malformed = Map.of(
-            "TESTRUN_E2E_ENABLED", "true",
             "TESTRUN_ENVIRONMENT", "isolated-test",
             "TESTRUN_API_TEST_ENABLED", "true",
             "TESTRUN_BASE_URL", "http://127.0.0.1:15052",
@@ -65,7 +63,6 @@ class DemoSafetyTest {
         assertFalse(DemoSafety.apiEnabled(malformed));
 
         Map<String, String> production = Map.of(
-            "TESTRUN_E2E_ENABLED", "true",
             "TESTRUN_ENVIRONMENT", "production",
             "TESTRUN_API_TEST_ENABLED", "true",
             "TESTRUN_BASE_URL", "https://testrun.pro",
