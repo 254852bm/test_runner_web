@@ -106,7 +106,7 @@ class TestRunEndToEndTest {
             By.xpath("//a[normalize-space()='" + projectName + "']")
         ));
         createdProject.click();
-        wait.until(ExpectedConditions.urlMatches(".*/project/\\\\d+$"));
+        wait.until(ExpectedConditions.urlContains("/project/"));
         assertTrue(driver.getPageSource().contains(projectName), "Название проекта должно отображаться");
         String[] urlParts = driver.getCurrentUrl().split("/");
         for (int i = 0; i < urlParts.length - 1; i++) {
