@@ -209,7 +209,8 @@ class TestRunEndToEndTest {
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//*[contains(normalize-space(.),'" + testTitle + "')]")));
         String page = driver.getPageSource();
         assertTrue(page.contains("base_url"), "Переменная base_url должна сохраниться");
-        assertTrue(page.contains("demo-user"), "Обычное значение параметра должно сохраниться");
+        assertTrue(page.contains("demo-user"), "Значение строки по умолчанию должно сохраниться");
+        assertTrue(page.contains("alternate-user"), "Дополнительная строка первого набора должна сохраниться");
         assertTrue(page.contains("Дополнительный набор"), "Второй набор данных должен сохраниться");
         assertTrue(page.contains("ru-RU"), "Значение второго набора должно сохраниться");
         attachScreenshot("Сохранённый тест-кейс и параметры");
