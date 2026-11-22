@@ -2,7 +2,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 from app import create_app, db
-from app.models import Project, TestCase, TestDataColumn, TestDataRow, TestDataSet, TestRun, TestRunDataSnapshot, TestStep, User
+from app.models import Project, TestCase, TestDataBatch, TestDataColumn, TestDataRow, TestDataSet, TestRun, TestRunDataSnapshot, TestStep, User
 from app.test_data_crypto import decrypt_secret_values
 
 
@@ -389,3 +389,97 @@ def test_profile_page_has_csrf_token_context(app):
 
     assert response.status_code == 200
     assert 'name="csrf_token"' in response.get_data(as_text=True)
+
+
+
+def test_edit_test_cannot_delete_legacy_multi_row_dataset_with_empty_form(app):
+    user_id, project_id = _user_and_project(app)
+    test_id, step_id = _create_editable_case(app, project_id)
+    with app.app_context():
+        dataset = TestDataSet(
+            test_case_id=test_id, name="Legacy variants", is_default=True
+        )
+        db.session.add(dataset)
+        db.session.flush()
+        column = TestDataColumn(
+            dataset_id=dataset.id, key="login", label="Login", position=0
+        )
+        rows = [
+            TestDataRow(
+                dataset_id=dataset.id, name="One",
+                values_json={"login": "one"}, is_default=True, is_enabled=True,
+            ),
+            TestDataRow(
+                dataset_id=dataset.id, name="Two",
+                values_json={"login": "two"}, is_default=False, is_enabled=True,
+            ),
+        ]
+        db.session.add_all([column, *rows])
+        db.session.commit()
+        dataset_id = dataset.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(f"/project/{project_id}/test/{test_id}/edit", data={
+        "title": "Не должно сохраниться",
+        "precondition": "",
+        "step_id[]": [str(step_id)],
+        "step_action[]": ["Изменённое действие"],
+        "step_expected[]": ["Ожидаемый результат"],
+        "data_set_count": "0",
+    })
+    assert response.status_code == 302
+
+    with app.app_context():
+        test = db.session.get(TestCase, test_id)
+        dataset = db.session.get(TestDataSet, dataset_id)
+        assert test.title == "Редактируемый тест"
+        assert dataset is not None
+        assert [row.values_json["login"] for row in dataset.rows] == ["one", "two"]
+
+
+def test_edit_test_cannot_delete_dataset_with_active_batch_using_empty_form(app):
+    user_id, project_id = _user_and_project(app)
+    test_id, step_id = _create_editable_case(app, project_id)
+    with app.app_context():
+        dataset = TestDataSet(
+            test_case_id=test_id, name="Основные параметры", is_default=True
+        )
+        db.session.add(dataset)
+        db.session.flush()
+        column = TestDataColumn(
+            dataset_id=dataset.id, key="login", label="Login", position=0
+        )
+        row = TestDataRow(
+            dataset_id=dataset.id, name="Значения по умолчанию",
+            values_json={"login": "tester"}, is_default=True, is_enabled=True,
+        )
+        db.session.add_all([column, row])
+        db.session.flush()
+        batch = TestDataBatch(
+            token="batch-token-for-protection-test",
+            user_id=user_id, test_case_id=test_id, dataset_id=dataset.id,
+            row_ids_json=[row.id], next_index=0,
+        )
+        db.session.add(batch)
+        db.session.commit()
+        dataset_id, row_id, batch_id = dataset.id, row.id, batch.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(f"/project/{project_id}/test/{test_id}/edit", data={
+        "title": "Не должно сохраниться",
+        "precondition": "",
+        "step_id[]": [str(step_id)],
+        "step_action[]": ["Изменённое действие"],
+        "step_expected[]": ["Ожидаемый результат"],
+        "data_set_count": "0",
+    })
+    assert response.status_code == 302
+
+    with app.app_context():
+        test = db.session.get(TestCase, test_id)
+        assert test.title == "Редактируемый тест"
+        assert db.session.get(TestDataSet, dataset_id) is not None
+        assert db.session.get(TestDataRow, row_id) is not None
+        assert db.session.get(TestDataBatch, batch_id) is not None
