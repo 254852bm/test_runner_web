@@ -7,7 +7,7 @@ import io.qameta.allure.Step;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.condition.EnabledIf;
 import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.TakesScreenshot;
@@ -97,8 +97,7 @@ class TestRunEndToEndTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "TESTRUN_E2E_ENABLED", matches = "true")
-    @EnabledIfEnvironmentVariable(named = "TESTRUN_ENVIRONMENT", matches = "isolated-test")
+    @EnabledIf("pro.testrun.demo.DemoSafety#uiEnabledFromEnvironment")
     @Description("Создаёт проект и параметризованный тест-кейс, выполняет прогон, проверяет историю и PDF.")
     void fullDemoJourney() throws Exception {
         createProject();
