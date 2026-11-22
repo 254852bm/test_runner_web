@@ -141,6 +141,20 @@ class TestRunEndToEndTest {
         dataSet.findElement(By.cssSelector("[data-role='dataset-default']")).click();
         dataRow.findElement(By.cssSelector("[data-role='row-default']")).click();
 
+        driver.findElement(By.xpath("//button[contains(normalize-space(.),'Добавить набор данных')]")).click();
+        List<WebElement> dataSets = driver.findElements(By.cssSelector(".data-set-card"));
+        assertEquals(2, dataSets.size(), "Форма должна поддерживать несколько наборов данных");
+        WebElement secondarySet = dataSets.get(1);
+        secondarySet.findElement(By.cssSelector("[data-role='dataset-name']")).sendKeys("Дополнительный набор");
+        WebElement secondaryColumn = secondarySet.findElement(By.cssSelector(".data-column"));
+        secondaryColumn.findElement(By.cssSelector("[data-role='column-key']")).sendKeys("locale");
+        secondaryColumn.findElement(By.cssSelector("[data-role='column-label']")).sendKeys("Язык");
+        secondarySet.findElement(By.xpath(".//button[contains(normalize-space(.),'Добавить строку')]")).click();
+        WebElement secondaryRow = secondarySet.findElement(By.cssSelector(".data-row"));
+        secondaryRow.findElement(By.cssSelector("[data-role='row-name']")).sendKeys("Русская локаль");
+        secondaryRow.findElement(By.cssSelector(".data-value")).sendKeys("ru-RU");
+        secondaryRow.findElement(By.cssSelector("[data-role='row-default']")).click();
+
         driver.findElement(By.cssSelector("textarea[name='step_action[]']")).sendKeys("Выполнить демонстрационную проверку для {{login}}");
         driver.findElement(By.cssSelector("textarea[name='step_expected[]']")).sendKeys("Тест-кейс доступен для выполнения");
         driver.findElement(By.xpath("//button[contains(normalize-space(.),'Сохранить тест-кейс')]")).click();
@@ -159,6 +173,8 @@ class TestRunEndToEndTest {
         String page = driver.getPageSource();
         assertTrue(page.contains("base_url"), "Переменная base_url должна сохраниться");
         assertTrue(page.contains("demo-user"), "Обычное значение параметра должно сохраниться");
+        assertTrue(page.contains("Дополнительный набор"), "Второй набор данных должен сохраниться");
+        assertTrue(page.contains("ru-RU"), "Значение второго набора должно сохраниться");
         attachScreenshot("Сохранённый тест-кейс и параметры");
     }
 
