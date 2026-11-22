@@ -75,7 +75,7 @@ class TestRunEndToEndTest {
     }
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "TESTRUN_BASE_URL", matches = ".+")
+    @EnabledIfEnvironmentVariable(named = "TESTRUN_E2E_ENABLED", matches = "true")
     @Description("Создаёт проект и параметризованный тест-кейс, выполняет прогон, проверяет историю и PDF.")
     void fullDemoJourney() throws Exception {
         createProject();
@@ -182,6 +182,10 @@ class TestRunEndToEndTest {
     private void executeManualRun() {
         driver.findElement(By.xpath("//a[contains(normalize-space(.),'Запустить этот тест')]")).click();
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("select[name='step_status[]']")));
+        assertTrue(driver.getPageSource().contains("Основной набор"),
+            "При запуске должен применяться набор данных по умолчанию");
+        assertTrue(driver.getPageSource().contains("Демонстрационная строка"),
+            "При запуске должна применяться строка по умолчанию");
         List<WebElement> statuses = driver.findElements(By.cssSelector("select[name='step_status[]']"));
         assertFalse(statuses.isEmpty(), "В прогоне должен быть хотя бы один шаг");
         for (WebElement status : statuses) {
