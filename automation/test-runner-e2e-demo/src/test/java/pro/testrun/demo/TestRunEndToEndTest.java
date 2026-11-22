@@ -7,6 +7,7 @@ import io.qameta.allure.Step;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.openqa.selenium.By;
 import org.openqa.selenium.OutputType;
 import org.openqa.selenium.TakesScreenshot;
@@ -74,8 +75,9 @@ class TestRunEndToEndTest {
     }
 
     @Test
+    @EnabledIfEnvironmentVariable(named = "TESTRUN_BASE_URL", matches = ".+")
     @Description("Создаёт проект и параметризованный тест-кейс, выполняет прогон, проверяет историю и PDF.")
-    void fullDemoJourney() {
+    void fullDemoJourney() throws Exception {
         createProject();
         createParameterizedTestCase();
         verifySavedTestCaseAndParameters();
