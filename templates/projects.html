@@ -11,7 +11,14 @@
     </div>
 </div>
 
+{% if request.args.get('ai_action') == 'case' %}
+<div class="alert alert-info ai-selection-hint mb-3">Выберите проект, для которого нужно подготовить черновик тест-кейса с ИИ. После выбора откроется форма генерации.</div>
+{% elif request.args.get('ai_action') == 'automation' %}
+<div class="alert alert-info ai-selection-hint mb-3">Выберите проект, затем нужный тест-кейс — на его странице будет действие для подготовки черновика автотеста.</div>
+{% endif %}
+
 <form method="GET" action="{{ url_for('main.projects') }}" class="row g-2 align-items-end mb-3">
+    {% if request.args.get('ai_action') %}<input type="hidden" name="ai_action" value="{{ request.args.get('ai_action') }}">{% endif %}
     <div class="col-12 col-md-7 col-lg-8">
         <label for="projectSearch" class="form-label small mb-1">Поиск проекта</label>
         <input id="projectSearch" type="search" name="q" value="{{ search }}"
@@ -44,13 +51,13 @@
         {% for project, test_count in pagination.items %}
             <tr>
                 <td class="project-name">
-                    <a href="{{ url_for('main.project_detail', project_id=project.id) }}"
+                    <a href="{{ url_for('main.project_detail', project_id=project.id, ai_action=request.args.get('ai_action')) if request.args.get('ai_action') else url_for('main.project_detail', project_id=project.id) }}"
                        class="text-decoration-none fw-semibold">{{ project.name }}</a>
                 </td>
                 <td><span class="badge text-bg-secondary">{{ test_count }}</span></td>
                 <td>
                     <div class="project-row-actions">
-                        <a href="{{ url_for('main.project_detail', project_id=project.id) }}"
+                        <a href="{{ url_for('main.project_detail', project_id=project.id, ai_action=request.args.get('ai_action')) if request.args.get('ai_action') else url_for('main.project_detail', project_id=project.id) }}"
                            class="btn btn-sm btn-outline-primary">Открыть</a>
                         <a href="{{ url_for('main.run_tests', project_id=project.id) }}"
                            class="btn btn-sm btn-outline-success">Запустить</a>
@@ -74,19 +81,19 @@
     <nav aria-label="Страницы проектов">
         <ul class="pagination pagination-sm mb-0">
             <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
-                <a class="page-link" href="{{ url_for('main.projects', page=pagination.prev_num, q=search, sort=sort) if pagination.has_prev else '#' }}" {% if not pagination.has_prev %}tabindex="-1" aria-disabled="true"{% endif %}>Назад</a>
+                <a class="page-link" href="{{ url_for('main.projects', page=pagination.prev_num, q=search, sort=sort, ai_action=request.args.get('ai_action')) if pagination.has_prev else '#' }}" {% if not pagination.has_prev %}tabindex="-1" aria-disabled="true"{% endif %}>Назад</a>
             </li>
             {% for page_num in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                 {% if page_num %}
                 <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
-                    <a class="page-link" href="{{ url_for('main.projects', page=page_num, q=search, sort=sort) }}">{{ page_num }}</a>
+                    <a class="page-link" href="{{ url_for('main.projects', page=page_num, q=search, sort=sort, ai_action=request.args.get('ai_action')) }}">{{ page_num }}</a>
                 </li>
                 {% else %}
                 <li class="page-item disabled"><span class="page-link">…</span></li>
                 {% endif %}
             {% endfor %}
             <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
-                <a class="page-link" href="{{ url_for('main.projects', page=pagination.next_num, q=search, sort=sort) if pagination.has_next else '#' }}" {% if not pagination.has_next %}tabindex="-1" aria-disabled="true"{% endif %}>Вперёд</a>
+                <a class="page-link" href="{{ url_for('main.projects', page=pagination.next_num, q=search, sort=sort, ai_action=request.args.get('ai_action')) if pagination.has_next else '#' }}" {% if not pagination.has_next %}tabindex="-1" aria-disabled="true"{% endif %}>Вперёд</a>
             </li>
         </ul>
     </nav>

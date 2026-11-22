@@ -8,7 +8,7 @@
 <div class="alert alert-info">
     <strong>Что это?</strong> API-токены позволяют отправлять результаты авто-тестов (Selenium, Playwright) в TestRun
     через эндпоинт <code>POST /api/run</code>.
-    Каждый токен привязан к вашему аккаунту и даёт доступ только к вашим проектам.
+    Каждый токен привязан к вашему аккаунту и даёт доступ только к вашим проектам. Получение секретных тестовых данных отдельно разрешается для каждого токена.
 </div>
 
 <div class="card mb-4">
@@ -21,6 +21,13 @@
             </div>
             <div class="col-md-4">
                 <button type="submit" class="btn btn-success w-100">+ Создать токен</button>
+            </div>
+            <div class="col-12">
+                <label class="form-check">
+                    <input class="form-check-input" type="checkbox" name="allow_secret_data" value="1">
+                    Разрешить этому токену получать секретные тестовые данные
+                </label>
+                <div class="form-text">Оставьте выключенным, если автотестам не нужны пароли и токены.</div>
             </div>
         </form>
     </div>
@@ -36,6 +43,7 @@
                     <th>Токен</th>
                     <th>Создан</th>
                     <th>Последнее использование</th>
+                    <th>Доступ к секретам</th>
                     <th></th>
                 </tr>
             </thead>
@@ -56,6 +64,14 @@
                             {% endif %}
                         </td>
                         <td>
+                            <form method="POST" action="{{ url_for('main.api_token_secret_access', token_id=token.id) }}">
+                                <input type="hidden" name="allow_secret_data" value="{{ '0' if token.allow_secret_data else '1' }}">
+                                <button type="submit" class="btn btn-sm {{ 'btn-warning' if token.allow_secret_data else 'btn-outline-secondary' }}">
+                                    {{ 'Разрешено — отключить' if token.allow_secret_data else 'Запрет — разрешить' }}
+                                </button>
+                            </form>
+                        </td>
+                        <td>
                             <form method="POST" action="{{ url_for('main.api_token_delete', token_id=token.id) }}" style="display:inline;">
                                 <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Удалить токен «{{ token.name }}»?')">🗑️ Удалить</button>
                             </form>
@@ -70,6 +86,10 @@
         У вас пока нет API-токенов. Создайте первый — и сможете отправлять результаты авто-тестов.
     </div>
 {% endif %}
+
+<div class="alert alert-warning mt-4">
+    Разрешайте доступ к секретам только отдельному токену, который используется в защищённой среде CI. Любой, у кого есть такой токен, сможет запросить секретные значения. Не выводите их в логи и не сохраняйте в артефакты сборки.
+</div>
 
 <div class="mt-4">
     <h5>Как использовать</h5>

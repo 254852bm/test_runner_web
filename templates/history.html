@@ -32,6 +32,9 @@
                             <span class="text-muted small d-block mb-1">Версия теста не зафиксирована для этого прогона</span>
                         {% endif %}
                         <div class="text-muted small">{{ run.timestamp.strftime('%d.%m.%Y %H:%M') }}</div>
+                        {% if run.data_snapshot %}
+                            <div class="small mt-2"><strong>Тестовые данные:</strong> {{ run.data_snapshot.dataset_name_snapshot }} · {{ run.data_snapshot.row_name_snapshot }}</div>
+                        {% endif %}
                         {% if run.comment %}
                             <div class="test-case-text mt-2">{{ run.comment }}</div>
                         {% endif %}

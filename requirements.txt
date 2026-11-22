@@ -7,3 +7,4 @@ reportlab
 python-dotenv
 Markdown
 python-telegram-bot
+cryptography>=42.0.0

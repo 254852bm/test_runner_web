@@ -1,14 +1,19 @@
-from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file, abort, current_app
+from flask import Blueprint, render_template, redirect, url_for, request, flash, send_file, abort, current_app, jsonify
 from flask_login import login_required, current_user
+from flask_wtf.csrf import validate_csrf, ValidationError
+import re
 from markdown import markdown
 from markdown.extensions.toc import slugify_unicode
 from app import db
-from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User
+from app.models import Project, TestCase, TestCaseVersion, TestRun, TestStep, TestStepScreenshot, StepRun, StepRunScreenshot, ApiToken, FeedbackTicket, FeedbackMessage, User, TestDataSet, TestDataColumn, TestDataRow, TestRunDataSnapshot, TestDataBatch
+from app.test_data import prepare_test_data, redact_secrets
+from app.test_data_crypto import encrypt_secret_values, decrypt_secret_values
 from datetime import datetime
 import secrets
 import os
 from pathlib import Path
 from werkzeug.utils import secure_filename
+from sqlalchemy.exc import OperationalError
 
 main_bp = Blueprint('main', __name__)
 
@@ -383,6 +388,24 @@ def delete_project(project_id):
             run_id for (run_id,) in db.session.query(TestRun.id)
             .filter(TestRun.test_case_id.in_(test_ids)).all()
         ]
+        dataset_ids = [
+            dataset_id for (dataset_id,) in db.session.query(TestDataSet.id)
+            .filter(TestDataSet.test_case_id.in_(test_ids)).all()
+        ]
+        # Bulk deletes bypass ORM cascades: remove parameterization records explicitly.
+        TestDataBatch.query.filter(
+            TestDataBatch.test_case_id.in_(test_ids)
+        ).delete(synchronize_session=False)
+        if dataset_ids:
+            TestDataRow.query.filter(
+                TestDataRow.dataset_id.in_(dataset_ids)
+            ).delete(synchronize_session=False)
+            TestDataColumn.query.filter(
+                TestDataColumn.dataset_id.in_(dataset_ids)
+            ).delete(synchronize_session=False)
+            TestDataSet.query.filter(
+                TestDataSet.id.in_(dataset_ids)
+            ).delete(synchronize_session=False)
         step_run_ids = []
         if run_ids:
             step_run_ids = [
@@ -410,6 +433,10 @@ def delete_project(project_id):
             StepRun.query.filter(StepRun.id.in_(step_run_ids)).delete(synchronize_session=False)
 
         if run_ids:
+            # Snapshot FK is non-nullable and has no ON DELETE CASCADE.
+            TestRunDataSnapshot.query.filter(
+                TestRunDataSnapshot.test_run_id.in_(run_ids)
+            ).delete(synchronize_session=False)
             TestRun.query.filter(TestRun.id.in_(run_ids)).delete(synchronize_session=False)
         if step_ids:
             TestStep.query.filter(TestStep.id.in_(step_ids)).delete(synchronize_session=False)
@@ -450,9 +477,464 @@ def test_detail(project_id, test_id):
     versions = TestCaseVersion.query.filter_by(test_case_id=test.id).order_by(
         TestCaseVersion.version_number.desc()
     ).all()
+    data_sets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
+        TestDataSet.created_at.asc()
+    ).all()
     return render_template('test_detail.html', project=project, test=test, steps=steps,
                            status_labels=STATUS_LABELS, current_version=current_version,
-                           versions=versions)
+                           versions=versions, data_sets=data_sets)
+
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data', methods=['GET'])
+@login_required
+def test_data_sets(project_id, test_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    datasets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
+        TestDataSet.created_at.asc()
+    ).all()
+    return render_template('test_data.html', project=project, test=test, datasets=datasets)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rename', methods=['POST'])
+@login_required
+def rename_test_data_set(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    name = request.form.get('dataset_name', '').strip()
+    if not name or len(name) > 120:
+        flash('Укажите название набора данных (до 120 символов).', 'danger')
+        return redirect(target)
+    dataset.name = name
+    db.session.commit()
+    flash('Название набора данных обновлено. История запусков не изменена.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/create', methods=['POST'])
+@login_required
+def create_test_data_set(project_id, test_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    name = request.form.get('dataset_name', '').strip()
+    keys = [value.strip() for value in request.form.getlist('column_key[]')]
+    submitted_labels = [value.strip() for value in request.form.getlist('column_label[]')]
+    labels = [
+        submitted_labels[index] if index < len(submitted_labels) and submitted_labels[index] else key
+        for index, key in enumerate(keys)
+    ]
+    secret_flags = [
+        request.form.get(f'column_is_secret_{index}') == '1'
+        for index in range(len(keys))
+    ]
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
+        flash('Секретные параметры доступны после настройки TEST_DATA_ENCRYPTION_KEY на сервере.', 'danger')
+        return redirect(target)
+
+    if not name or len(name) > 120:
+        flash('Укажите название набора данных (до 120 символов).', 'danger')
+        return redirect(target)
+    if not keys or len(keys) > 30 or len(keys) != len(labels):
+        flash('Добавьте от 1 до 30 корректных параметров.', 'danger')
+        return redirect(target)
+    if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
+        flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
+        return redirect(target)
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
+    if any(
+        re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
+        for index, key in enumerate(keys)
+    ):
+        flash('Колонки с паролями, токенами и ключами необходимо отметить как секретные.', 'danger')
+        return redirect(target)
+    if len(keys) != len(set(keys)):
+        flash('Имена переменных в одном наборе должны быть уникальными.', 'danger')
+        return redirect(target)
+    if any(not label or len(label) > 120 for label in labels):
+        flash('Укажите название каждой колонки (до 120 символов).', 'danger')
+        return redirect(target)
+
+    dataset = TestDataSet(test_case_id=test.id, name=name)
+    db.session.add(dataset)
+    db.session.flush()
+    for position, (key, label) in enumerate(zip(keys, labels)):
+        db.session.add(TestDataColumn(
+            dataset_id=dataset.id, key=key, label=label,
+            position=position, is_secret=secret_flags[position]
+        ))
+    db.session.commit()
+    flash('Набор тестовых данных создан.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/columns/add', methods=['POST'])
+@login_required
+def add_test_data_column(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    key = request.form.get('column_key', '').strip()
+    label = request.form.get('column_label', '').strip() or key
+    is_secret = request.form.get('is_secret') == '1'
+
+    if len(dataset.columns) >= 30:
+        flash('В одном наборе можно создать не более 30 параметров.', 'danger')
+        return redirect(target)
+    if not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key):
+        flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
+        return redirect(target)
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
+    if re.search(sensitive_pattern, key, re.IGNORECASE) and not is_secret:
+        flash('Колонки с паролями, токенами и ключами необходимо отметить как секретные.', 'danger')
+        return redirect(target)
+    if not label or len(label) > 120:
+        flash('Укажите название колонки (до 120 символов).', 'danger')
+        return redirect(target)
+    if TestDataColumn.query.filter_by(dataset_id=dataset.id, key=key).first():
+        flash('Переменная с таким именем уже существует.', 'danger')
+        return redirect(target)
+    if is_secret:
+        try:
+            encrypt_secret_values({'_key_check': 'configured'})
+        except ValueError as error:
+            flash(str(error), 'danger')
+            return redirect(target)
+
+    db.session.add(TestDataColumn(
+        dataset_id=dataset.id, key=key, label=label,
+        position=len(dataset.columns), is_secret=is_secret
+    ))
+    db.session.commit()
+    flash('Параметр добавлен. В существующих строках её значение пока пустое.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/columns/<int:column_id>/edit', methods=['POST'])
+@login_required
+def edit_test_data_column(project_id, test_id, dataset_id, column_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    column = TestDataColumn.query.filter_by(id=column_id, dataset_id=dataset.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    new_key = request.form.get('column_key', '').strip()
+    new_label = request.form.get('column_label', '').strip()
+
+    if not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', new_key):
+        flash('Название параметра должно начинаться с буквы и может содержать буквы, цифры, пробелы, дефисы и подчёркивания.', 'danger')
+        return redirect(target)
+    sensitive_pattern = r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
+    if re.search(sensitive_pattern, new_key, re.IGNORECASE) and not column.is_secret:
+        flash('Колонки с паролями, токенами и ключами должны быть секретными.', 'danger')
+        return redirect(target)
+    if not new_label or len(new_label) > 120:
+        flash('Укажите название колонки (до 120 символов).', 'danger')
+        return redirect(target)
+    duplicate = TestDataColumn.query.filter(
+        TestDataColumn.dataset_id == dataset.id,
+        TestDataColumn.key == new_key,
+        TestDataColumn.id != column.id,
+    ).first()
+    if duplicate:
+        flash('Переменная с таким именем уже существует.', 'danger')
+        return redirect(target)
+
+    old_key = column.key
+    if new_key != old_key:
+        if column.is_secret:
+            try:
+                for row in dataset.rows:
+                    secret_values = decrypt_secret_values(row.encrypted_values_json)
+                    if old_key in secret_values:
+                        secret_values[new_key] = secret_values.pop(old_key)
+                        row.encrypted_values_json = encrypt_secret_values(secret_values)
+            except ValueError as error:
+                db.session.rollback()
+                flash(str(error), 'danger')
+                return redirect(target)
+        else:
+            for row in dataset.rows:
+                values = dict(row.values_json or {})
+                if old_key in values:
+                    values[new_key] = values.pop(old_key)
+                    row.values_json = values
+        column.key = new_key
+
+    column.label = new_label
+    db.session.commit()
+    flash('Параметр обновлён. История ранее выполненных запусков не меняется.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/columns/<int:column_id>/delete', methods=['POST'])
+@login_required
+def delete_test_data_column(project_id, test_id, dataset_id, column_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    column = TestDataColumn.query.filter_by(id=column_id, dataset_id=dataset.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    if len(dataset.columns) <= 1:
+        flash('В наборе должна остаться хотя бы одна колонка.', 'warning')
+        return redirect(target)
+
+    try:
+        for row in dataset.rows:
+            if column.is_secret:
+                secret_values = decrypt_secret_values(row.encrypted_values_json)
+                secret_values.pop(column.key, None)
+                row.encrypted_values_json = encrypt_secret_values(secret_values)
+            else:
+                values = dict(row.values_json or {})
+                values.pop(column.key, None)
+                row.values_json = values
+    except ValueError as error:
+        db.session.rollback()
+        flash(str(error), 'danger')
+        return redirect(target)
+
+    db.session.delete(column)
+    db.session.commit()
+    flash('Параметр удалён из текущего набора. Исторические снимки запусков не изменены.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/create', methods=['POST'])
+@login_required
+def create_test_data_row(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    name = request.form.get('row_name', '').strip()
+    if not name or len(name) > 120:
+        flash('Укажите название строки данных (до 120 символов).', 'danger')
+        return redirect(target)
+    if len(dataset.rows) >= 500:
+        flash('В одном наборе можно создать не более 500 строк.', 'danger')
+        return redirect(target)
+    values = {}
+    secret_values = {}
+    for column in dataset.columns:
+        field_name = f'secret_value_{column.id}' if column.is_secret else f'value_{column.id}'
+        value = request.form.get(field_name, '')
+        if len(value) > 10000:
+            flash(f'Значение «{column.label}» превышает 10 000 символов.', 'danger')
+            return redirect(target)
+        if column.is_secret:
+            if value:
+                secret_values[column.key] = value
+        else:
+            values[column.key] = value
+    try:
+        encrypted_values = encrypt_secret_values(secret_values)
+    except Exception:
+        current_app.logger.exception('Could not encrypt test-data secrets')
+        flash('Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.', 'danger')
+        return redirect(target)
+    db.session.add(TestDataRow(
+        dataset_id=dataset.id, name=name, values_json=values,
+        encrypted_values_json=encrypted_values,
+        is_enabled=True, position=len(dataset.rows)
+    ))
+    db.session.commit()
+    flash('Строка тестовых данных добавлена.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/duplicate', methods=['POST'])
+@login_required
+def duplicate_test_data_row(project_id, test_id, dataset_id, row_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    source = TestDataRow.query.filter_by(id=row_id, dataset_id=dataset.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+
+    if len(dataset.rows) >= 500:
+        flash('В одном наборе можно создать не более 500 вариантов.', 'danger')
+        return redirect(target)
+
+    requested_name = request.form.get('row_name', '').strip()
+    new_name = requested_name or f'{source.name} — копия'
+    if not new_name or len(new_name) > 120:
+        flash('Название копии должно содержать не более 120 символов.', 'danger')
+        return redirect(target)
+
+    # Copy ciphertext as-is: secrets are never decrypted or rendered during duplication.
+    duplicate = TestDataRow(
+        dataset_id=dataset.id,
+        name=new_name,
+        values_json=dict(source.values_json or {}),
+        encrypted_values_json=source.encrypted_values_json,
+        is_enabled=False,
+        position=max((row.position for row in dataset.rows), default=-1) + 1,
+    )
+    db.session.add(duplicate)
+    db.session.commit()
+    flash('Вариант скопирован. Новая копия отключена — проверьте её перед запуском.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/edit', methods=['POST'])
+@login_required
+def edit_test_data_row(project_id, test_id, dataset_id, row_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    row = TestDataRow.query.filter_by(id=row_id, dataset_id=dataset.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+    name = request.form.get('row_name', '').strip()
+    if not name or len(name) > 120:
+        flash('Укажите название строки данных (до 120 символов).', 'danger')
+        return redirect(target)
+    values = {}
+    try:
+        secret_values = decrypt_secret_values(row.encrypted_values_json)
+    except ValueError as error:
+        flash(str(error), 'danger')
+        return redirect(target)
+    for column in dataset.columns:
+        if column.is_secret:
+            value = request.form.get(f'secret_value_{column.id}', '')
+            if len(value) > 10000:
+                flash(f'Значение «{column.label}» превышает 10 000 символов.', 'danger')
+                return redirect(target)
+            if request.form.get(f'clear_secret_{column.id}') == '1':
+                secret_values.pop(column.key, None)
+            elif value:
+                secret_values[column.key] = value
+        else:
+            value = request.form.get(f'value_{column.id}', '')
+            if len(value) > 10000:
+                flash(f'Значение «{column.label}» превышает 10 000 символов.', 'danger')
+                return redirect(target)
+            values[column.key] = value
+    try:
+        encrypted_values = encrypt_secret_values(secret_values)
+    except Exception:
+        current_app.logger.exception('Could not encrypt edited test-data secrets')
+        flash('Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.', 'danger')
+        return redirect(target)
+    row.name = name
+    row.values_json = values
+    row.encrypted_values_json = encrypted_values
+    db.session.commit()
+    flash('Строка тестовых данных обновлена.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/toggle', methods=['POST'])
+@login_required
+def toggle_test_data_row(project_id, test_id, dataset_id, row_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    row = TestDataRow.query.filter_by(id=row_id, dataset_id=dataset.id).first_or_404()
+    row.is_enabled = request.form.get('is_enabled') == '1'
+    db.session.commit()
+    flash('Статус строки обновлён.', 'success')
+    return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/bulk-status', methods=['POST'])
+@login_required
+def bulk_update_test_data_rows(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    target = url_for('main.test_data_sets', project_id=project.id, test_id=test.id)
+
+    row_ids = set()
+    for raw_id in request.form.getlist('row_ids[]'):
+        try:
+            row_ids.add(int(raw_id))
+        except (TypeError, ValueError):
+            flash('Некорректный список вариантов.', 'danger')
+            return redirect(target)
+
+    if not row_ids:
+        flash('Выберите хотя бы один вариант.', 'warning')
+        return redirect(target)
+    if len(row_ids) > 500:
+        flash('За один раз можно изменить не более 500 вариантов.', 'danger')
+        return redirect(target)
+
+    status = request.form.get('is_enabled')
+    if status not in {'0', '1'}:
+        flash('Неизвестная операция.', 'danger')
+        return redirect(target)
+
+    rows = TestDataRow.query.filter(
+        TestDataRow.dataset_id == dataset.id,
+        TestDataRow.id.in_(row_ids),
+    ).all()
+    if len(rows) != len(row_ids):
+        flash('Некоторые выбранные варианты не найдены в этом наборе.', 'danger')
+        return redirect(target)
+
+    enabled = status == '1'
+    for row in rows:
+        row.is_enabled = enabled
+    db.session.commit()
+    flash(f'Обновлён статус вариантов: {len(rows)}.', 'success')
+    return redirect(target)
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/delete', methods=['POST'])
+@login_required
+def delete_test_data_row(project_id, test_id, dataset_id, row_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    row = TestDataRow.query.filter_by(id=row_id, dataset_id=dataset.id).first_or_404()
+    db.session.delete(row)
+    db.session.commit()
+    flash('Строка удалена. Исторические результаты сохраняются.', 'success')
+    return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
+
+
+@main_bp.route('/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/delete', methods=['POST'])
+@login_required
+def delete_test_data_set(project_id, test_id, dataset_id):
+    project = user_project(project_id)
+    if not project:
+        return redirect(url_for('main.projects'))
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    db.session.delete(dataset)
+    db.session.commit()
+    flash('Набор удалён. Исторические результаты и снимки данных сохраняются.', 'success')
+    return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
 
 
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/versions/<int:version_number>')
@@ -546,6 +1028,319 @@ def compare_test_versions(project_id, test_id):
     )
 
 
+def _save_inline_test_data_sets(test, form):
+    """Create optional data sets atomically with a new test case."""
+    raw_count = (form.get('data_set_count') or '0').strip()
+    try:
+        dataset_count = int(raw_count)
+    except (TypeError, ValueError):
+        raise ValueError('Некорректное количество наборов тестовых данных.')
+    if dataset_count < 0 or dataset_count > 10:
+        raise ValueError('При создании теста можно добавить не более 10 наборов данных.')
+    if dataset_count == 0:
+        return
+
+    # Backward compatibility for clients that still submit the former compact
+    # single-table payload without explicit dataset/row names.
+    legacy_single_table = (
+        dataset_count == 1
+        and not (form.get('data_0_name') or '').strip()
+        and not form.getlist('data_0_row_name[]')
+    )
+    default_dataset_raw = (
+        form.get('default_data_set_index') or ('0' if legacy_single_table else '')
+    ).strip()
+    try:
+        default_dataset_index = int(default_dataset_raw) if default_dataset_raw else None
+    except ValueError:
+        raise ValueError('Некорректный выбор основного набора данных.')
+    if default_dataset_index is not None and not 0 <= default_dataset_index < dataset_count:
+        raise ValueError('Выбранный основной набор данных не существует.')
+
+    sensitive_pattern = (
+        r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|'
+        r'парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|'
+        r'секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
+    )
+
+    for dataset_index in range(dataset_count):
+        prefix = f'data_{dataset_index}_'
+        name = (
+            form.get(prefix + 'name')
+            or ('Основные параметры' if legacy_single_table and dataset_index == 0 else '')
+        ).strip()
+        keys = [value.strip() for value in form.getlist(prefix + 'column_key[]')]
+        submitted_labels = [value.strip() for value in form.getlist(prefix + 'column_label[]')]
+        labels = [
+            submitted_labels[index] if index < len(submitted_labels) and submitted_labels[index] else key
+            for index, key in enumerate(keys)
+        ]
+        secret_flags = [
+            form.get(prefix + f'column_is_secret_{index}') == '1'
+            for index in range(len(keys))
+        ]
+        if not name or len(name) > 120:
+            raise ValueError(f'Укажите название набора данных №{dataset_index + 1} (до 120 символов).')
+        if not keys or len(keys) > 30 or len(keys) != len(labels):
+            raise ValueError(f'В наборе «{name}» добавьте от 1 до 30 параметров.')
+        if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
+            raise ValueError(f'В наборе «{name}» есть некорректное имя параметра.')
+        if len(keys) != len(set(keys)):
+            raise ValueError(f'В наборе «{name}» имена параметров должны быть уникальными.')
+        if any(not label or len(label) > 120 for label in labels):
+            raise ValueError(f'Укажите подпись каждого параметра в наборе «{name}».')
+        if any(
+            re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
+            for index, key in enumerate(keys)
+        ):
+            raise ValueError(
+                f'Параметры с паролями, токенами и ключами в наборе «{name}» должны быть отмечены как секретные.'
+            )
+        if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
+            raise ValueError(
+                'Секретные параметры нельзя сохранить: на сервере не настроен TEST_DATA_ENCRYPTION_KEY.'
+            )
+
+        row_names = [value.strip() for value in form.getlist(prefix + 'row_name[]')]
+        if legacy_single_table and dataset_index == 0 and not row_names:
+            row_names = ['Значения по умолчанию']
+        if len(row_names) > 500:
+            raise ValueError(f'В наборе «{name}» допускается не более 500 строк.')
+        if any(not row_name or len(row_name) > 120 for row_name in row_names):
+            raise ValueError(f'Укажите название каждой строки данных в наборе «{name}» (до 120 символов).')
+
+        default_row_raw = (
+            form.get(prefix + 'default_row_index')
+            or ('0' if legacy_single_table and row_names else '')
+        ).strip()
+        try:
+            default_row_index = int(default_row_raw) if default_row_raw else None
+        except ValueError:
+            raise ValueError(f'Некорректный выбор строки по умолчанию в наборе «{name}».')
+        if default_row_index is not None and not 0 <= default_row_index < len(row_names):
+            raise ValueError(f'Выбранная строка по умолчанию в наборе «{name}» не существует.')
+
+        dataset = TestDataSet(
+            test_case_id=test.id,
+            name=name,
+            is_default=(dataset_index == default_dataset_index),
+        )
+        db.session.add(dataset)
+        db.session.flush()
+        columns = []
+        for position, (key, label) in enumerate(zip(keys, labels)):
+            column = TestDataColumn(
+                dataset_id=dataset.id,
+                key=key,
+                label=label,
+                position=position,
+                is_secret=secret_flags[position],
+            )
+            db.session.add(column)
+            columns.append(column)
+        db.session.flush()
+
+        for row_index, row_name in enumerate(row_names):
+            ordinary_values = {}
+            secret_values = {}
+            for column_index, column in enumerate(columns):
+                value = (form.get(
+                    prefix + f'row_{row_index}_value_{column_index}'
+                ) or '')
+                if len(value) > 10000:
+                    raise ValueError(
+                        f'Значение параметра «{column.label}» в наборе «{name}» превышает 10 000 символов.'
+                    )
+                if column.is_secret:
+                    if value:
+                        secret_values[column.key] = value
+                else:
+                    ordinary_values[column.key] = value
+            try:
+                encrypted_values = encrypt_secret_values(secret_values)
+            except Exception:
+                current_app.logger.warning(
+                    'Could not encrypt inline test-data secrets during test creation'
+                )
+                raise ValueError(
+                    'Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.'
+                ) from None
+            db.session.add(TestDataRow(
+                dataset_id=dataset.id,
+                name=row_name,
+                values_json=ordinary_values,
+                encrypted_values_json=encrypted_values,
+                is_enabled=True,
+                is_default=(row_index == default_row_index),
+                position=row_index,
+            ))
+
+def _update_inline_test_data_sets(test, form):
+    """Update the compact parameter table in place without replacing history-linked IDs."""
+    raw_count = (form.get('data_set_count') or '0').strip()
+    try:
+        dataset_count = int(raw_count)
+    except (TypeError, ValueError):
+        raise ValueError('Некорректные тестовые данные.')
+    if dataset_count not in (0, 1):
+        raise ValueError('Для тест-кейса допускается одна таблица параметров.')
+
+    datasets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
+        TestDataSet.created_at.asc(), TestDataSet.id.asc()
+    ).all()
+    if len(datasets) > 1:
+        raise ValueError('У этого тест-кейса несколько старых наборов данных. Измените их через «Управлять наборами данных», чтобы ничего не потерять.')
+
+    dataset = datasets[0] if datasets else None
+    row = None
+    existing_columns = []
+    if dataset is not None:
+        existing_columns = list(dataset.columns)
+        rows = list(dataset.rows)
+        batches = TestDataBatch.query.filter_by(dataset_id=dataset.id).count()
+        if len(rows) > 1 or batches:
+            raise ValueError('У этого тест-кейса есть несколько вариантов или пакетный запуск. Измените данные через «Управлять наборами данных», чтобы сохранить все варианты.')
+        row = rows[0] if rows else None
+        if not dataset.is_default or (
+            row is not None and (not row.is_default or not row.is_enabled)
+        ):
+            raise ValueError('Этот набор или строка не отмечены как активные значения по умолчанию. Измените их через «Управлять наборами данных».')
+
+    if dataset_count == 0:
+        if dataset is None:
+            return
+        for snapshot in TestRunDataSnapshot.query.filter_by(dataset_id=dataset.id).all():
+            snapshot.dataset_id = None
+            snapshot.data_row_id = None
+        db.session.delete(dataset)
+        return
+
+    keys = [value.strip() for value in form.getlist('data_0_column_key[]')]
+    submitted_labels = [value.strip() for value in form.getlist('data_0_column_label[]')]
+    labels = [
+        submitted_labels[index] if index < len(submitted_labels) and submitted_labels[index] else key
+        for index, key in enumerate(keys)
+    ]
+    if not keys or len(keys) > 30:
+        raise ValueError('Добавьте от 1 до 30 параметров.')
+    if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
+        raise ValueError('Имя параметра должно начинаться с буквы и содержать только буквы, цифры, пробелы, дефисы или подчёркивания.')
+    if len(set(keys)) != len(keys):
+        raise ValueError('Имена параметров должны быть уникальными.')
+    if any(not label or len(label) > 120 for label in labels):
+        raise ValueError('Название параметра должно быть не длиннее 120 символов.')
+
+    sensitive_pattern = (
+        r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|'
+        r'парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|'
+        r'секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
+    )
+    secret_flags = [
+        form.get(f'data_0_column_is_secret_{index}') == '1'
+        for index in range(len(keys))
+    ]
+    if any(
+        re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
+        for index, key in enumerate(keys)
+    ):
+        raise ValueError('Пароли, токены и ключи необходимо отметить как секретные.')
+    if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
+        raise ValueError('Секретные параметры нельзя сохранить: на сервере не настроено шифрование.')
+
+    existing_by_id = {column.id: column for column in existing_columns}
+    submitted_ids = []
+    for raw_id in form.getlist('data_0_column_id[]'):
+        raw_id = (raw_id or '').strip()
+        if not raw_id:
+            submitted_ids.append(None)
+            continue
+        try:
+            column_id = int(raw_id)
+        except ValueError:
+            raise ValueError('Некорректный идентификатор параметра.')
+        if column_id not in existing_by_id or column_id in submitted_ids:
+            raise ValueError('Список параметров устарел. Обновите страницу и попробуйте снова.')
+        submitted_ids.append(column_id)
+    if len(submitted_ids) != len(keys):
+        raise ValueError('Некорректный список параметров.')
+
+    retained_ids = {column_id for column_id in submitted_ids if column_id is not None}
+    original_column_keys = {column.id: column.key for column in existing_columns}
+    # Move current keys out of the unique namespace before applying renames,
+    # allowing safe key swaps and replacement of a removed key in one request.
+    for existing_column in existing_columns:
+        existing_column.key = f'__pending_edit_{existing_column.id}__'
+        if existing_column.id not in retained_ids:
+            db.session.delete(existing_column)
+    db.session.flush()
+
+    try:
+        old_secret_values = decrypt_secret_values(row.encrypted_values_json) if row else {}
+    except ValueError:
+        raise ValueError('Не удалось расшифровать сохранённые секреты. Данные не изменены; проверьте ключ шифрования.') from None
+
+    if dataset is None:
+        dataset = TestDataSet(test_case_id=test.id, name='Основные параметры', is_default=True)
+        db.session.add(dataset)
+        db.session.flush()
+    else:
+        dataset.name = 'Основные параметры'
+
+    ordinary_values = {}
+    secret_values = {}
+    for index, (key, label, is_secret) in enumerate(zip(keys, labels, secret_flags)):
+        column_id = submitted_ids[index]
+        value = form.get(f'data_0_row_0_value_{index}', '')
+        if len(value) > 10000:
+            raise ValueError(f'Значение параметра «{label}» превышает 10 000 символов.')
+
+        column = existing_by_id.get(column_id) if column_id else None
+        if column is not None:
+            if bool(column.is_secret) != bool(is_secret):
+                raise ValueError('Нельзя менять тип уже существующего параметра (обычный/секретный). Удалите его и создайте новый.')
+            old_key = original_column_keys[column.id]
+            column.key = key
+            column.label = label
+            column.position = index
+            if is_secret:
+                previous_secret = old_secret_values.get(old_key, '')
+                if form.get(f'data_0_row_0_clear_secret_{index}') == '1':
+                    previous_secret = ''
+                secret_value = value if value else previous_secret
+                if secret_value:
+                    secret_values[key] = secret_value
+            else:
+                ordinary_values[key] = value
+        else:
+            column = TestDataColumn(
+                dataset_id=dataset.id, key=key, label=label,
+                position=index, is_secret=is_secret
+            )
+            db.session.add(column)
+            if is_secret:
+                if value:
+                    secret_values[key] = value
+            else:
+                ordinary_values[key] = value
+
+    try:
+        encrypted_values = encrypt_secret_values(secret_values)
+    except Exception:
+        current_app.logger.warning('Could not encrypt simple test-data secrets during test editing')
+        raise ValueError('Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.') from None
+
+    if row is None:
+        row = TestDataRow(
+            dataset_id=dataset.id, name='Значения по умолчанию',
+            is_enabled=True, is_default=True, position=0
+        )
+        db.session.add(row)
+    row.name = 'Значения по умолчанию'
+    row.position = 0
+    row.values_json = ordinary_values
+    row.encrypted_values_json = encrypted_values
+
+
 @main_bp.route('/project/<int:project_id>/create_test', methods=['GET', 'POST'])
 @login_required
 def create_test(project_id):
@@ -577,6 +1372,7 @@ def create_test(project_id):
                         request.files.getlist(f'test_step_screenshot_{index}[]'),
                         user_id=current_user.id, test_step_id=step.id
                     ))
+                _save_inline_test_data_sets(test, request.form)
                 create_test_version(test)
                 db.session.commit()
             except ValueError as error:
@@ -716,6 +1512,8 @@ def edit_test(project_id, test_id):
                 for old_id, items in old_screenshots_by_id.items():
                     if old_id not in retained_source_ids:
                         old_screenshot_paths_to_remove.extend(upload_dir / item['stored_name'] for item in items)
+                if 'data_set_count' in request.form:
+                    _update_inline_test_data_sets(test, request.form)
                 create_test_version(test)
                 db.session.commit()
                 for old_path in old_screenshot_paths_to_remove:
@@ -749,7 +1547,34 @@ def edit_test(project_id, test_id):
             flash('Тест-кейс обновлён! Создана новая версия.', 'success')
             return redirect(url_for('main.test_detail', project_id=project.id, test_id=test.id))
 
-    return render_template('edit_test.html', project=project, test=test, steps=steps)
+    data_sets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
+        TestDataSet.created_at.asc()
+    ).all()
+    inline_dataset = data_sets[0] if len(data_sets) == 1 else None
+    inline_rows = list(inline_dataset.rows) if inline_dataset is not None else []
+    inline_batches = (
+        TestDataBatch.query.filter_by(dataset_id=inline_dataset.id).count()
+        if inline_dataset is not None else 0
+    )
+    simple_inline_data = (
+        len(data_sets) == 0 or
+        (
+            inline_dataset is not None
+            and inline_dataset.is_default
+            and len(inline_rows) <= 1
+            and inline_batches == 0
+            and (
+                not inline_rows
+                or (inline_rows[0].is_default and inline_rows[0].is_enabled)
+            )
+        )
+    )
+    inline_row = inline_rows[0] if inline_rows else None
+    return render_template(
+        'edit_test.html', project=project, test=test, steps=steps,
+        data_sets=data_sets, simple_inline_data=simple_inline_data,
+        inline_dataset=inline_dataset, inline_row=inline_row
+    )
 
 
 @main_bp.route('/project/<int:project_id>/test/<int:test_id>/delete', methods=['POST'])
@@ -798,6 +1623,10 @@ def delete_test(project_id, test_id):
         StepRun.query.filter(StepRun.id.in_(step_run_ids)).delete(synchronize_session=False)
 
     if run_ids:
+        # Bulk deletion skips the TestRun.data_snapshot ORM cascade.
+        TestRunDataSnapshot.query.filter(
+            TestRunDataSnapshot.test_run_id.in_(run_ids)
+        ).delete(synchronize_session=False)
         TestRun.query.filter(TestRun.id.in_(run_ids)).delete(synchronize_session=False)
     if step_ids:
         TestStep.query.filter(TestStep.id.in_(step_ids)).delete(synchronize_session=False)
@@ -822,6 +1651,44 @@ def delete_test(project_id, test_id):
     return redirect(url_for('main.project_detail', project_id=project.id))
 
 
+@main_bp.route(
+    '/project/<int:project_id>/test/<int:test_id>/data/<int:dataset_id>/rows/<int:row_id>/secrets/<int:column_id>',
+    methods=['POST']
+)
+@login_required
+def reveal_run_secret(project_id, test_id, dataset_id, row_id, column_id):
+    """Reveal one secret only after an explicit, authenticated user action."""
+    try:
+        validate_csrf(request.headers.get('X-CSRFToken', ''))
+    except ValidationError:
+        abort(400, description='Недействительный CSRF-токен')
+    project = Project.query.filter_by(id=project_id, user_id=current_user.id).first_or_404()
+    test = TestCase.query.filter_by(id=test_id, project_id=project.id).first_or_404()
+    dataset = TestDataSet.query.filter_by(id=dataset_id, test_case_id=test.id).first_or_404()
+    row = TestDataRow.query.filter_by(id=row_id, dataset_id=dataset.id).first_or_404()
+    column = TestDataColumn.query.filter_by(
+        id=column_id, dataset_id=dataset.id, is_secret=True
+    ).first_or_404()
+
+    try:
+        values = decrypt_secret_values(row.encrypted_values_json)
+    except ValueError:
+        current_app.logger.warning(
+            'Secret reveal unavailable for user_id=%s project_id=%s dataset_id=%s column_id=%s',
+            current_user.id, project.id, dataset.id, column.id,
+        )
+        return jsonify({'error': 'Секретное значение временно недоступно.'}), 503
+
+    if column.key not in values:
+        return jsonify({'error': 'Секретное значение не найдено.'}), 404
+
+    response = jsonify({'value': values[column.key]})
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Vary'] = 'Cookie'
+    return response
+
+
 @main_bp.route('/project/<int:project_id>/run', methods=['GET', 'POST'])
 @login_required
 def run_tests(project_id):
@@ -830,13 +1697,112 @@ def run_tests(project_id):
         return redirect(url_for('main.projects'))
 
     selected_test_id = request.args.get('test_id', type=int)
+    data_set_id = request.args.get('data_set_id', type=int)
+    data_row_id = request.args.get('data_row_id', type=int)
+    batch_token = (request.args.get('batch_id') or '').strip()
+    data_index = request.args.get('data_index', type=int)
+    data_batch = None
+
+    # Start a sequential run by freezing the active row IDs in a server-side record.
+    if request.args.get('run_all') == '1' and not batch_token:
+        if not selected_test_id or not data_set_id:
+            flash('Выберите тест-кейс и набор данных для последовательного запуска.', 'danger')
+            return redirect(url_for('main.project_detail', project_id=project.id))
+        batch_test = TestCase.query.filter_by(
+            id=selected_test_id, project_id=project.id
+        ).first_or_404()
+        batch_dataset = TestDataSet.query.filter_by(
+            id=data_set_id, test_case_id=batch_test.id
+        ).first_or_404()
+        active_row_ids = [
+            row.id for row in TestDataRow.query.filter_by(
+                dataset_id=batch_dataset.id, is_enabled=True
+            ).order_by(TestDataRow.position, TestDataRow.id).all()
+        ]
+        if not active_row_ids:
+            flash('В наборе нет активных строк для запуска.', 'warning')
+            return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=batch_test.id))
+        data_batch = TestDataBatch(
+            token=secrets.token_urlsafe(24),
+            user_id=current_user.id,
+            test_case_id=batch_test.id,
+            dataset_id=batch_dataset.id,
+            row_ids_json=active_row_ids,
+            next_index=0,
+        )
+        db.session.add(data_batch)
+        db.session.commit()
+        return redirect(url_for(
+            'main.run_tests', project_id=project.id, test_id=batch_test.id,
+            data_set_id=batch_dataset.id, run_all=1,
+            batch_id=data_batch.token, data_index=0
+        ))
+
+    if batch_token:
+        if not selected_test_id:
+            abort(404)
+        data_batch = TestDataBatch.query.filter_by(
+            token=batch_token, user_id=current_user.id,
+            test_case_id=selected_test_id
+        ).first_or_404()
+        if data_set_id and data_set_id != data_batch.dataset_id:
+            abort(404)
+        data_set_id = data_batch.dataset_id
+        if data_index is None:
+            data_index = data_batch.next_index
+        if data_index != data_batch.next_index:
+            return redirect(url_for(
+                'main.run_tests', project_id=project.id, test_id=selected_test_id,
+                data_set_id=data_set_id, run_all=1,
+                batch_id=data_batch.token, data_index=data_batch.next_index
+            ))
+        batch_row_ids = data_batch.row_ids_json or []
+        if data_index < 0 or data_index >= len(batch_row_ids):
+            db.session.delete(data_batch)
+            db.session.commit()
+            flash('Последовательный запуск завершён.', 'success')
+            return redirect(url_for('main.run_stats', project_id=project.id))
+        data_row_id = batch_row_ids[data_index]
+
     if selected_test_id:
-        selected_test = TestCase.query.filter_by(id=selected_test_id, project_id=project.id).first_or_404()
+        selected_test = TestCase.query.filter_by(
+            id=selected_test_id, project_id=project.id
+        ).first_or_404()
+        # If the user marked a data set as default while creating the test,
+        # apply its default row when they start this test directly.
+        if not data_set_id and not data_row_id:
+            default_dataset = TestDataSet.query.filter_by(
+                test_case_id=selected_test.id, is_default=True
+            ).order_by(TestDataSet.id.asc()).first()
+            if default_dataset:
+                default_row = TestDataRow.query.filter_by(
+                    dataset_id=default_dataset.id, is_enabled=True
+                ).order_by(
+                    TestDataRow.is_default.desc(),
+                    TestDataRow.position.asc(),
+                    TestDataRow.id.asc()
+                ).first()
+                if default_row is None:
+                    flash(
+                        'Для основного набора ещё не добавлена активная строка тестовых данных.',
+                        'warning'
+                    )
+                    return redirect(url_for(
+                        'main.test_data_sets',
+                        project_id=project.id,
+                        test_id=selected_test.id
+                    ))
+                data_set_id = default_dataset.id
+                data_row_id = default_row.id
         tests = [selected_test]
         single_test = True
     else:
         tests = TestCase.query.filter_by(project_id=project.id).all()
         single_test = False
+
+    if bool(data_set_id) != bool(data_row_id) or ((data_set_id or data_row_id) and not selected_test_id):
+        flash('Для запуска с тестовыми данными выберите тест-кейс, набор и строку.', 'danger')
+        return redirect(url_for('main.project_detail', project_id=project.id))
 
     if not tests:
         flash('В этом проекте нет тестов для прогона', 'warning')
@@ -846,6 +1812,66 @@ def run_tests(project_id):
     current_index = max(0, min(current_index, len(tests) - 1))
     test = tests[current_index]
     steps = ensure_test_steps(test)
+    dataset = None
+    data_row = None
+    prepared_data = None
+    secret_fields = []
+    display_precondition = test.precondition or ''
+    display_steps = [
+        {'action': step.action, 'expected_result': step.expected_result or ''}
+        for step in steps
+    ]
+    if data_set_id and data_row_id:
+        dataset = TestDataSet.query.filter_by(
+            id=data_set_id, test_case_id=test.id
+        ).first_or_404()
+        data_row = TestDataRow.query.filter_by(
+            id=data_row_id, dataset_id=dataset.id
+        ).first()
+        if data_row is None and data_batch:
+            # A row can be deleted in another tab after the batch was created.
+            # Stop cleanly instead of returning a 404 and leaving a stale batch.
+            db.session.delete(data_batch)
+            db.session.commit()
+            flash(
+                'Последовательный запуск остановлен: одна из строк тестовых данных была удалена.',
+                'warning'
+            )
+            return redirect(url_for(
+                'main.test_data_sets', project_id=project.id, test_id=test.id
+            ))
+        if data_row is None:
+            abort(404)
+        if not data_row.is_enabled and not data_batch:
+            flash('Эта строка тестовых данных отключена.', 'warning')
+            return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
+        try:
+            prepared_data = prepare_test_data(test, dataset, data_row)
+        except ValueError as error:
+            flash(str(error), 'danger')
+            return redirect(url_for('main.test_data_sets', project_id=project.id, test_id=test.id))
+        # Decrypted secrets are used server-side for substitution and snapshots,
+        # but are never rendered into the initial HTML response.
+        display_precondition = redact_secrets(
+            prepared_data['precondition'], prepared_data
+        )
+        display_steps = prepared_data['redacted_steps']
+        secret_fields = [
+            {
+                'label': column.label,
+                'key': column.key,
+                'column_id': column.id,
+                'reveal_url': url_for(
+                    'main.reveal_run_secret',
+                    project_id=project.id,
+                    test_id=test.id,
+                    dataset_id=dataset.id,
+                    row_id=data_row.id,
+                    column_id=column.id,
+                ),
+            }
+            for column in dataset.columns if column.is_secret
+        ]
 
     if request.method == 'POST':
         statuses = request.form.getlist('step_status[]')
@@ -856,6 +1882,63 @@ def run_tests(project_id):
         elif any(status not in STATUS_LABELS for status in statuses):
             flash('Некорректный статус шага', 'danger')
         else:
+            if data_batch:
+                # Claim this iteration atomically. Replayed requests cannot create duplicate runs.
+                try:
+                    claimed = TestDataBatch.query.filter_by(
+                        id=data_batch.id,
+                        user_id=current_user.id,
+                        next_index=data_index,
+                    ).update(
+                        {TestDataBatch.next_index: data_index + 1},
+                        synchronize_session=False,
+                    )
+                except OperationalError as error:
+                    db.session.rollback()
+                    message = str(getattr(error, 'orig', error)).lower()
+                    if 'database is locked' not in message and 'database is busy' not in message:
+                        raise
+                    current_batch = TestDataBatch.query.filter_by(
+                        token=batch_token, user_id=current_user.id,
+                        test_case_id=test.id,
+                    ).first()
+                    if current_batch:
+                        flash(
+                            'База данных занята другим запросом. Повторите сохранение: '
+                            'текущая итерация ещё не подтверждена.',
+                            'warning'
+                        )
+                        return redirect(url_for(
+                            'main.run_tests', project_id=project.id,
+                            test_id=test.id, data_set_id=current_batch.dataset_id,
+                            run_all=1, batch_id=current_batch.token,
+                            data_index=current_batch.next_index,
+                        ))
+                    flash('Последовательный запуск уже завершён.', 'warning')
+                    return redirect(url_for('main.run_stats', project_id=project.id))
+                if claimed != 1:
+                    db.session.rollback()
+                    current_batch = TestDataBatch.query.filter_by(
+                        token=batch_token, user_id=current_user.id,
+                        test_case_id=test.id,
+                    ).first()
+                    if current_batch:
+                        flash(
+                            'Эта итерация уже была сохранена. Продолжите со следующей.',
+                            'warning'
+                        )
+                        return redirect(url_for(
+                            'main.run_tests', project_id=project.id,
+                            test_id=test.id, data_set_id=current_batch.dataset_id,
+                            run_all=1, batch_id=current_batch.token,
+                            data_index=current_batch.next_index,
+                        ))
+                    flash('Последовательный запуск уже завершён.', 'warning')
+                    return redirect(url_for('main.run_stats', project_id=project.id))
+
+                # Keep the ORM object in sync with the atomic SQL update.
+                data_batch.next_index = data_index + 1
+
             # Pin each run to the exact test-case snapshot that was current when it started.
             version = ensure_test_version(test)
             overall_status = step_status_summary([
@@ -870,16 +1953,28 @@ def run_tests(project_id):
             )
             db.session.add(run)
             db.session.flush()
+            if prepared_data:
+                db.session.add(TestRunDataSnapshot(
+                    test_run_id=run.id,
+                    dataset_id=dataset.id,
+                    data_row_id=data_row.id,
+                    dataset_name_snapshot=prepared_data['dataset_name_snapshot'],
+                    row_name_snapshot=prepared_data['row_name_snapshot'],
+                    values_snapshot_json=prepared_data['values_snapshot'],
+                    encrypted_values_snapshot=prepared_data['encrypted_values_snapshot'],
+                    snapshot_version=1,
+                ))
             uploaded_paths = []
             try:
                 for index, (step, status, comment) in enumerate(zip(steps, statuses, comments)):
+                    rendered_step = display_steps[index]
                     step_run = StepRun(
                         test_run_id=run.id,
                         test_step_id=step.id,
                         status=status,
-                        comment=comment.strip(),
-                        step_text=step.action,
-                        expected_result=step.expected_result or ''
+                        comment=(redact_secrets(comment.strip(), prepared_data) if prepared_data else comment.strip()),
+                        step_text=(prepared_data['redacted_steps'][index]['action'] if prepared_data else rendered_step['action']),
+                        expected_result=(prepared_data['redacted_steps'][index]['expected_result'] if prepared_data else (rendered_step['expected_result'] or ''))
                     )
                     db.session.add(step_run)
                     db.session.flush()
@@ -941,7 +2036,11 @@ def run_tests(project_id):
                         current_app.logger.exception('Could not remove a temporary screenshot after validation failure')
                 flash(str(error), 'danger')
                 return redirect(url_for('main.run_tests', project_id=project.id,
-                                        test_id=(test.id if single_test else None), index=current_index))
+                                        test_id=(test.id if single_test else None), index=current_index,
+                                        data_set_id=data_set_id, data_row_id=data_row_id,
+                                        run_all=(1 if data_batch else None),
+                                        batch_id=(data_batch.token if data_batch else None),
+                                        data_index=(data_index if data_batch else None)))
             except Exception:
                 db.session.rollback()
                 for file_path in uploaded_paths:
@@ -951,6 +2050,20 @@ def run_tests(project_id):
                         current_app.logger.exception('Could not remove a screenshot after a failed test-run save')
                 raise
 
+            if data_batch:
+                completed_iterations = data_batch.next_index
+                total_iterations = len(data_batch.row_ids_json or [])
+                if data_batch.next_index < total_iterations:
+                    return redirect(url_for(
+                        'main.run_tests', project_id=project.id, test_id=test.id,
+                        data_set_id=data_set_id, run_all=1,
+                        batch_id=data_batch.token, data_index=data_batch.next_index
+                    ))
+                db.session.delete(data_batch)
+                db.session.commit()
+                flash(f'Последовательный запуск завершён: {completed_iterations} итераций.', 'success')
+                return redirect(url_for('main.run_stats', project_id=project.id))
+
             next_index = current_index + 1
             if next_index < len(tests):
                 if single_test:
@@ -959,9 +2072,14 @@ def run_tests(project_id):
                 return redirect(url_for('main.run_tests', project_id=project.id, index=next_index))
             return redirect(url_for('main.run_stats', project_id=project.id))
 
-    return render_template('run.html', project=project, test=test, steps=steps,
-                           current_index=current_index, total=len(tests),
-                           single_test=single_test, status_labels=STATUS_LABELS)
+    return render_template(
+        'run.html', project=project, test=test, steps=steps,
+        display_steps=display_steps, display_precondition=display_precondition,
+        dataset=dataset, data_row=data_row, data_batch=data_batch, data_index=data_index,
+        secret_fields=secret_fields,
+        current_index=current_index, total=len(tests),
+        single_test=single_test, status_labels=STATUS_LABELS
+    )
 
 
 @main_bp.route('/test-step-screenshots/<int:screenshot_id>')
@@ -1130,6 +2248,15 @@ def export_pdf(project_id):
         )
         version_label = 'v' + str(run.version.version_number) if run.version else '—'
         comment = run.comment or ''
+        run_data_snapshot = TestRunDataSnapshot.query.filter_by(
+            test_run_id=run.id
+        ).first()
+        if run_data_snapshot:
+            snapshot_label = (
+                run_data_snapshot.dataset_name_snapshot + ' / '
+                + run_data_snapshot.row_name_snapshot
+            )
+            comment = (comment + NL if comment else '') + 'Тестовые данные: ' + snapshot_label
         comment = escape(comment).replace(NL, '<br/>')
         data.append([
             Paragraph(str(idx), cell_style),
@@ -1211,11 +2338,25 @@ def api_token_create():
     token = ApiToken(
         user_id=current_user.id,
         token=token_value,
-        name=name
+        name=name,
+        allow_secret_data=(request.form.get('allow_secret_data') == '1')
     )
     db.session.add(token)
     db.session.commit()
     flash(f'Токен «{name}» создан. Скопируйте его — он больше не будет показан.', 'success')
+    return redirect(url_for('main.api_tokens'))
+
+
+@main_bp.route('/settings/api/<int:token_id>/secret-access', methods=['POST'])
+@login_required
+def api_token_secret_access(token_id):
+    token = ApiToken.query.get_or_404(token_id)
+    if token.user_id != current_user.id:
+        flash('Доступ запрещён', 'danger')
+        return redirect(url_for('main.api_tokens'))
+    token.allow_secret_data = request.form.get('allow_secret_data') == '1'
+    db.session.commit()
+    flash('Разрешение на получение секретных данных обновлено.', 'success')
     return redirect(url_for('main.api_tokens'))
 
 

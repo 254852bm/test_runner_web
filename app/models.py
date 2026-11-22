@@ -20,6 +20,10 @@ class User(UserMixin, db.Model):
         return bool(self.is_blocked and (self.blocked_until is None or self.blocked_until > datetime.utcnow()))
 
     projects = db.relationship('Project', backref='owner', lazy=True)
+    ai_credential = db.relationship(
+        'AICredential', back_populates='user', uselist=False,
+        cascade='all, delete-orphan'
+    )
 
 
 class Project(db.Model):
@@ -32,6 +36,8 @@ class Project(db.Model):
 
 
 class TestCase(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     precondition = db.Column(db.Text)
@@ -55,8 +61,19 @@ class TestCase(db.Model):
         cascade='all, delete-orphan'
     )
 
+    data_sets = db.relationship(
+        'TestDataSet', backref='test_case', lazy=True,
+        cascade='all, delete-orphan'
+    )
+    data_batches = db.relationship(
+        'TestDataBatch', backref='test_case', lazy=True,
+        cascade='all, delete-orphan'
+    )
+
 
 class TestCaseVersion(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     id = db.Column(db.Integer, primary_key=True)
     test_case_id = db.Column(db.Integer, db.ForeignKey('test_case.id'), nullable=False)
     version_number = db.Column(db.Integer, nullable=False)
@@ -71,6 +88,8 @@ class TestCaseVersion(db.Model):
 
 
 class TestStep(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     id = db.Column(db.Integer, primary_key=True)
     test_case_id = db.Column(db.Integer, db.ForeignKey('test_case.id'), nullable=False)
     position = db.Column(db.Integer, nullable=False)
@@ -81,6 +100,8 @@ class TestStep(db.Model):
 
 
 class TestStepScreenshot(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     id = db.Column(db.Integer, primary_key=True)
     test_step_id = db.Column(db.Integer, db.ForeignKey('test_step.id'), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
@@ -93,6 +114,8 @@ class TestStepScreenshot(db.Model):
 
 
 class TestRun(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     id = db.Column(db.Integer, primary_key=True)
     status = db.Column(db.String(20), nullable=False)
     comment = db.Column(db.Text)
@@ -152,6 +175,10 @@ class ApiToken(db.Model):
     name = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_used_at = db.Column(db.DateTime)
+    # Explicit per-token permission; legacy tokens remain unable to retrieve secrets.
+    allow_secret_data = db.Column(
+        db.Boolean, nullable=False, default=False, server_default='0'
+    )
 
     user = db.relationship('User', backref='api_tokens')
 
@@ -160,7 +187,7 @@ from app import login_manager
 
 @login_manager.user_loader
 def load_user(user_id):
-    user = User.query.get(int(user_id))
+    user = db.session.get(User, int(user_id))
     return user if user and not user.is_deleted else None
 
 
@@ -213,3 +240,175 @@ class AppErrorLog(db.Model):
     error_type = db.Column(db.String(120), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     user = db.relationship('User', foreign_keys=[user_id])
+
+
+class TestDataSet(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
+    """A named collection of parameter rows belonging to one test case."""
+    id = db.Column(db.Integer, primary_key=True)
+    test_case_id = db.Column(
+        db.Integer, db.ForeignKey('test_case.id'), nullable=False, index=True
+    )
+    name = db.Column(db.String(120), nullable=False)
+    is_default = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    columns = db.relationship(
+        'TestDataColumn', backref='dataset', lazy=True,
+        cascade='all, delete-orphan', order_by='TestDataColumn.position'
+    )
+    rows = db.relationship(
+        'TestDataRow', backref='dataset', lazy=True,
+        cascade='all, delete-orphan', order_by='TestDataRow.position'
+    )
+    run_snapshots = db.relationship(
+        'TestRunDataSnapshot', backref='dataset', lazy=True
+    )
+    batches = db.relationship(
+        'TestDataBatch', backref='dataset', lazy=True,
+        cascade='all, delete-orphan'
+    )
+
+
+class TestDataColumn(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
+    """A named variable definition in a test data set."""
+    id = db.Column(db.Integer, primary_key=True)
+    dataset_id = db.Column(
+        db.Integer, db.ForeignKey('test_data_set.id'), nullable=False, index=True
+    )
+    key = db.Column(db.String(64), nullable=False)
+    label = db.Column(db.String(120), nullable=False)
+    is_secret = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+    position = db.Column(db.Integer, nullable=False, default=0)
+
+    __table_args__ = (
+        db.UniqueConstraint('dataset_id', 'key', name='uq_test_data_column_dataset_key'),
+    )
+
+
+class TestDataRow(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
+    """One row of values; values are JSON keyed by TestDataColumn.key.
+
+    Secret-column encryption must be implemented before secret values are accepted
+    through any UI or API. The model alone does not provide encryption.
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    dataset_id = db.Column(
+        db.Integer, db.ForeignKey('test_data_set.id'), nullable=False, index=True
+    )
+    name = db.Column(db.String(120), nullable=False)
+    is_default = db.Column(db.Boolean, nullable=False, default=False, server_default='0')
+    # Ordinary values stay in JSON. Secret values must be stored only in this
+    # authenticated-encryption payload; never put plaintext secrets in values_json.
+    values_json = db.Column(db.JSON, nullable=False, default=dict)
+    encrypted_values_json = db.Column(db.Text, nullable=True)
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default='1')
+    position = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+    run_snapshots = db.relationship(
+        'TestRunDataSnapshot', backref='data_row', lazy=True
+    )
+
+
+class TestRunDataSnapshot(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
+    """Immutable, non-secret data snapshot attached to one historical run.
+
+    This separate table avoids altering the existing test_run table, so existing
+    production databases can gain the feature additively via create_all().
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    test_run_id = db.Column(
+        db.Integer, db.ForeignKey('test_run.id'), nullable=False, unique=True, index=True
+    )
+    dataset_id = db.Column(
+        db.Integer, db.ForeignKey('test_data_set.id', ondelete='SET NULL'), nullable=True
+    )
+    data_row_id = db.Column(
+        db.Integer, db.ForeignKey('test_data_row.id', ondelete='SET NULL'), nullable=True
+    )
+    dataset_name_snapshot = db.Column(db.String(120), nullable=False)
+    row_name_snapshot = db.Column(db.String(120), nullable=False)
+    values_snapshot_json = db.Column(db.JSON, nullable=False, default=dict)
+    # Secret snapshot is encrypted independently so history remains immutable
+    # without exposing credentials in ordinary JSON columns.
+    encrypted_values_snapshot = db.Column(db.Text, nullable=True)
+    snapshot_version = db.Column(db.Integer, nullable=False, default=1)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    test_run = db.relationship('TestRun', backref=db.backref(
+        'data_snapshot', uselist=False, cascade='all, delete-orphan'
+    ))
+
+
+
+
+class TestDataBatch(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
+    """Server-side progress for a sequential run over a fixed list of rows."""
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    test_case_id = db.Column(
+        db.Integer, db.ForeignKey('test_case.id'), nullable=False, index=True
+    )
+    dataset_id = db.Column(
+        db.Integer, db.ForeignKey('test_data_set.id'), nullable=False, index=True
+    )
+    row_ids_json = db.Column(db.JSON, nullable=False, default=list)
+    next_index = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    user = db.relationship('User', backref='test_data_batches')
+
+
+
+class AIGenerationAttempt(db.Model):
+    """Metadata-only record used for per-user generation rate limiting."""
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+
+class AIDraftSave(db.Model):
+    """Idempotency record preventing the same reviewed AI draft being saved twice."""
+    id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    user_id = db.Column(db.Integer, nullable=False, index=True)
+    project_id = db.Column(db.Integer, nullable=False, index=True)
+    test_case_id = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+
+class AICredential(db.Model):
+    """One encrypted, user-owned BYOK credential; plaintext is never persisted."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey('user.id'), nullable=False, unique=True, index=True
+    )
+    provider = db.Column(db.String(40), nullable=False)
+    encrypted_payload = db.Column(db.Text, nullable=False)
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default='1')
+    consent_version = db.Column(db.String(40), nullable=False)
+    consented_at = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+    )
+
+    user = db.relationship('User', back_populates='ai_credential')
