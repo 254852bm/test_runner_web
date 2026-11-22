@@ -1040,7 +1040,16 @@ def _save_inline_test_data_sets(test, form):
     if dataset_count == 0:
         return
 
-    default_dataset_raw = (form.get('default_data_set_index') or '').strip()
+    # Backward compatibility for clients that still submit the former compact
+    # single-table payload without explicit dataset/row names.
+    legacy_single_table = (
+        dataset_count == 1
+        and not (form.get('data_0_name') or '').strip()
+        and not form.getlist('data_0_row_name[]')
+    )
+    default_dataset_raw = (
+        form.get('default_data_set_index') or ('0' if legacy_single_table else '')
+    ).strip()
     try:
         default_dataset_index = int(default_dataset_raw) if default_dataset_raw else None
     except ValueError:
@@ -1056,7 +1065,10 @@ def _save_inline_test_data_sets(test, form):
 
     for dataset_index in range(dataset_count):
         prefix = f'data_{dataset_index}_'
-        name = (form.get(prefix + 'name') or '').strip()
+        name = (
+            form.get(prefix + 'name')
+            or ('Основные параметры' if legacy_single_table and dataset_index == 0 else '')
+        ).strip()
         keys = [value.strip() for value in form.getlist(prefix + 'column_key[]')]
         submitted_labels = [value.strip() for value in form.getlist(prefix + 'column_label[]')]
         labels = [
@@ -1090,12 +1102,17 @@ def _save_inline_test_data_sets(test, form):
             )
 
         row_names = [value.strip() for value in form.getlist(prefix + 'row_name[]')]
+        if legacy_single_table and dataset_index == 0 and not row_names:
+            row_names = ['Значения по умолчанию']
         if len(row_names) > 500:
             raise ValueError(f'В наборе «{name}» допускается не более 500 строк.')
         if any(not row_name or len(row_name) > 120 for row_name in row_names):
             raise ValueError(f'Укажите название каждой строки данных в наборе «{name}» (до 120 символов).')
 
-        default_row_raw = (form.get(prefix + 'default_row_index') or '').strip()
+        default_row_raw = (
+            form.get(prefix + 'default_row_index')
+            or ('0' if legacy_single_table and row_names else '')
+        ).strip()
         try:
             default_row_index = int(default_row_raw) if default_row_raw else None
         except ValueError:
