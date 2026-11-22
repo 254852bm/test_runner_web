@@ -49,6 +49,12 @@ class TestRunApiIntegrationTest {
         JsonNode root = JSON.readTree(rowsResponse.body());
         assertEquals(testCaseId, root.path("test_case_id").asInt(),
             "Выбранный набор данных должен принадлежать указанному тест-кейсу");
+        assertFalse(root.path("secrets_included").asBoolean(),
+            "Обычный API-запрос не должен включать секретные значения");
+        for (JsonNode column : root.path("columns")) {
+            assertFalse(column.path("is_secret").asBoolean(),
+                "Секретные столбцы не должны попадать в обычный ответ API");
+        }
         JsonNode rows = root.path("rows");
         assertTrue(rows.isArray() && !rows.isEmpty(), "В наборе должна быть хотя бы одна активная строка");
 
