@@ -196,6 +196,8 @@ class TestRunEndToEndTest {
             "При запуске должен применяться набор данных по умолчанию");
         assertTrue(driver.getPageSource().contains("Демонстрационная строка"),
             "При запуске должна применяться строка по умолчанию");
+        assertTrue(driver.getPageSource().contains("Выполнить демонстрационную проверку для demo-user"),
+            "Параметр из выбранной строки должен подставиться в действие шага");
         List<WebElement> statuses = driver.findElements(By.cssSelector("select[name='step_status[]']"));
         assertFalse(statuses.isEmpty(), "В прогоне должен быть хотя бы один шаг");
         for (WebElement status : statuses) {
