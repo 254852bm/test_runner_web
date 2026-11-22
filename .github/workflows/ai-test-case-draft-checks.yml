@@ -12,6 +12,7 @@ on:
 
   push:
     branches:
+      - feature/dashboard-ai-visual-refresh
       - feature/edit-simple-test-data-table
       - integration/ai-provider-mvp
       - feature/ai-automation-test-design
