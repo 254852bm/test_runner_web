@@ -66,7 +66,7 @@ def api_test_case_data_sets(test_case_id):
     if not user:
         return _error('Неверный или отсутствующий API-токен', 401)
 
-    test_case = TestCase.query.get(test_case_id)
+    test_case = db.session.get(TestCase, test_case_id)
     if not test_case:
         return _error('Тест-кейс не найден', 404)
     if not _owns_test_case(user, test_case):
@@ -106,10 +106,10 @@ def api_data_set_rows(dataset_id):
     if not user:
         return _error('Неверный или отсутствующий API-токен', 401)
 
-    dataset = TestDataSet.query.get(dataset_id)
+    dataset = db.session.get(TestDataSet, dataset_id)
     if not dataset:
         return _error('Набор данных не найден', 404)
-    test_case = TestCase.query.get(dataset.test_case_id)
+    test_case = db.session.get(TestCase, dataset.test_case_id)
     if not _owns_test_case(user, test_case):
         return _error('Доступ запрещён', 403)
 
@@ -207,7 +207,7 @@ def api_run():
     if not test_case_id:
         return _error('Не указан test_case_id')
 
-    test_case = TestCase.query.get(test_case_id)
+    test_case = db.session.get(TestCase, test_case_id)
     if not test_case:
         return _error(f'Тест-кейс с id={test_case_id} не найден', 404)
 
@@ -294,7 +294,7 @@ def api_run():
         if step_status not in ['PASS', 'FAIL', 'SKIP']:
             continue
 
-        step = TestStep.query.get(step_id)
+        step = db.session.get(TestStep, step_id)
         if not step or step.test_case_id != test_case.id:
             continue
 
