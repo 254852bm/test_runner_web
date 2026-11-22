@@ -23,6 +23,7 @@ $env:TESTRUN_BASE_URL = "http://127.0.0.1:15052"
 $env:TESTRUN_DEMO_EMAIL = "demo@example.test"
 $env:TESTRUN_DEMO_PASSWORD = "значение-пароля"
 $env:TESTRUN_HEADLESS = "false"
+$env:TESTRUN_ENVIRONMENT = "isolated-test"
 $env:TESTRUN_E2E_ENABLED = "true"
 ```
 
@@ -39,7 +40,7 @@ gradle allureReport
 
 Отчёт Allure: `build/reports/allure-report/allureReport/index.html` (точный каталог зависит от версии Gradle Allure plugin).
 
-Сквозной UI-тест намеренно пропускается, пока явно не задано `TESTRUN_E2E_ENABLED=true`. Это защита от случайного создания проектов и прогонов в неподходящей среде. API-тест также включается только при заданных API-переменных.
+Сквозной UI-тест намеренно пропускается, пока явно не заданы `TESTRUN_ENVIRONMENT=isolated-test` и `TESTRUN_E2E_ENABLED=true`. Это защита от случайного создания проектов и прогонов в неподходящей среде. API-тест также включается только при заданных API-переменных.
 
 Для запуска в фоне без окна браузера задайте:
 
@@ -61,13 +62,13 @@ $env:TESTRUN_HEADLESS = "true"
 
 ## Отдельная проверка API
 
-Класс `TestRunApiIntegrationTest` запускается только если дополнительно заданы:
+Класс `TestRunApiIntegrationTest` выполняет запись результата в TestRun, поэтому запускается только при явном разрешении `$env:TESTRUN_API_TEST_ENABLED = "true"`, `$env:TESTRUN_ENVIRONMENT = "isolated-test"` и если дополнительно заданы:
 
 - `TESTRUN_API_TOKEN` — отдельный API-токен demo-пользователя;
 - `TESTRUN_TEST_CASE_ID` — ID существующего тест-кейса в тестовой среде;
 - `TESTRUN_DATA_SET_ID` — ID набора данных этого тест-кейса.
 
-Токен должен иметь обычные права чтения/записи результатов. Для этого теста не требуется разрешение на получение секретных значений: API проверяется без запроса секретов. Токен храните только в переменной окружения.
+Для API-теста также задайте `$env:TESTRUN_API_TEST_ENABLED = "true"` только на изолированной копии. Токен должен иметь обычные права чтения/записи результатов. Для этого теста не требуется разрешение на получение секретных значений: API проверяется без запроса секретов. Токен храните только в переменной окружения.
 
 ## Ограничения
 
