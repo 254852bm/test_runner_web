@@ -950,3 +950,64 @@ def test_test_detail_displays_marked_default_row_not_first_active_row(app):
     assert "default-user" in html
     assert "first-user" in html
     assert "Значения по умолчанию" in html
+
+def test_inline_test_creation_supports_multiple_data_sets_and_default_rows(app):
+    """All selected data sets and their rows are saved atomically at test creation."""
+    with app.app_context():
+        user, project, _ = _case()
+        user_id, project_id = user.id, project.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(
+        f"/project/{project_id}/create_test",
+        data={
+            "title": "Create test with multiple data sets",
+            "precondition": "Open {{base_url}}",
+            "step_action[]": ["Sign in as {{login}}"],
+            "step_expected[]": ["The account is opened"],
+            "data_set_count": "2",
+            "default_data_set_index": "1",
+            "data_0_name": "Browser matrix",
+            "data_0_column_key[]": ["browser", "locale"],
+            "data_0_column_label[]": ["Браузер", "Язык"],
+            "data_0_row_name[]": ["Chrome", "Firefox"],
+            "data_0_default_row_index": "1",
+            "data_0_row_0_value_0": "Chrome",
+            "data_0_row_0_value_1": "ru-RU",
+            "data_0_row_1_value_0": "Firefox",
+            "data_0_row_1_value_1": "en-US",
+            "data_1_name": "Accounts",
+            "data_1_column_key[]": ["login"],
+            "data_1_column_label[]": ["Логин"],
+            "data_1_row_name[]": ["Demo account"],
+            "data_1_default_row_index": "0",
+            "data_1_row_0_value_0": "demo-user",
+        },
+    )
+    assert response.status_code == 302
+
+    with app.app_context():
+        test = TestCase.query.filter_by(
+            project_id=project_id, title="Create test with multiple data sets"
+        ).one()
+        datasets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
+            TestDataSet.id.asc()
+        ).all()
+        assert [dataset.name for dataset in datasets] == ["Browser matrix", "Accounts"]
+        assert [dataset.is_default for dataset in datasets] == [False, True]
+
+        browser_columns = sorted(datasets[0].columns, key=lambda item: item.position)
+        assert [column.key for column in browser_columns] == ["browser", "locale"]
+        browser_rows = sorted(datasets[0].rows, key=lambda item: item.position)
+        assert [row.name for row in browser_rows] == ["Chrome", "Firefox"]
+        assert [row.is_default for row in browser_rows] == [False, True]
+        assert browser_rows[1].values_json == {"browser": "Firefox", "locale": "en-US"}
+
+        account_columns = sorted(datasets[1].columns, key=lambda item: item.position)
+        assert [column.key for column in account_columns] == ["login"]
+        account_rows = list(datasets[1].rows)
+        assert len(account_rows) == 1
+        assert account_rows[0].is_default is True
+        assert account_rows[0].values_json == {"login": "demo-user"}
+
