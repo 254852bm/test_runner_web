@@ -161,7 +161,16 @@ class TestRunEndToEndTest {
         columns.get(1).findElement(By.cssSelector("[data-role='column-label']")).sendKeys("Логин");
 
         dataSet.findElement(By.xpath(".//button[contains(normalize-space(.),'Добавить строку')]")).click();
-        WebElement dataRow = dataSet.findElement(By.cssSelector(".data-row"));
+        List<WebElement> primaryRows = dataSet.findElements(By.cssSelector(".data-row"));
+        WebElement alternateRow = primaryRows.get(0);
+        alternateRow.findElement(By.cssSelector("[data-role='row-name']")).sendKeys("Альтернативная строка");
+        List<WebElement> alternateValues = alternateRow.findElements(By.cssSelector(".data-value"));
+        alternateValues.get(0).sendKeys(baseUrl);
+        alternateValues.get(1).sendKeys("alternate-user");
+
+        dataSet.findElement(By.xpath(".//button[contains(normalize-space(.),'Добавить строку')]")).click();
+        primaryRows = dataSet.findElements(By.cssSelector(".data-row"));
+        WebElement dataRow = primaryRows.get(1);
         dataRow.findElement(By.cssSelector("[data-role='row-name']")).sendKeys("Демонстрационная строка");
         List<WebElement> values = dataRow.findElements(By.cssSelector(".data-value"));
         values.get(0).sendKeys(baseUrl);
