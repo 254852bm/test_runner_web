@@ -40,8 +40,8 @@ gradle wrapper --gradle-version 8.10.2
 Затем запускайте проект через Wrapper — он сам использует нужную версию Gradle:
 
 ```powershell
-.\\gradlew.bat test
-.\\gradlew.bat allureReport
+.\gradlew.bat test
+.\gradlew.bat allureReport
 ```
 
 Отчёт Allure: `build/reports/allure-report/allureReport/index.html` (точный каталог зависит от версии Gradle Allure plugin).
