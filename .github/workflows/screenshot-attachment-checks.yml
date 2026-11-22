@@ -9,6 +9,7 @@ on:
       - integration/parameterization-integrity
   push:
     branches:
+      - feature/edit-simple-test-data-table
       - integration/parameterization-integrity
 
 jobs:

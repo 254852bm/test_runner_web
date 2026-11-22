@@ -1116,6 +1116,172 @@ def _save_inline_test_data_sets(test, form):
     ))
 
 
+def _update_inline_test_data_sets(test, form):
+    """Update the compact parameter table in place without replacing history-linked IDs."""
+    raw_count = (form.get('data_set_count') or '0').strip()
+    try:
+        dataset_count = int(raw_count)
+    except (TypeError, ValueError):
+        raise ValueError('Некорректные тестовые данные.')
+    if dataset_count not in (0, 1):
+        raise ValueError('Для тест-кейса допускается одна таблица параметров.')
+
+    datasets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
+        TestDataSet.created_at.asc(), TestDataSet.id.asc()
+    ).all()
+    if len(datasets) > 1:
+        raise ValueError('У этого тест-кейса несколько старых наборов данных. Измените их через «Управлять наборами данных», чтобы ничего не потерять.')
+
+    dataset = datasets[0] if datasets else None
+    row = None
+    existing_columns = []
+    if dataset is not None:
+        existing_columns = list(dataset.columns)
+        rows = list(dataset.rows)
+        batches = TestDataBatch.query.filter_by(dataset_id=dataset.id).count()
+        if len(rows) > 1 or batches:
+            raise ValueError('У этого тест-кейса есть несколько вариантов или пакетный запуск. Измените данные через «Управлять наборами данных», чтобы сохранить все варианты.')
+        row = rows[0] if rows else None
+        if not dataset.is_default or (
+            row is not None and (not row.is_default or not row.is_enabled)
+        ):
+            raise ValueError('Этот набор или строка не отмечены как активные значения по умолчанию. Измените их через «Управлять наборами данных».')
+
+    if dataset_count == 0:
+        if dataset is None:
+            return
+        for snapshot in TestRunDataSnapshot.query.filter_by(dataset_id=dataset.id).all():
+            snapshot.dataset_id = None
+            snapshot.data_row_id = None
+        db.session.delete(dataset)
+        return
+
+    keys = [value.strip() for value in form.getlist('data_0_column_key[]')]
+    submitted_labels = [value.strip() for value in form.getlist('data_0_column_label[]')]
+    labels = [
+        submitted_labels[index] if index < len(submitted_labels) and submitted_labels[index] else key
+        for index, key in enumerate(keys)
+    ]
+    if not keys or len(keys) > 30:
+        raise ValueError('Добавьте от 1 до 30 параметров.')
+    if any(not re.fullmatch(r'[^\W\d]\w*(?:[ -]\w+)*', key) for key in keys):
+        raise ValueError('Имя параметра должно начинаться с буквы и содержать только буквы, цифры, пробелы, дефисы или подчёркивания.')
+    if len(set(keys)) != len(keys):
+        raise ValueError('Имена параметров должны быть уникальными.')
+    if any(not label or len(label) > 120 for label in labels):
+        raise ValueError('Название параметра должно быть не длиннее 120 символов.')
+
+    sensitive_pattern = (
+        r'(password|passwd|secret|token|api[_-]?key|access[_-]?key|'
+        r'парол(?:ь|я|ей|ям|ями)?|токен(?:ы|а|ов|у|ом)?|'
+        r'секрет(?:ы|а|ов)?|ключ(?:и|а|ей|у|ом)?(?:[ _-]?api)?|ключ[ _-]?доступа)'
+    )
+    secret_flags = [
+        form.get(f'data_0_column_is_secret_{index}') == '1'
+        for index in range(len(keys))
+    ]
+    if any(
+        re.search(sensitive_pattern, key, re.IGNORECASE) and not secret_flags[index]
+        for index, key in enumerate(keys)
+    ):
+        raise ValueError('Пароли, токены и ключи необходимо отметить как секретные.')
+    if any(secret_flags) and not current_app.config.get('TEST_DATA_ENCRYPTION_KEY'):
+        raise ValueError('Секретные параметры нельзя сохранить: на сервере не настроено шифрование.')
+
+    existing_by_id = {column.id: column for column in existing_columns}
+    submitted_ids = []
+    for raw_id in form.getlist('data_0_column_id[]'):
+        raw_id = (raw_id or '').strip()
+        if not raw_id:
+            submitted_ids.append(None)
+            continue
+        try:
+            column_id = int(raw_id)
+        except ValueError:
+            raise ValueError('Некорректный идентификатор параметра.')
+        if column_id not in existing_by_id or column_id in submitted_ids:
+            raise ValueError('Список параметров устарел. Обновите страницу и попробуйте снова.')
+        submitted_ids.append(column_id)
+    if len(submitted_ids) != len(keys):
+        raise ValueError('Некорректный список параметров.')
+
+    retained_ids = {column_id for column_id in submitted_ids if column_id is not None}
+    original_column_keys = {column.id: column.key for column in existing_columns}
+    # Move current keys out of the unique namespace before applying renames,
+    # allowing safe key swaps and replacement of a removed key in one request.
+    for existing_column in existing_columns:
+        existing_column.key = f'__pending_edit_{existing_column.id}__'
+        if existing_column.id not in retained_ids:
+            db.session.delete(existing_column)
+    db.session.flush()
+
+    try:
+        old_secret_values = decrypt_secret_values(row.encrypted_values_json) if row else {}
+    except ValueError:
+        raise ValueError('Не удалось расшифровать сохранённые секреты. Данные не изменены; проверьте ключ шифрования.') from None
+
+    if dataset is None:
+        dataset = TestDataSet(test_case_id=test.id, name='Основные параметры', is_default=True)
+        db.session.add(dataset)
+        db.session.flush()
+    else:
+        dataset.name = 'Основные параметры'
+
+    ordinary_values = {}
+    secret_values = {}
+    for index, (key, label, is_secret) in enumerate(zip(keys, labels, secret_flags)):
+        column_id = submitted_ids[index]
+        value = form.get(f'data_0_row_0_value_{index}', '')
+        if len(value) > 10000:
+            raise ValueError(f'Значение параметра «{label}» превышает 10 000 символов.')
+
+        column = existing_by_id.get(column_id) if column_id else None
+        if column is not None:
+            if bool(column.is_secret) != bool(is_secret):
+                raise ValueError('Нельзя менять тип уже существующего параметра (обычный/секретный). Удалите его и создайте новый.')
+            old_key = original_column_keys[column.id]
+            column.key = key
+            column.label = label
+            column.position = index
+            if is_secret:
+                previous_secret = old_secret_values.get(old_key, '')
+                if form.get(f'data_0_row_0_clear_secret_{index}') == '1':
+                    previous_secret = ''
+                secret_value = value if value else previous_secret
+                if secret_value:
+                    secret_values[key] = secret_value
+            else:
+                ordinary_values[key] = value
+        else:
+            column = TestDataColumn(
+                dataset_id=dataset.id, key=key, label=label,
+                position=index, is_secret=is_secret
+            )
+            db.session.add(column)
+            if is_secret:
+                if value:
+                    secret_values[key] = value
+            else:
+                ordinary_values[key] = value
+
+    try:
+        encrypted_values = encrypt_secret_values(secret_values)
+    except Exception:
+        current_app.logger.warning('Could not encrypt simple test-data secrets during test editing')
+        raise ValueError('Не удалось безопасно сохранить секретные данные. Проверьте настройки шифрования.') from None
+
+    if row is None:
+        row = TestDataRow(
+            dataset_id=dataset.id, name='Значения по умолчанию',
+            is_enabled=True, is_default=True, position=0
+        )
+        db.session.add(row)
+    row.name = 'Значения по умолчанию'
+    row.position = 0
+    row.values_json = ordinary_values
+    row.encrypted_values_json = encrypted_values
+
+
 @main_bp.route('/project/<int:project_id>/create_test', methods=['GET', 'POST'])
 @login_required
 def create_test(project_id):
@@ -1287,6 +1453,8 @@ def edit_test(project_id, test_id):
                 for old_id, items in old_screenshots_by_id.items():
                     if old_id not in retained_source_ids:
                         old_screenshot_paths_to_remove.extend(upload_dir / item['stored_name'] for item in items)
+                if 'data_set_count' in request.form:
+                    _update_inline_test_data_sets(test, request.form)
                 create_test_version(test)
                 db.session.commit()
                 for old_path in old_screenshot_paths_to_remove:
@@ -1323,9 +1491,30 @@ def edit_test(project_id, test_id):
     data_sets = TestDataSet.query.filter_by(test_case_id=test.id).order_by(
         TestDataSet.created_at.asc()
     ).all()
+    inline_dataset = data_sets[0] if len(data_sets) == 1 else None
+    inline_rows = list(inline_dataset.rows) if inline_dataset is not None else []
+    inline_batches = (
+        TestDataBatch.query.filter_by(dataset_id=inline_dataset.id).count()
+        if inline_dataset is not None else 0
+    )
+    simple_inline_data = (
+        len(data_sets) == 0 or
+        (
+            inline_dataset is not None
+            and inline_dataset.is_default
+            and len(inline_rows) <= 1
+            and inline_batches == 0
+            and (
+                not inline_rows
+                or (inline_rows[0].is_default and inline_rows[0].is_enabled)
+            )
+        )
+    )
+    inline_row = inline_rows[0] if inline_rows else None
     return render_template(
         'edit_test.html', project=project, test=test, steps=steps,
-        data_sets=data_sets
+        data_sets=data_sets, simple_inline_data=simple_inline_data,
+        inline_dataset=inline_dataset, inline_row=inline_row
     )
 
 
