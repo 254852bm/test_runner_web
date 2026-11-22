@@ -182,11 +182,11 @@ class TestRunEndToEndTest {
         testItem.findElement(By.xpath(".//a[normalize-space()='Открыть']")).click();
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//*[contains(normalize-space(.),'" + testTitle + "')]")));
         String page = driver.getPageSource();
+        assertTrue(page.contains("Основные параметры"), "Компактная форма должна сохранить основной набор");
         assertTrue(page.contains("base_url"), "Переменная base_url должна сохраниться");
-        assertTrue(page.contains("demo-user"), "Значение строки по умолчанию должно сохраниться");
-        assertTrue(page.contains("alternate-user"), "Дополнительная строка первого набора должна сохраниться");
-        assertTrue(page.contains("Дополнительный набор"), "Второй набор данных должен сохраниться");
-        assertTrue(page.contains("ru-RU"), "Значение второго набора должно сохраниться");
+        assertTrue(page.contains("demo-user"), "Значение параметра login должно сохраниться");
+        assertTrue(page.contains(baseUrl), "Значение параметра base_url должно сохраниться");
+        assertTrue(page.contains("Значения по умолчанию"), "Строка по умолчанию должна сохраниться");
         attachScreenshot("Сохранённый тест-кейс и параметры");
     }
 
@@ -194,12 +194,12 @@ class TestRunEndToEndTest {
     private void executeManualRun() {
         driver.findElement(By.xpath("//a[contains(normalize-space(.),'Запустить этот тест')]")).click();
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("select[name='step_status[]']")));
-        assertTrue(driver.getPageSource().contains("Основной набор"),
-            "При запуске должен применяться набор данных по умолчанию");
-        assertTrue(driver.getPageSource().contains("Демонстрационная строка"),
+        assertTrue(driver.getPageSource().contains("Основные параметры"),
+            "При запуске должен применяться основной набор из компактной формы");
+        assertTrue(driver.getPageSource().contains("Значения по умолчанию"),
             "При запуске должна применяться строка по умолчанию");
-        assertTrue(driver.getPageSource().contains("Выполнить демонстрационную проверку для demo-user"),
-            "Параметр из выбранной строки должен подставиться в действие шага");
+        assertTrue(driver.getPageSource().contains("Выполнить демонстрационную проверку для demo-user на " + baseUrl),
+            "Параметры login и base_url должны подставиться в действие шага");
         List<WebElement> statuses = driver.findElements(By.cssSelector("select[name='step_status[]']"));
         assertFalse(statuses.isEmpty(), "В прогоне должен быть хотя бы один шаг");
         for (WebElement status : statuses) {
