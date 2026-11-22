@@ -3,11 +3,13 @@ name: Screenshot attachment checks
 on:
   pull_request:
     branches:
+      - feature/edit-simple-test-data-table
       - feature/stage4-test-management
       - feature/test-data-parameterization
       - integration/parameterization-integrity
   push:
     branches:
+      - feature/dashboard-ai-visual-refresh
       - feature/edit-simple-test-data-table
       - integration/parameterization-integrity
 
