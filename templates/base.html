@@ -18,7 +18,7 @@
 <body>
     <nav class="navbar navbar-dark bg-dark app-navbar">
         <div class="container-fluid px-3 px-lg-4">
-            <div class="app-navbar-start">
+            <div class="app-navbar-start {% if request.endpoint == 'main.dashboard' %}app-navbar-start--dashboard{% endif %}">
                 <button class="btn btn-outline-light sidebar-toggle" type="button"
                         data-bs-toggle="offcanvas" data-bs-target="#mainSidebar"
                         aria-controls="mainSidebar" aria-label="Открыть меню">
@@ -32,6 +32,18 @@
                     <a href="{{ url_for('support.index') }}"
                        class="{% if request.endpoint and request.endpoint.startswith('support.') %}active{% endif %}">Поддержка</a>
                 </nav>
+                {% endif %}
+
+                {% if current_user.is_authenticated and request.endpoint == 'main.dashboard' %}
+                <div class="navbar-ai-links" aria-label="Возможности ИИ">
+                    <span class="navbar-ai-label"><span aria-hidden="true">✦</span> Возможности ИИ</span>
+                    <a href="{{ url_for('main.projects', ai_action='case') }}" title="Сначала выберите проект">
+                        <span aria-hidden="true">＋</span> Тест-кейс
+                    </a>
+                    <a href="{{ url_for('main.projects', ai_action='automation') }}" title="Выберите проект и тест-кейс">
+                        <span aria-hidden="true">{ }</span> Автотест
+                    </a>
+                </div>
                 {% endif %}
 
                 <a class="navbar-brand app-logo" href="{{ url_for('main.index') }}" aria-label="Тест-раннер">
