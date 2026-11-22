@@ -46,20 +46,20 @@ class TestRunApiIntegrationTest {
             "Выбранный набор данных должен принадлежать указанному тест-кейсу");
         assertFalse(root.path("secrets_included").asBoolean(),
             "Обычный API-запрос не должен включать секретные значения");
-        java.util.Set<String> secretKeys = new java.util.HashSet<>();
+        java.util.Set<String> visibleKeys = new java.util.HashSet<>();
         for (JsonNode column : root.path("columns")) {
-            if (column.path("is_secret").asBoolean()) {
-                secretKeys.add(column.path("key").asText());
-            }
+            assertFalse(column.path("is_secret").asBoolean(),
+                "Секретные столбцы не должны попадать в обычный ответ API");
+            visibleKeys.add(column.path("key").asText());
         }
         JsonNode rows = root.path("rows");
         assertTrue(rows.isArray() && !rows.isEmpty(), "В наборе должна быть хотя бы одна активная строка");
         for (JsonNode row : rows) {
             JsonNode values = row.path("values");
-            for (String secretKey : secretKeys) {
-                assertFalse(values.has(secretKey),
-                    "Секретные значения не должны попадать в обычный ответ API: " + secretKey);
-            }
+            values.fieldNames().forEachRemaining(key -> assertTrue(
+                visibleKeys.contains(key),
+                "API не должна возвращать значения столбцов, скрытых из обычного ответа: " + key
+            ));
         }
 
         JsonNode firstRow = rows.get(0);
