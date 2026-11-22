@@ -15,8 +15,8 @@ public final class DemoSafety {
     }
 
     public static boolean apiEnabled(Map<String, String> env) {
-        return uiEnabled(env)
-            && "true".equals(env.get("TESTRUN_API_TEST_ENABLED"))
+        return "true".equals(env.get("TESTRUN_API_TEST_ENABLED"))
+            && "isolated-test".equals(env.get("TESTRUN_ENVIRONMENT"))
             && present(env, "TESTRUN_BASE_URL")
             && present(env, "TESTRUN_API_TOKEN")
             && digits(env, "TESTRUN_TEST_CASE_ID")
