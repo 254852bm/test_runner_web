@@ -115,6 +115,10 @@ function renumberSteps() {
     });
 }
 function addDataSet() {
+    if (document.querySelectorAll('.data-set-card').length >= 10) {
+        alert('Не более 10 наборов данных для одного тест-кейса.');
+        return;
+    }
     document.getElementById('data-sets-empty')?.remove();
     const card = document.createElement('section');
     card.className = 'border rounded p-3 mb-3 data-set-card';
