@@ -58,10 +58,9 @@ Create a disposable project and a test case with at least these placeholders:
 - `{{password}}`
 - `{{expected_message}}`
 
-Create a data set with:
-- ordinary columns for base URL, login and expected message;
-- a password column marked **Секрет**;
-- at least two rows, one active and one disabled.
+While creating the test case, add at least two data sets before the first save. In the first set add ordinary columns for base URL, login and expected message, plus at least two rows. In the second set add a password column marked **Секрет** and a disposable test password. Select a non-first data set and a non-first row as defaults, save the test case, then verify both sets and all rows remain available. Start the test case directly and confirm the selected default set/row is applied automatically.
+
+In the separate data-set management page, also check enabling/disabling rows and editing secrets:
 
 Check the following:
 
