@@ -101,7 +101,12 @@ class TestRunEndToEndTest {
         driver.get(baseUrl + "/projects/create");
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.name("name"))).sendKeys(projectName);
         driver.findElement(By.xpath("//button[contains(normalize-space(.),'Создать')]")).click();
-        wait.until(ExpectedConditions.urlContains("/project/"));
+        wait.until(ExpectedConditions.urlContains("/projects"));
+        WebElement createdProject = wait.until(ExpectedConditions.elementToBeClickable(
+            By.xpath("//a[normalize-space()='" + projectName + "']")
+        ));
+        createdProject.click();
+        wait.until(ExpectedConditions.urlMatches(".*/project/\\\\d+$"));
         assertTrue(driver.getPageSource().contains(projectName), "Название проекта должно отображаться");
         String[] urlParts = driver.getCurrentUrl().split("/");
         for (int i = 0; i < urlParts.length - 1; i++) {
