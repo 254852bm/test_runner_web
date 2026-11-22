@@ -15,6 +15,8 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.edge.EdgeDriver;
+import org.openqa.selenium.edge.EdgeOptions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.Select;
 import org.openqa.selenium.support.ui.WebDriverWait;
@@ -47,12 +49,28 @@ class TestRunEndToEndTest {
         String email = requiredEnv("TESTRUN_DEMO_EMAIL");
         String password = requiredEnv("TESTRUN_DEMO_PASSWORD");
 
-        ChromeOptions options = new ChromeOptions();
-        options.addArguments("--window-size=1440,1000", "--disable-dev-shm-usage");
-        if (Boolean.parseBoolean(System.getenv().getOrDefault("TESTRUN_HEADLESS", "false"))) {
-            options.addArguments("--headless=new", "--no-sandbox");
+        boolean headless = Boolean.parseBoolean(
+            System.getenv().getOrDefault("TESTRUN_HEADLESS", "false")
+        );
+        String browser = System.getenv().getOrDefault("TESTRUN_BROWSER", "edge")
+            .trim().toLowerCase();
+        switch (browser) {
+            case "chrome" -> {
+                ChromeOptions options = new ChromeOptions();
+                options.addArguments("--window-size=1440,1000", "--disable-dev-shm-usage");
+                if (headless) options.addArguments("--headless=new", "--no-sandbox");
+                driver = new ChromeDriver(options);
+            }
+            case "edge" -> {
+                EdgeOptions options = new EdgeOptions();
+                options.addArguments("--window-size=1440,1000", "--disable-dev-shm-usage");
+                if (headless) options.addArguments("--headless=new", "--no-sandbox");
+                driver = new EdgeDriver(options);
+            }
+            default -> throw new IllegalArgumentException(
+                "TESTRUN_BROWSER должен быть chrome или edge"
+            );
         }
-        driver = new ChromeDriver(options);
         wait = new WebDriverWait(driver, Duration.ofSeconds(20));
 
         String suffix = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"));
