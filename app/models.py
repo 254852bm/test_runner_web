@@ -36,6 +36,8 @@ class Project(db.Model):
 
 
 class TestCase(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(200), nullable=False)
     precondition = db.Column(db.Text)
@@ -70,6 +72,8 @@ class TestCase(db.Model):
 
 
 class TestCaseVersion(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     id = db.Column(db.Integer, primary_key=True)
     test_case_id = db.Column(db.Integer, db.ForeignKey('test_case.id'), nullable=False)
     version_number = db.Column(db.Integer, nullable=False)
@@ -84,6 +88,8 @@ class TestCaseVersion(db.Model):
 
 
 class TestStep(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     id = db.Column(db.Integer, primary_key=True)
     test_case_id = db.Column(db.Integer, db.ForeignKey('test_case.id'), nullable=False)
     position = db.Column(db.Integer, nullable=False)
@@ -94,6 +100,8 @@ class TestStep(db.Model):
 
 
 class TestStepScreenshot(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     id = db.Column(db.Integer, primary_key=True)
     test_step_id = db.Column(db.Integer, db.ForeignKey('test_step.id'), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False, index=True)
@@ -106,6 +114,8 @@ class TestStepScreenshot(db.Model):
 
 
 class TestRun(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     id = db.Column(db.Integer, primary_key=True)
     status = db.Column(db.String(20), nullable=False)
     comment = db.Column(db.Text)
@@ -233,6 +243,8 @@ class AppErrorLog(db.Model):
 
 
 class TestDataSet(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     """A named collection of parameter rows belonging to one test case."""
     id = db.Column(db.Integer, primary_key=True)
     test_case_id = db.Column(
@@ -263,6 +275,8 @@ class TestDataSet(db.Model):
 
 
 class TestDataColumn(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     """A named variable definition in a test data set."""
     id = db.Column(db.Integer, primary_key=True)
     dataset_id = db.Column(
@@ -279,6 +293,8 @@ class TestDataColumn(db.Model):
 
 
 class TestDataRow(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     """One row of values; values are JSON keyed by TestDataColumn.key.
 
     Secret-column encryption must be implemented before secret values are accepted
@@ -306,6 +322,8 @@ class TestDataRow(db.Model):
 
 
 class TestRunDataSnapshot(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     """Immutable, non-secret data snapshot attached to one historical run.
 
     This separate table avoids altering the existing test_run table, so existing
@@ -338,6 +356,8 @@ class TestRunDataSnapshot(db.Model):
 
 
 class TestDataBatch(db.Model):
+    # Prevent pytest from treating SQLAlchemy models as test classes.
+    __test__ = False
     """Server-side progress for a sequential run over a fixed list of rows."""
     id = db.Column(db.Integer, primary_key=True)
     token = db.Column(db.String(64), unique=True, nullable=False, index=True)
