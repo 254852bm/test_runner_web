@@ -19,6 +19,11 @@ import org.openqa.selenium.support.ui.Select;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
 import java.io.ByteArrayInputStream;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.stream.Collectors;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -33,6 +38,7 @@ class TestRunEndToEndTest {
     private String baseUrl;
     private String projectName;
     private String testTitle;
+    private String projectId;
 
     @BeforeEach
     void setUp() {
@@ -95,6 +101,8 @@ class TestRunEndToEndTest {
         driver.findElement(By.xpath("//button[contains(normalize-space(.),'Создать')]")).click();
         wait.until(ExpectedConditions.urlContains("/project/"));
         assertTrue(driver.getPageSource().contains(projectName), "Название проекта должно отображаться");
+        projectId = driver.getCurrentUrl().replaceAll(".*/project/(\\\\d+).*", "$1");
+        assertTrue(projectId.matches("\\\\d+"), "ID проекта должен быть числовым");
         attachScreenshot("Создан демонстрационный проект");
     }
 
@@ -152,37 +160,38 @@ class TestRunEndToEndTest {
             comments.get(0).sendKeys("Автоматическая демонстрационная проверка Selenium");
         }
         driver.findElement(By.xpath("//button[contains(normalize-space(.),'Сохранить результат теста')]")).click();
-        wait.until(ExpectedConditions.or(
-            ExpectedConditions.urlContains("/project/"),
-            ExpectedConditions.presenceOfElementLocated(By.xpath("//*[contains(.,'Результат сохранён') or contains(.,'Прогон сохранён')]"))
-        ));
+        wait.until(ExpectedConditions.urlContains("/stats"));
         attachScreenshot("Результат ручного прогона");
     }
 
     @Step("Проверить историю прогонов и PDF-отчёт")
-    private void verifyHistoryAndPdf() {
-        driver.get(baseUrl + "/projects");
-        WebElement projectLink = wait.until(ExpectedConditions.elementToBeClickable(
-            By.xpath("//a[contains(@href,'/project/') and contains(.,'" + projectName + "')]")
-        ));
-        projectLink.click();
-        wait.until(ExpectedConditions.urlContains("/project/"));
-
-        driver.findElement(By.xpath("//a[contains(normalize-space(.),'История')]")).click();
+    private void verifyHistoryAndPdf() throws Exception {
+        driver.get(baseUrl + "/project/" + projectId + "/history");
         wait.until(ExpectedConditions.urlContains("/history"));
         String history = driver.getPageSource();
         assertTrue(history.contains(testTitle), "История должна содержать тест-кейс");
         assertTrue(history.contains("Автоматическая демонстрационная проверка Selenium"),
             "Комментарий шага должен сохраниться");
-
-        String projectId = driver.getCurrentUrl().replaceAll(".*/project/(\\d+)/history.*", "$1");
-        assertNotEquals(driver.getCurrentUrl(), projectId, "ID проекта должен извлекаться из адреса");
-        driver.get(baseUrl + "/project/" + projectId + "/export_pdf");
-        wait.until(d -> d.getCurrentUrl().contains("/export_pdf"));
-        String contentType = driver.findElement(By.tagName("body")).getAttribute("data-content-type");
-        // PDF is downloaded by the browser; a direct HTTP assertion is handled by the API-style helper below.
-        assertTrue(driver.getCurrentUrl().contains("/export_pdf"));
         attachScreenshot("История прогонов");
+
+        String cookieHeader = driver.manage().getCookies().stream()
+            .map(cookie -> cookie.getName() + "=" + cookie.getValue())
+            .collect(Collectors.joining("; "));
+        HttpRequest pdfRequest = HttpRequest.newBuilder(
+                URI.create(baseUrl + "/project/" + projectId + "/export_pdf"))
+            .header("Cookie", cookieHeader)
+            .GET()
+            .build();
+        HttpResponse<byte[]> pdfResponse = HttpClient.newHttpClient().send(
+            pdfRequest, HttpResponse.BodyHandlers.ofByteArray());
+        assertEquals(200, pdfResponse.statusCode(), "Экспорт PDF должен вернуть HTTP 200");
+        assertTrue(pdfResponse.headers().firstValue("Content-Type").orElse("")
+            .toLowerCase().contains("application/pdf"), "Ответ должен иметь PDF content-type");
+        assertTrue(pdfResponse.body().length > 5, "PDF не должен быть пустым");
+        assertEquals("%PDF-", new String(pdfResponse.body(), 0, 5),
+            "Скачанный отчёт должен иметь сигнатуру PDF");
+        Allure.addAttachment("PDF-отчёт TestRun", "application/pdf",
+            new ByteArrayInputStream(pdfResponse.body()), ".pdf");
     }
 
     @Step("Вернуться к панели через навигацию")
