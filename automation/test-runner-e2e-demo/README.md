@@ -47,7 +47,7 @@ gradle wrapper --gradle-version 8.10.2
 
 Отчёт Allure: `build/reports/allure-report/allureReport/index.html` (точный каталог зависит от версии Gradle Allure plugin).
 
-Сквозной UI-тест намеренно пропускается, пока явно не заданы `TESTRUN_ENVIRONMENT=isolated-test` и `TESTRUN_E2E_ENABLED=true`. Это защита от случайного создания проектов и прогонов в неподходящей среде. API-тест также включается только при заданных API-переменных.
+Сквозной UI-тест намеренно пропускается, пока явно не заданы `TESTRUN_ENVIRONMENT=isolated-test`, `TESTRUN_E2E_ENABLED=true` и loopback-адрес (`localhost` или `127.0.0.1`). Удалённые адреса, включая production-домен, блокируются самой проверкой конфигурации. Это дополнительная защита от случайного создания проектов и прогонов в неподходящей среде. API-тест также включается только при отдельном `TESTRUN_API_TEST_ENABLED=true`, изолированном окружении, loopback-адресе и заданных API-переменных.
 
 Чтобы использовать Chrome вместо Edge, задайте `$env:TESTRUN_BROWSER = "chrome"`. Для запуска в фоне без окна браузера задайте:
 
