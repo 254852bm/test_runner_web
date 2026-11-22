@@ -23,6 +23,7 @@ $env:TESTRUN_BASE_URL = "http://127.0.0.1:15052"
 $env:TESTRUN_DEMO_EMAIL = "demo@example.test"
 $env:TESTRUN_DEMO_PASSWORD = "значение-пароля"
 $env:TESTRUN_HEADLESS = "false"
+$env:TESTRUN_E2E_ENABLED = "true"
 ```
 
 Пароль не записывайте в файлы проекта, Git или отчёт Allure. В примере выше замените адрес и учётные данные на значения из изолированной тестовой среды.
@@ -37,6 +38,8 @@ gradle allureReport
 ```
 
 Отчёт Allure: `build/reports/allure-report/allureReport/index.html` (точный каталог зависит от версии Gradle Allure plugin).
+
+Сквозной UI-тест намеренно пропускается, пока явно не задано `TESTRUN_E2E_ENABLED=true`. Это защита от случайного создания проектов и прогонов в неподходящей среде. API-тест также включается только при заданных API-переменных.
 
 Для запуска в фоне без окна браузера задайте:
 
