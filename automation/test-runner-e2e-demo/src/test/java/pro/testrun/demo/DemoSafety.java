@@ -39,9 +39,16 @@ public final class DemoSafety {
         try {
             URI uri = URI.create(value);
             String host = uri.getHost();
+            if (host == null || uri.getRawUserInfo() != null
+                    || uri.getRawQuery() != null || uri.getRawFragment() != null) {
+                return false;
+            }
+            // URI#getHost may retain brackets around IPv6 literals.
+            if (host.startsWith("[") && host.endsWith("]")) {
+                host = host.substring(1, host.length() - 1);
+            }
             return ("http".equalsIgnoreCase(uri.getScheme())
                     || "https".equalsIgnoreCase(uri.getScheme()))
-                && host != null
                 && (host.equalsIgnoreCase("localhost")
                     || host.equals("127.0.0.1")
                     || host.equals("::1"));
