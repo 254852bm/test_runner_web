@@ -328,3 +328,64 @@ def test_edit_test_rejects_complex_legacy_data_without_mutating_it(app):
         assert test.title == "Редактируемый тест"
         assert dataset is not None
         assert [row.values_json["login"] for row in dataset.rows] == ["one", "two"]
+
+
+
+def test_edit_test_can_remove_simple_parameters_without_deleting_history(app):
+    user_id, project_id = _user_and_project(app)
+    test_id, step_id = _create_editable_case(app, project_id)
+    with app.app_context():
+        test = db.session.get(TestCase, test_id)
+        dataset = TestDataSet(test_case_id=test.id, name="Основные параметры", is_default=True)
+        db.session.add(dataset)
+        db.session.flush()
+        column = TestDataColumn(dataset_id=dataset.id, key="login", label="Логин", position=0)
+        row = TestDataRow(
+            dataset_id=dataset.id, name="Значения по умолчанию",
+            values_json={"login": "old-user"}, is_default=True, is_enabled=True,
+        )
+        db.session.add_all([column, row])
+        db.session.flush()
+        run = TestRun(status="PASS", test_case_id=test.id, user_id=user_id)
+        db.session.add(run)
+        db.session.flush()
+        snapshot = TestRunDataSnapshot(
+            test_run_id=run.id, dataset_id=dataset.id, data_row_id=row.id,
+            dataset_name_snapshot=dataset.name, row_name_snapshot=row.name,
+            values_snapshot_json={"login": "old-user"},
+        )
+        db.session.add(snapshot)
+        db.session.commit()
+        dataset_id, row_id, snapshot_id = dataset.id, row.id, snapshot.id
+
+    client = app.test_client()
+    _login(client, user_id)
+    response = client.post(f"/project/{project_id}/test/{test_id}/edit", data={
+        "title": "Редактируемый тест",
+        "precondition": "",
+        "step_id[]": [str(step_id)],
+        "step_action[]": ["Проверить вход"],
+        "step_expected[]": ["Успешно"],
+        "data_set_count": "0",
+    })
+    assert response.status_code == 302
+
+    with app.app_context():
+        assert db.session.get(TestDataSet, dataset_id) is None
+        assert db.session.get(TestDataRow, row_id) is None
+        snapshot = db.session.get(TestRunDataSnapshot, snapshot_id)
+        assert snapshot is not None
+        assert snapshot.dataset_id is None
+        assert snapshot.data_row_id is None
+        assert snapshot.values_snapshot_json == {"login": "old-user"}
+
+
+def test_profile_page_has_csrf_token_context(app):
+    user_id, _project_id = _user_and_project(app)
+    client = app.test_client()
+    _login(client, user_id)
+
+    response = client.get("/profile")
+
+    assert response.status_code == 200
+    assert 'name="csrf_token"' in response.get_data(as_text=True)
