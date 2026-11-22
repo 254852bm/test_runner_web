@@ -1090,3 +1090,25 @@ html[data-theme="dark"] .project-test-count {
         height: 185px;
     }
 }
+
+/* Informational guidance follows the green accent instead of the old blue. */
+.alert-info,
+.badge.bg-info {
+    --bs-alert-color: #42684d;
+    --bs-alert-bg: #e7f1e9;
+    --bs-alert-border-color: #c9ddce;
+    color: #42684d;
+    background-color: #e7f1e9;
+    border-color: #c9ddce;
+}
+html[data-theme="dark"] .alert-info {
+    --bs-alert-color: #c4ddca;
+    --bs-alert-bg: #26372c;
+    --bs-alert-border-color: #3b5543;
+    color: #c4ddca;
+    background-color: #26372c;
+    border-color: #3b5543;
+}
+.ai-selection-hint {
+    border-radius: 0.65rem;
+}
