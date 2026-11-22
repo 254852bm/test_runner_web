@@ -56,6 +56,7 @@ class DemoSafetyTest {
         Map<String, String> malformed = Map.of(
             "TESTRUN_E2E_ENABLED", "true",
             "TESTRUN_ENVIRONMENT", "isolated-test",
+            "TESTRUN_API_TEST_ENABLED", "true",
             "TESTRUN_BASE_URL", "http://127.0.0.1:15052",
             "TESTRUN_API_TOKEN", "test-only-token",
             "TESTRUN_TEST_CASE_ID", "12; DROP TABLE test_case",
@@ -66,6 +67,7 @@ class DemoSafetyTest {
         Map<String, String> production = Map.of(
             "TESTRUN_E2E_ENABLED", "true",
             "TESTRUN_ENVIRONMENT", "production",
+            "TESTRUN_API_TEST_ENABLED", "true",
             "TESTRUN_BASE_URL", "https://testrun.pro",
             "TESTRUN_API_TOKEN", "token",
             "TESTRUN_TEST_CASE_ID", "12",
