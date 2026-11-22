@@ -24,6 +24,8 @@ class TestRunApiIntegrationTest {
         .build();
 
     @Test
+    @EnabledIfEnvironmentVariable(named = "TESTRUN_API_TEST_ENABLED", matches = "true")
+    @EnabledIfEnvironmentVariable(named = "TESTRUN_ENVIRONMENT", matches = "isolated-test")
     @EnabledIfEnvironmentVariable(named = "TESTRUN_API_TOKEN", matches = ".+")
     @EnabledIfEnvironmentVariable(named = "TESTRUN_TEST_CASE_ID", matches = "\\d+")
     @EnabledIfEnvironmentVariable(named = "TESTRUN_DATA_SET_ID", matches = "\\d+")
