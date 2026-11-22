@@ -11,6 +11,12 @@
     </div>
 </div>
 
+{% if request.args.get('ai_action') == 'case' %}
+<div class="alert alert-info ai-selection-hint mb-3">Выберите проект, для которого нужно подготовить черновик тест-кейса с ИИ. После выбора откроется форма генерации.</div>
+{% elif request.args.get('ai_action') == 'automation' %}
+<div class="alert alert-info ai-selection-hint mb-3">Выберите проект, затем нужный тест-кейс — на его странице будет действие для подготовки черновика автотеста.</div>
+{% endif %}
+
 <form method="GET" action="{{ url_for('main.projects') }}" class="row g-2 align-items-end mb-3">
     <div class="col-12 col-md-7 col-lg-8">
         <label for="projectSearch" class="form-label small mb-1">Поиск проекта</label>
