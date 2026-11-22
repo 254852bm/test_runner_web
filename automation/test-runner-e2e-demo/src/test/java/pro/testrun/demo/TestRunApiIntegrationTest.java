@@ -79,8 +79,15 @@ class TestRunApiIntegrationTest {
 
         HttpResponse<String> runResponse = HTTP.send(runRequest, HttpResponse.BodyHandlers.ofString());
         assertEquals(201, runResponse.statusCode(), "API регистрации результата должна вернуть HTTP 201");
-        assertTrue(JSON.readTree(runResponse.body()).path("ok").asBoolean(),
+        JsonNode runResult = JSON.readTree(runResponse.body());
+        assertTrue(runResult.path("ok").asBoolean(),
             "Ответ API должен подтвердить создание автоматического прогона");
+        assertTrue(runResult.path("run_id").asInt() > 0,
+            "API должна вернуть ID созданного прогона");
+        assertEquals(testCaseId, runResult.path("test_case_id").asInt());
+        assertEquals(dataSetId, runResult.path("data_set_id").asInt());
+        assertEquals(rowId, runResult.path("data_row_id").asInt());
+        assertEquals("PASS", runResult.path("status").asText());
     }
 
     private static String requiredEnv(String key) {
