@@ -113,27 +113,34 @@ class TestRunEndToEndTest {
         attachScreenshot("Создан демонстрационный проект");
     }
 
-    @Step("Создать тест-кейс с предусловием, шагом и параметрами")
+    @Step("Создать тест-кейс с набором параметров и строкой по умолчанию")
     private void createParameterizedTestCase() {
         clickLink("+ Добавить тест");
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.id("title"))).sendKeys(testTitle);
         driver.findElement(By.id("precondition")).sendKeys("Подготовить тестовую среду {{base_url}}");
 
-        driver.findElement(By.id("add-parameter")).click();
-        driver.findElement(By.id("add-parameter")).click();
-        List<WebElement> rows = driver.findElements(By.cssSelector("#parameters-body tr.parameter-row"));
-        assertEquals(2, rows.size(), "Должны быть созданы две строки параметров");
+        driver.findElement(By.xpath("//button[contains(normalize-space(.),'Добавить набор данных')]")).click();
+        WebElement dataSet = wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector(".data-set-card")));
+        dataSet.findElement(By.cssSelector("[data-role='dataset-name']")).sendKeys("Основной набор");
+        List<WebElement> columns = dataSet.findElements(By.cssSelector(".data-column"));
+        columns.get(0).findElement(By.cssSelector("[data-role='column-key']")).sendKeys("base_url");
+        columns.get(0).findElement(By.cssSelector("[data-role='column-label']")).sendKeys("Адрес TestRun");
+        dataSet.findElement(By.xpath(".//button[contains(normalize-space(.),'Добавить параметр')]")).click();
+        columns = dataSet.findElements(By.cssSelector(".data-column"));
+        columns.get(1).findElement(By.cssSelector("[data-role='column-key']")).sendKeys("login");
+        columns.get(1).findElement(By.cssSelector("[data-role='column-label']")).sendKeys("Логин");
 
-        rows.get(0).findElement(By.cssSelector("[data-role='parameter-key']")).sendKeys("base_url");
-        rows.get(0).findElement(By.cssSelector("[data-role='parameter-value']")).sendKeys(baseUrl);
-        rows.get(1).findElement(By.cssSelector("[data-role='parameter-key']")).sendKeys("login");
-        rows.get(1).findElement(By.cssSelector("[data-role='parameter-value']")).sendKeys("demo-user");
+        dataSet.findElement(By.xpath(".//button[contains(normalize-space(.),'Добавить строку')]")).click();
+        WebElement dataRow = dataSet.findElement(By.cssSelector(".data-row"));
+        dataRow.findElement(By.cssSelector("[data-role='row-name']")).sendKeys("Демонстрационная строка");
+        List<WebElement> values = dataRow.findElements(By.cssSelector(".data-value"));
+        values.get(0).sendKeys(baseUrl);
+        values.get(1).sendKeys("demo-user");
+        dataSet.findElement(By.cssSelector("[data-role='dataset-default']")).click();
+        dataRow.findElement(By.cssSelector("[data-role='row-default']")).click();
 
-        List<WebElement> actions = driver.findElements(By.cssSelector("textarea[name='step_action[]']"));
-        List<WebElement> expected = driver.findElements(By.cssSelector("textarea[name='step_expected[]']"));
-        actions.get(0).sendKeys("Выполнить демонстрационную проверку для {{login}}");
-        expected.get(0).sendKeys("Тест-кейс доступен для выполнения");
-
+        driver.findElement(By.cssSelector("textarea[name='step_action[]']")).sendKeys("Выполнить демонстрационную проверку для {{login}}");
+        driver.findElement(By.cssSelector("textarea[name='step_expected[]']")).sendKeys("Тест-кейс доступен для выполнения");
         driver.findElement(By.xpath("//button[contains(normalize-space(.),'Сохранить тест-кейс')]")).click();
         wait.until(d -> d.getCurrentUrl().contains("/project/") && !d.getCurrentUrl().contains("/create_test"));
         assertTrue(driver.getPageSource().contains(testTitle), "Новый тест-кейс должен появиться в проекте");
