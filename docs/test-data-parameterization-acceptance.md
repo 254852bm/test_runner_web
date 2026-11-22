@@ -11,7 +11,30 @@ Do not point any command in this document at the production database.
 - Keep the test copy's current branch/commit and backup path so it can be restored.
 - Do not copy production API tokens or real passwords into the test environment.
 
-## 2. Configure encryption for the test copy
+## 2. Prepare the existing TEST database schema
+
+Run the following additive migrations from the repository root, **only after**
+making and verifying a separate backup of the isolated TEST database. Use the
+same exact database path for every command:
+
+```bash
+python scripts/add_user_is_deleted.py --database /absolute/path/to/test/instance/test_runner.db
+python scripts/add_test_data_encryption_columns.py --database /absolute/path/to/test/instance/test_runner.db
+python scripts/add_default_test_data_selection.py --database /absolute/path/to/test/instance/test_runner.db
+python scripts/add_ai_credential_table.py --database /absolute/path/to/test/instance/test_runner.db
+sqlite3 /absolute/path/to/test/instance/test_runner.db "PRAGMA integrity_check;"
+```
+
+The order is intentional: the default-selection migration requires the
+test-data tables created by the preceding migration. Each script refuses to
+create a missing database and is safe to re-run for columns/tables it already
+prepared. Review each command's output and stop on any error. Expected final
+integrity result: `ok`.
+
+These commands are for the isolated test database only. Do not run them against
+production without a separate explicit approval and a verified backup.
+
+## 3. Configure encryption for the test copy
 
 Generate a dedicated Fernet key in a secure terminal:
 
@@ -26,7 +49,7 @@ values cannot be recovered if the key is lost.
 
 The key is independent from Flask's `SECRET_KEY`.
 
-## 3. Prepare only the test database
+## 4. Prepare only the test database
 
 Run the migration with the exact test database path:
 
@@ -46,7 +69,7 @@ sqlite3 /absolute/path/to/test/instance/test_runner.db "PRAGMA integrity_check;"
 
 Expected result: `ok`.
 
-## 4. Manual UI checks
+## 5. Manual UI checks
 
 Create a disposable project and a test case with at least these placeholders:
 
@@ -84,7 +107,7 @@ Check the following:
   cannot reveal the secret.
 - [ ] Secret values never appear in the instruction text, comments or run history.
 
-## 5. API checks
+## 6. API checks
 
 Create a new API token specifically for the test automation check.
 
@@ -104,7 +127,7 @@ Create a new API token specifically for the test automation check.
 Use a disposable non-secret test password. Never print returned secrets to
 terminal output, CI logs, or build artifacts.
 
-## 6. Final checks
+## 7. Final checks
 
 - [ ] Existing project, test-case, manual-run, history, screenshot and PDF flows still work.
 - [ ] Existing test accounts and projects remain intact.
