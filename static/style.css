@@ -953,8 +953,8 @@ html[data-theme="dark"] .profile-project-list .list-group-item:hover {
     --app-accent-soft: #c9ddce;
 }
 html[data-theme="dark"] {
-    --app-accent: #86ad91;
-    --app-accent-dark: #a5c8ad;
+    --app-accent: #527d60;
+    --app-accent-dark: #6f9b7b;
     --app-accent-pale: #26372c;
     --app-accent-soft: #3b5543;
 }
@@ -968,8 +968,10 @@ html[data-theme="dark"] {
     --bs-btn-active-border-color: var(--app-accent-dark);
     --bs-btn-disabled-bg: var(--app-accent);
     --bs-btn-disabled-border-color: var(--app-accent);
+    --bs-btn-focus-shadow-rgb: 111, 155, 123;
 }
 .btn-outline-primary {
+    --bs-btn-focus-shadow-rgb: 111, 155, 123;
     --bs-btn-color: var(--app-accent-dark);
     --bs-btn-border-color: var(--app-accent);
     --bs-btn-hover-bg: var(--app-accent);
@@ -1124,8 +1126,8 @@ html[data-theme="dark"] .alert-info {
     --bs-link-color-rgb: 82, 125, 96;
 }
 html[data-theme="dark"] {
-    --bs-primary: #86ad91;
-    --bs-primary-rgb: 134, 173, 145;
+    --bs-primary: #527d60;
+    --bs-primary-rgb: 82, 125, 96;
     --bs-primary-text-emphasis: #c4ddca;
     --bs-primary-bg-subtle: #26372c;
     --bs-primary-border-subtle: #3b5543;
