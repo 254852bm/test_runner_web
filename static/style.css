@@ -1112,3 +1112,22 @@ html[data-theme="dark"] .alert-info {
 .ai-selection-hint {
     border-radius: 0.65rem;
 }
+
+
+/* Bootstrap's remaining primary utilities (badges, pagination, etc.) share the green token. */
+:root {
+    --bs-primary: #6f9b7b;
+    --bs-primary-rgb: 111, 155, 123;
+    --bs-primary-text-emphasis: #42684d;
+    --bs-primary-bg-subtle: #e7f1e9;
+    --bs-primary-border-subtle: #c9ddce;
+    --bs-link-color-rgb: 82, 125, 96;
+}
+html[data-theme="dark"] {
+    --bs-primary: #86ad91;
+    --bs-primary-rgb: 134, 173, 145;
+    --bs-primary-text-emphasis: #c4ddca;
+    --bs-primary-bg-subtle: #26372c;
+    --bs-primary-border-subtle: #3b5543;
+    --bs-link-color-rgb: 165, 200, 173;
+}
