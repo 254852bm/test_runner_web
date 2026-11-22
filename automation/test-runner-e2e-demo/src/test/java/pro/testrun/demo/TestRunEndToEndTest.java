@@ -101,8 +101,15 @@ class TestRunEndToEndTest {
         driver.findElement(By.xpath("//button[contains(normalize-space(.),'Создать')]")).click();
         wait.until(ExpectedConditions.urlContains("/project/"));
         assertTrue(driver.getPageSource().contains(projectName), "Название проекта должно отображаться");
-        projectId = driver.getCurrentUrl().replaceAll(".*/project/(\\\\d+).*", "$1");
-        assertTrue(projectId.matches("\\\\d+"), "ID проекта должен быть числовым");
+        String[] urlParts = driver.getCurrentUrl().split("/");
+        for (int i = 0; i < urlParts.length - 1; i++) {
+            if ("project".equals(urlParts[i])) {
+                projectId = urlParts[i + 1];
+                break;
+            }
+        }
+        assertNotNull(projectId, "В адресе должен быть ID проекта");
+        assertTrue(projectId.chars().allMatch(Character::isDigit), "ID проекта должен быть числовым");
         attachScreenshot("Создан демонстрационный проект");
     }
 
@@ -128,7 +135,7 @@ class TestRunEndToEndTest {
         expected.get(0).sendKeys("Тест-кейс доступен для выполнения");
 
         driver.findElement(By.xpath("//button[contains(normalize-space(.),'Сохранить тест-кейс')]")).click();
-        wait.until(ExpectedConditions.urlContains("/project/"));
+        wait.until(d -> d.getCurrentUrl().contains("/project/") && !d.getCurrentUrl().contains("/create_test"));
         assertTrue(driver.getPageSource().contains(testTitle), "Новый тест-кейс должен появиться в проекте");
         attachScreenshot("Создан тест-кейс с параметрами");
     }
