@@ -1131,3 +1131,15 @@ html[data-theme="dark"] {
     --bs-primary-border-subtle: #3b5543;
     --bs-link-color-rgb: 165, 200, 173;
 }
+
+.navbar-ai-optional {
+    color: #b9cdbf;
+    font-size: 0.68rem;
+    font-weight: 450;
+    white-space: nowrap;
+}
+@media (max-width: 767.98px) {
+    .navbar-ai-optional {
+        font-size: 0.64rem;
+    }
+}
