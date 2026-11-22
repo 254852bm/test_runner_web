@@ -36,7 +36,7 @@
 
                 {% if current_user.is_authenticated and request.endpoint == 'main.dashboard' %}
                 <div class="navbar-ai-links" aria-label="Возможности ИИ">
-                    <span class="navbar-ai-label"><span aria-hidden="true">✦</span> Возможности ИИ</span>
+                    <span class="navbar-ai-label"><span aria-hidden="true">✦</span> Возможности ИИ <span class="navbar-ai-optional">по желанию</span></span>
                     <a href="{{ url_for('main.projects', ai_action='case') }}" title="Сначала выберите проект">
                         <span aria-hidden="true">＋</span> Тест-кейс
                     </a>
