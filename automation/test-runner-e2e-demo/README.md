@@ -14,7 +14,7 @@
 1. Используйте только отдельный тестовый сервер TestRun и отдельного demo-пользователя.
 2. Не указывайте адрес production, если не хотите создавать там демонстрационные проекты и прогоны.
 3. Создайте отдельную учётную запись для автоматизации и задайте её данные только в переменных окружения.
-4. Убедитесь, что Chrome установлен на машине, где запускаются тесты.
+4. Убедитесь, что Microsoft Edge или Google Chrome установлен на машине, где запускаются тесты. По умолчанию используется Edge; Selenium Manager автоматически подбирает драйвер.
 
 ## Переменные окружения (PowerShell)
 
@@ -23,6 +23,7 @@ $env:TESTRUN_BASE_URL = "http://127.0.0.1:15052"
 $env:TESTRUN_DEMO_EMAIL = "demo@example.test"
 $env:TESTRUN_DEMO_PASSWORD = "значение-пароля"
 $env:TESTRUN_HEADLESS = "false"
+$env:TESTRUN_BROWSER = "edge" # или "chrome"
 $env:TESTRUN_ENVIRONMENT = "isolated-test"
 $env:TESTRUN_E2E_ENABLED = "true"
 ```
@@ -48,7 +49,7 @@ gradle wrapper --gradle-version 8.10.2
 
 Сквозной UI-тест намеренно пропускается, пока явно не заданы `TESTRUN_ENVIRONMENT=isolated-test` и `TESTRUN_E2E_ENABLED=true`. Это защита от случайного создания проектов и прогонов в неподходящей среде. API-тест также включается только при заданных API-переменных.
 
-Для запуска в фоне без окна браузера задайте:
+Чтобы использовать Chrome вместо Edge, задайте `$env:TESTRUN_BROWSER = "chrome"`. Для запуска в фоне без окна браузера задайте:
 
 ```powershell
 $env:TESTRUN_HEADLESS = "true"
