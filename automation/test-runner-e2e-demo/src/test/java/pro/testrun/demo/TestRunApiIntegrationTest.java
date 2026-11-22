@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.qameta.allure.Description;
 import io.qameta.allure.Feature;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.junit.jupiter.api.condition.EnabledIf;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -24,12 +24,7 @@ class TestRunApiIntegrationTest {
         .build();
 
     @Test
-    @EnabledIfEnvironmentVariable(named = "TESTRUN_BASE_URL", matches = ".+")
-    @EnabledIfEnvironmentVariable(named = "TESTRUN_API_TEST_ENABLED", matches = "true")
-    @EnabledIfEnvironmentVariable(named = "TESTRUN_ENVIRONMENT", matches = "isolated-test")
-    @EnabledIfEnvironmentVariable(named = "TESTRUN_API_TOKEN", matches = ".+")
-    @EnabledIfEnvironmentVariable(named = "TESTRUN_TEST_CASE_ID", matches = "\\d+")
-    @EnabledIfEnvironmentVariable(named = "TESTRUN_DATA_SET_ID", matches = "\\d+")
+    @EnabledIf("pro.testrun.demo.DemoSafety#apiEnabledFromEnvironment")
     @Description("Читает активные строки через API и отправляет автоматический результат в TestRun.")
     void readDataRowsAndPostAutomatedRun() throws Exception {
         String base = requiredEnv("TESTRUN_BASE_URL").replaceAll("/+$", "");
