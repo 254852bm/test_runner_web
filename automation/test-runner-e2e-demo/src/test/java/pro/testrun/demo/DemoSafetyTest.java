@@ -72,6 +72,16 @@ class DemoSafetyTest {
         );
         assertFalse(DemoSafety.apiEnabled(malformed));
 
+        Map<String, String> remoteUrl = Map.of(
+            "TESTRUN_ENVIRONMENT", "isolated-test",
+            "TESTRUN_API_TEST_ENABLED", "true",
+            "TESTRUN_BASE_URL", "https://testrun.pro",
+            "TESTRUN_API_TOKEN", "token",
+            "TESTRUN_TEST_CASE_ID", "12",
+            "TESTRUN_DATA_SET_ID", "34"
+        );
+        assertFalse(DemoSafety.apiEnabled(remoteUrl));
+
         Map<String, String> production = Map.of(
             "TESTRUN_ENVIRONMENT", "production",
             "TESTRUN_API_TEST_ENABLED", "true",
