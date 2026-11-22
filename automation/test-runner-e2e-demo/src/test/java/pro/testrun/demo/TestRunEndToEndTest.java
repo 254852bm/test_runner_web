@@ -70,12 +70,17 @@ class TestRunEndToEndTest {
             } catch (Exception ignored) {
                 // A screenshot is diagnostic only; it must not hide the test result.
             }
-            driver.quit();
+            try {
+                driver.quit();
+            } catch (Exception ignored) {
+                // Browser shutdown is best-effort and must not mask the test result.
+            }
         }
     }
 
     @Test
     @EnabledIfEnvironmentVariable(named = "TESTRUN_E2E_ENABLED", matches = "true")
+    @EnabledIfEnvironmentVariable(named = "TESTRUN_ENVIRONMENT", matches = "isolated-test")
     @Description("Создаёт проект и параметризованный тест-кейс, выполняет прогон, проверяет историю и PDF.")
     void fullDemoJourney() throws Exception {
         createProject();
@@ -101,7 +106,7 @@ class TestRunEndToEndTest {
         driver.get(baseUrl + "/projects/create");
         wait.until(ExpectedConditions.visibilityOfElementLocated(By.name("name"))).sendKeys(projectName);
         driver.findElement(By.xpath("//button[contains(normalize-space(.),'Создать')]")).click();
-        wait.until(ExpectedConditions.urlContains("/projects"));
+        wait.until(d -> d.getCurrentUrl().contains("/projects") && !d.getCurrentUrl().contains("/projects/create"));
         WebElement createdProject = wait.until(ExpectedConditions.elementToBeClickable(
             By.xpath("//a[normalize-space()='" + projectName + "']")
         ));
